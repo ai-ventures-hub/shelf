@@ -1,0 +1,490 @@
+/**
+ * Shelf MCP stdio server — same library + process manager as the Electron app.
+ * Log only to stderr; stdout is reserved for MCP JSON-RPC.
+ */
+import { randomUUID } from 'node:crypto'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { z } from 'zod'
+import { resolveDesignMd } from '../shared/design-md'
+import { LibraryStore } from '../shared/library-store'
+import { ProcessManager } from '../shared/process-manager'
+import {
+  findFreePort,
+  findPortOccupant,
+  urlForPort,
+  withForcedPort,
+} from '../shared/ports'
+import { inspectProject } from '../shared/project-import'
+import { ReceiptStore } from '../shared/receipt-store'
+import { sanitizeToolForOutput, type Tool } from '../shared/types'
+import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
+
+const store = new LibraryStore()
+const receipts = new ReceiptStore()
+const processes = new ProcessManager(store, { receipts })
+
+function textResult(payload: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+  }
+}
+
+function errorResult(message: string) {
+  return {
+    content: [{ type: 'text' as const, text: message }],
+    isError: true,
+  }
+}
+
+const server = new McpServer({
+  name: 'shelf',
+  version: '0.1.0',
+})
+
+server.registerTool(
+  'shelf_list_tools',
+  {
+    description: 'List tools in the Shelf library with runtime status summaries.',
+  },
+  async () => {
+    const tools = await Promise.all(
+      store.list().map(async (tool) => {
+        const state = await processes.getState(tool.id)
+        return {
+          id: tool.id,
+          name: tool.name,
+          tags: tool.tags,
+          favorite: tool.favorite,
+          projectPath: tool.projectPath,
+          port: tool.port,
+          url: tool.url,
+          status: state.status,
+          message: state.message,
+        }
+      }),
+    )
+    return textResult({ count: tools.length, tools })
+  },
+)
+
+server.registerTool(
+  'shelf_get_tool',
+  {
+    description: 'Get one Shelf tool by id, including sanitized config and runtime state.',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+    },
+  },
+  async ({ id }) => {
+    const tool = store.get(id)
+    if (!tool) return errorResult(`Tool not found: ${id}`)
+    return textResult({
+      tool: sanitizeToolForOutput(tool),
+      state: await processes.getState(id),
+    })
+  },
+)
+
+server.registerTool(
+  'shelf_find_free_port',
+  {
+    description:
+      'Find free localhost TCP ports for registering or launching Shelf tools. Prefer this before upserting a web app.',
+    inputSchema: {
+      preferred: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Preferred port (returned when free)'),
+      from: z.number().int().positive().optional().describe('Scan start (default 3000)'),
+      to: z.number().int().positive().optional().describe('Scan end (default 3999)'),
+      count: z
+        .number()
+        .int()
+        .positive()
+        .max(20)
+        .optional()
+        .describe('How many free candidates to return (default 5)'),
+    },
+  },
+  async (args) => {
+    try {
+      const result = await findFreePort({
+        preferred: args.preferred,
+        from: args.from,
+        to: args.to,
+        count: args.count,
+      })
+      return textResult(result)
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
+  },
+)
+
+server.registerTool(
+  'shelf_upsert_tool',
+  {
+    description:
+      'Create or update a Shelf tool. Provide id to update an existing tool, or name to update by name / create when missing. By default checks port conflicts and returns warnings + suggestedPort without blocking the save.',
+    inputSchema: {
+      id: z.string().optional().describe('Existing tool id (optional)'),
+      name: z.string().min(1).describe('Display name'),
+      description: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      favorite: z.boolean().optional(),
+      projectPath: z.string().optional().describe('Absolute project folder path'),
+      launchCommand: z.string().min(1).describe('Shell command to launch the tool'),
+      stopCommand: z.string().optional(),
+      url: z.string().optional(),
+      port: z.number().int().positive().optional(),
+      env: z.record(z.string(), z.string()).optional(),
+      notes: z.string().optional(),
+      iconPath: z.string().optional(),
+      iconLucide: z
+        .string()
+        .optional()
+        .describe('Lucide icon PascalCase name, e.g. Wrench'),
+      iconColor: z.string().optional().describe('Hex color for Lucide glyph'),
+      iconBackground: z.string().optional().describe('Hex background behind Lucide glyph'),
+      checkPort: z
+        .boolean()
+        .optional()
+        .describe('When true (default), warn if port is busy or claimed by another Shelf tool'),
+      autoFixPort: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true and the port is busy/claimed, rewrite port/url/launchCommand to a free port before saving',
+        ),
+    },
+  },
+  async (args) => {
+    if (!args.launchCommand.trim()) {
+      return errorResult('launchCommand is required.')
+    }
+
+    const now = new Date().toISOString()
+    let existing: Tool | undefined
+    if (args.id) existing = store.get(args.id)
+    if (!existing) existing = store.findByName(args.name)
+
+    const checkPort = args.checkPort !== false
+    let port = args.port ?? existing?.port
+    let url = args.url ?? existing?.url
+    let launchCommand = args.launchCommand
+    const warnings: string[] = []
+    let suggestedPort: number | undefined
+    let freeCandidates: number[] = []
+    let portFixed = false
+
+    if (port && checkPort) {
+      const toolId = existing?.id || args.id
+      const libraryConflicts = store
+        .list()
+        .filter((t) => t.port === port && t.id !== toolId)
+        .map((t) => ({ id: t.id, name: t.name }))
+
+      const occupantPid = await findPortOccupant(port)
+      if (occupantPid) {
+        warnings.push(`Port ${port} is currently in use by pid ${occupantPid}.`)
+      }
+      if (libraryConflicts.length > 0) {
+        warnings.push(
+          `Port ${port} is already claimed by Shelf tool(s): ${libraryConflicts
+            .map((t) => `${t.name} (${t.id})`)
+            .join(', ')}.`,
+        )
+      }
+
+      if (warnings.length > 0) {
+        try {
+          const free = await findFreePort({ preferred: port, from: 3000, to: 4999, count: 5 })
+          suggestedPort = free.port
+          freeCandidates = free.candidates
+        } catch {
+          // leave suggestedPort unset
+        }
+
+        if (args.autoFixPort && suggestedPort) {
+          port = suggestedPort
+          url = urlForPort(url, suggestedPort)
+          launchCommand = withForcedPort(launchCommand, suggestedPort)
+          portFixed = true
+          warnings.push(
+            `autoFixPort applied: saved as port ${suggestedPort} with updated launchCommand/url.`,
+          )
+        } else if (suggestedPort) {
+          warnings.push(
+            `Suggested free port: ${suggestedPort}. Re-upsert with that port (and matching url/launch flags), set autoFixPort=true, or launch with onPortConflict=reassign.`,
+          )
+        }
+      }
+    }
+
+    const tool = store.save({
+      id: existing?.id || args.id || randomUUID(),
+      name: args.name,
+      description: args.description,
+      tags: args.tags || existing?.tags || [],
+      favorite: args.favorite ?? existing?.favorite ?? false,
+      projectPath: args.projectPath ?? existing?.projectPath,
+      launchCommand,
+      stopCommand: args.stopCommand ?? existing?.stopCommand,
+      url,
+      port,
+      env:
+        portFixed && port
+          ? { ...(args.env ?? existing?.env ?? {}), PORT: String(port) }
+          : (args.env ?? existing?.env),
+      notes: args.notes ?? existing?.notes,
+      iconPath: args.iconPath ?? existing?.iconPath,
+      iconLucide: args.iconLucide ?? existing?.iconLucide,
+      iconColor: args.iconColor ?? existing?.iconColor,
+      iconBackground: args.iconBackground ?? existing?.iconBackground,
+      lastLaunchedAt: existing?.lastLaunchedAt,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    })
+
+    return textResult({
+      action: existing ? 'updated' : 'created',
+      tool: sanitizeToolForOutput(tool),
+      warnings: warnings.length ? warnings : undefined,
+      suggestedPort,
+      freeCandidates: freeCandidates.length ? freeCandidates : undefined,
+      portFixed: portFixed || undefined,
+    })
+  },
+)
+
+server.registerTool(
+  'shelf_remove_tool',
+  {
+    description: 'Remove a tool from the Shelf library by id. Stops it first if running.',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+    },
+  },
+  async ({ id }) => {
+    if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
+    await processes.stop(id, 'Removed via MCP.')
+    store.delete(id)
+    return textResult({ removed: id })
+  },
+)
+
+server.registerTool(
+  'shelf_launch_tool',
+  {
+    description:
+      'Launch a Shelf tool by id and wait for running/error status. Use onPortConflict=reassign to pick a free port when the configured one is busy.',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+      onPortConflict: z
+        .enum(['fail', 'reassign'])
+        .optional()
+        .describe('fail (default) refuses busy ports; reassign picks a free port and updates the library entry'),
+    },
+  },
+  async ({ id, onPortConflict }) => {
+    const before = store.get(id)
+    if (!before) return errorResult(`Tool not found: ${id}`)
+    const previousPort = before.port
+    const state = await processes.start(id, {
+      onPortConflict: onPortConflict || 'fail',
+    })
+    const after = store.get(id)
+    const reassigned =
+      previousPort &&
+      after?.port &&
+      after.port !== previousPort &&
+      state.status === 'running'
+        ? {
+            from: previousPort,
+            to: after.port,
+            url: after.url,
+            launchCommand: after.launchCommand,
+          }
+        : undefined
+    return textResult({ state, reassigned })
+  },
+)
+
+server.registerTool(
+  'shelf_stop_tool',
+  {
+    description: 'Stop a running Shelf tool by id.',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+    },
+  },
+  async ({ id }) => {
+    if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
+    const state = await processes.stop(id)
+    return textResult({ state })
+  },
+)
+
+server.registerTool(
+  'shelf_get_status',
+  {
+    description: 'Get runtime status for a Shelf tool.',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+    },
+  },
+  async ({ id }) => {
+    if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
+    return textResult({ state: await processes.getState(id) })
+  },
+)
+
+server.registerTool(
+  'shelf_get_logs',
+  {
+    description: 'Get recent launch logs for a Shelf tool (secrets already masked).',
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+      limit: z.number().int().positive().max(500).optional().describe('Max lines (default 100)'),
+    },
+  },
+  async ({ id, limit }) => {
+    if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
+    const lines = processes.getLogs(id)
+    const capped = lines.slice(-(limit || 100))
+    return textResult({ id, count: capped.length, lines: capped })
+  },
+)
+
+server.registerTool(
+  'shelf_list_collections',
+  {
+    description: 'List curated Shelf collections and their tool membership.',
+  },
+  async () => {
+    const collections = store.listCollections()
+    return textResult({ count: collections.length, collections })
+  },
+)
+
+server.registerTool(
+  'shelf_inspect_project',
+  {
+    description:
+      'Smart-import scan of an absolute project folder. Suggests name, launchCommand, port/url, tags, and DESIGN.md presence without writing the library. Prefer this before shelf_upsert_tool when registering a new folder.',
+    inputSchema: {
+      projectPath: z.string().min(1).describe('Absolute project folder path'),
+    },
+  },
+  async ({ projectPath }) => {
+    try {
+      const suggestion = await inspectProject(projectPath)
+      return textResult(suggestion)
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
+  },
+)
+
+server.registerTool(
+  'shelf_list_receipts',
+  {
+    description:
+      'List durable run receipts (launch history). Newest first. Optionally filter by tool id.',
+    inputSchema: {
+      id: z.string().optional().describe('Tool id filter'),
+      limit: z.number().int().positive().max(200).optional().describe('Max rows (default 50)'),
+    },
+  },
+  async ({ id, limit }) => {
+    const list = receipts.list({ toolId: id, limit })
+    return textResult({ count: list.length, receipts: list })
+  },
+)
+
+server.registerTool(
+  'shelf_clear_receipts',
+  {
+    description:
+      'Clear run receipts. Pass id to clear one tool; omit to clear the entire history.',
+    inputSchema: {
+      id: z.string().optional().describe('Tool id (optional — omit to clear all)'),
+    },
+  },
+  async ({ id }) => {
+    const result = receipts.clear({ toolId: id })
+    return textResult(result)
+  },
+)
+
+server.registerTool(
+  'shelf_get_design_md',
+  {
+    description:
+      'Resolve a project-local DESIGN.md for a Shelf tool or absolute projectPath. Returns found:false when none exists (not an error).',
+    inputSchema: {
+      id: z.string().optional().describe('Shelf tool id'),
+      projectPath: z.string().optional().describe('Absolute project folder path'),
+    },
+  },
+  async ({ id, projectPath }) => {
+    if (!id && !projectPath) {
+      return errorResult('Provide id or projectPath.')
+    }
+    const tool = id ? store.get(id) : undefined
+    if (id && !tool) return errorResult(`Tool not found: ${id}`)
+    const result = resolveDesignMd(projectPath || tool?.projectPath, tool?.id || id)
+    return textResult(result)
+  },
+)
+
+// Stable agent contract: shelf://tools/{id}/design-md
+server.registerResource(
+  'shelf-tool-design-md',
+  new ResourceTemplate('shelf://tools/{id}/design-md', {
+    list: undefined,
+  }),
+  {
+    description: 'Project-local DESIGN.md for a Shelf tool, when present.',
+    mimeType: 'text/markdown',
+  },
+  async (uri, variables) => {
+    const id = String(variables.id || '')
+    const tool = store.get(id)
+    const result = resolveDesignMd(tool?.projectPath, id)
+    if (!result.found) {
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: 'application/json',
+            text: JSON.stringify({ found: false, toolId: id }, null, 2),
+          },
+        ],
+      }
+    }
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: 'text/markdown',
+          text: result.content || '',
+        },
+      ],
+    }
+  },
+)
+
+async function main() {
+  const transport = new StdioServerTransport()
+  await server.connect(transport)
+  console.error('[shelf-mcp] ready on stdio')
+}
+
+main().catch((err) => {
+  console.error('[shelf-mcp] fatal', err)
+  process.exit(1)
+})

@@ -1,0 +1,350 @@
+/* MCP Connections — compact product UI (progressive disclosure). */
+
+.mcp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 820px;
+}
+
+.mcp-overview {
+  margin-bottom: 0;
+  gap: 1rem;
+}
+
+.mcp-overview-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.mcp-overview-stats {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.mcp-overview-stats strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-overview-dot {
+  margin: 0 0.45rem;
+  color: var(--subtle);
+}
+
+.mcp-section-label {
+  margin: 0 0 0.65rem;
+  color: var(--subtle);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mcp-client-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.mcp-client-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.mcp-client-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--input);
+  border: 1px solid var(--line);
+  color: var(--brand-strong);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.mcp-client-copy {
+  min-width: 0;
+}
+
+.mcp-client-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+}
+
+.mcp-client-name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.mcp-client-detail {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.mcp-client-flash {
+  margin: 0.35rem 0 0;
+  color: var(--success);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.mcp-client-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu-trigger {
+  min-width: 2rem;
+  padding-inline: 0.45rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.overflow-menu-list {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  min-width: 11.5rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-raised);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 35%);
+}
+
+.overflow-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overflow-menu-item:hover,
+.overflow-menu-item:focus-visible {
+  background: var(--input);
+}
+
+.overflow-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.overflow-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mcp-advanced {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.mcp-advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 0.85rem 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.mcp-advanced-toggle:hover {
+  color: var(--brand-strong);
+}
+
+.mcp-advanced-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  opacity: 1;
+}
+
+.mcp-advanced-toggle:hover .mcp-advanced-chevron {
+  color: var(--brand-strong);
+}
+
+/* Wider gaps than generic .stack — Advanced is dense technical content. */
+.mcp-advanced-body.stack {
+  gap: 1.75rem;
+  padding: 0.85rem 0 1.25rem;
+}
+
+.mcp-advanced-body > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.mcp-advanced-heading {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.mcp-advanced-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.mcp-advanced-list li {
+  margin: 0.55rem 0;
+}
+
+.mcp-advanced-list li + li {
+  margin-top: 0.65rem;
+}
+
+.mcp-advanced-list code {
+  color: var(--brand-strong);
+  font-size: 0.84em;
+}
+
+.mcp-advanced-guide-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.mcp-guide-tab {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mcp-guide-tab.is-active,
+.mcp-guide-tab:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.mcp-advanced-guides {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  width: 100%;
+}
+
+.mcp-advanced-guides .field-label {
+  margin: 0.15rem 0 0;
+}
+
+.shelf-url-hint {
+  color: var(--subtle);
+  font-size: 0.85em;
+}
+
+.link-button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-strong);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.mcp-advanced-body .code-block {
+  margin: 0;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #070b13;
+  color: var(--brand-strong);
+  font-family: SFMono-Regular, ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.86em;
+  line-height: 1.55;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mcp-advanced-body .btn {
+  margin-top: 0.15rem;
+}
+
+.mcp-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mcp-steps li {
+  margin: 0.5rem 0;
+}
+
+.mcp-steps li + li {
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 700px) {
+  .mcp-client-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mcp-client-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}

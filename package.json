@@ -1,0 +1,111 @@
+{
+  "name": "shelf",
+  "productName": "Shelf",
+  "version": "0.3.15",
+  "private": true,
+  "description": "Personal command center for the tools you build",
+  "main": "dist-electron/electron/main.js",
+  "author": "Carlos Montalvo",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.shared.json && tsc -p tsconfig.electron.json && npm run mcp:build && vite build",
+    "preview": "vite preview",
+    "electron:dev": "env -u ELECTRON_RUN_AS_NODE SHELF_DEV=1 concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && tsc -p tsconfig.electron.json && electron .\"",
+    "electron:build": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
+    "mcp:build": "esbuild mcp/server.ts --bundle --platform=node --format=cjs --outfile=dist-mcp/mcp/server.js --external:electron",
+    "mcp": "npm run mcp:build && node dist-mcp/mcp/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.shared.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.mcp.json --noEmit",
+    "smoke": "node scripts/smoke-process.mjs",
+    "smoke:quick-open": "node scripts/smoke-quick-open.mjs",
+    "smoke:import": "tsc -p tsconfig.electron.json && node scripts/smoke-import.mjs",
+    "smoke:receipts": "tsc -p tsconfig.electron.json && node scripts/smoke-receipts.mjs",
+    "smoke:shelf-url": "tsc -p tsconfig.electron.json && node scripts/smoke-shelf-url.mjs",
+    "smoke:adopt": "tsc -p tsconfig.electron.json && node scripts/smoke-adopt.mjs",
+    "smoke:claude-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-claude-connect.mjs",
+    "smoke:cursor-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-cursor-connect.mjs",
+    "smoke:codex-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-codex-connect.mjs",
+    "smoke:mcp-path": "tsc -p tsconfig.electron.json && node scripts/smoke-mcp-path.mjs",
+    "smoke:receipt-export": "tsc -p tsconfig.electron.json && node scripts/smoke-receipt-export.mjs",
+    "smoke:electron": "tsc -p tsconfig.electron.json && env -u ELECTRON_RUN_AS_NODE electron scripts/smoke-electron.cjs",
+    "smoke:mcp": "npm run mcp:build && node scripts/smoke-mcp.mjs",
+    "smoke:all": "node scripts/smoke-all.mjs",
+    "icon": "python3 scripts/generate-icon.py",
+    "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",
+    "install:desktop": "npm run package:mac && node scripts/install-desktop.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "lucide-react": "^1.26.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.1.2",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "org.cjm.shelf",
+    "productName": "Shelf",
+    "copyright": "Copyright © Carlos Montalvo",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-mcp",
+        "to": "mcp"
+      },
+      {
+        "from": "build/TrayIconTemplate.png",
+        "to": "TrayIconTemplate.png"
+      },
+      {
+        "from": "build/TrayIconTemplate@2x.png",
+        "to": "TrayIconTemplate@2x.png"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dir"
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "CFBundleDisplayName": "Shelf",
+        "NSHighResolutionCapable": true,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "org.cjm.shelf",
+            "CFBundleURLSchemes": ["shelf"]
+          }
+        ]
+      }
+    },
+    "protocols": [
+      {
+        "name": "Shelf",
+        "schemes": ["shelf"]
+      }
+    ],
+    "asar": true
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "shelf-sample-tool",
+  "private": true,
+  "description": "Fixture HTTP server for Shelf smoke tests",
+  "scripts": {
+    "start": "PORT=8765 node server.mjs"
+  }
+}

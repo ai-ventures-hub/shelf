@@ -1,0 +1,109 @@
+/**
+ * Suds System Studio design tokens — keep names stable for branding reuse.
+ * Source: DESIGN.md (Suds System Studio Design Language)
+ * Themes: data-theme="dark" | "light" (system resolves in usePrefs).
+ */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink: #f6f7fb;
+  --muted: #99a3b8;
+  --subtle: #6f7a91;
+
+  --surface: #090d16;
+  --panel: #111725;
+  --panel-raised: #171e2f;
+  --line: #273047;
+  --input: #0b101c;
+
+  --brand: #7895ff;
+  --brand-strong: #9badff;
+
+  --success: #48d597;
+  --warning: #f3bc62;
+  --danger: #f0787d;
+
+  --sidebar-bg: rgb(9 13 22 / 86%);
+  --sidebar-width: 250px;
+  --content-max: 1220px;
+  --radius-control: 11px;
+  --radius-card: 16px;
+  --radius-mark: 14px;
+  --surface-glow: rgb(73 98 193 / 18%);
+  --on-brand: #081021;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --ink: #121826;
+  --muted: #4b556b;
+  --subtle: #6b7288;
+
+  --surface: #f3f5fb;
+  --panel: #ffffff;
+  --panel-raised: #ffffff;
+  --line: #d7dce8;
+  --input: #ffffff;
+
+  --brand: #4f6ef2;
+  --brand-strong: #3d5ce0;
+
+  --success: #1f9d63;
+  --warning: #c98512;
+  --danger: #d04850;
+
+  --sidebar-bg: rgb(255 255 255 / 92%);
+  --surface-glow: rgb(79 110 242 / 12%);
+  --on-brand: #ffffff;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at 15% -10%, var(--surface-glow), transparent 30rem),
+    var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: var(--brand-strong);
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

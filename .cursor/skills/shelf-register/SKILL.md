@@ -1,0 +1,74 @@
+---
+name: shelf-register
+description: >-
+  Register a local project in Shelf (personal local-tools launcher) via the
+  Shelf MCP server after building or discovering a tool. Use when the user asks
+  to add, register, or save a project into Shelf, or to wire a finished local
+  app into their tool library.
+---
+
+# Register a project in Shelf
+
+Shelf is a macOS personal command center for local tools. After a project is
+built, register it so the user can launch it later without remembering commands.
+
+## Prerequisites
+
+- Shelf MCP server configured in the client (Shelf → **MCP Connections** → Connect Claude / Cursor / Codex)
+- Prefer absolute project paths
+
+## Workflow
+
+1. Call `shelf_inspect_project` with the absolute `projectPath` for suggested name, launchCommand, port/url, tags, and DESIGN.md signals. Review `signals` / `confidence` before trusting the draft.
+2. **Check for a project-local DESIGN.md** (Community bridge for agents):
+   - Prefer the inspect result (`designMd`), or call `shelf_get_design_md` with the tool `id` or `projectPath`.
+   - When `found: true`, read it and follow its tokens/guidance for UI work in that project.
+   - Resource URI: `shelf://tools/{id}/design-md`
+   - Missing DESIGN.md is normal — do not treat as an error.
+3. **Confirm the port** (web apps):
+   - Inspect already prefers a free port when the framework default is busy; still call `shelf_find_free_port` if you need more candidates.
+   - Keep `port` and `url` in sync (`http://127.0.0.1:<port>/`).
+4. Draft a Shelf tool config (start from inspect suggestions):
+   - **name**: short product name
+   - **description**: one or two sentences
+   - **projectPath**: absolute folder path
+   - **launchCommand**:
+     - Python with venv → `.venv/bin/python app.py` (not bare `python3` when Flask/deps live in `.venv`)
+     - Node / Next → `npm run dev -- --port <port>` (or `pnpm` / `yarn` / `bun` equivalent)
+     - Vite → `npm run dev -- --port <port>`
+     - Docker → `docker compose up`
+   - **port** / **url** when it is a local web app (must match the launch flags)
+   - **tags**: small set (e.g. `Image Tools`, `Client Projects`)
+   - **notes**: inputs, common errors, last known working setup
+5. Show the draft to the user and get confirmation before writing.
+6. Call MCP `shelf_upsert_tool` with the confirmed fields.
+   - Read `warnings` / `suggestedPort` in the response. If present, re-upsert on the suggested port (or pass `autoFixPort: true`) — do not treat a busy-port upsert as fully healthy.
+7. Optionally call `shelf_launch_tool`. Prefer `shelf_stop_tool` when finished so the GUI is not left with an orphaned listener. If you need a second instance while the port is busy, use `onPortConflict: "reassign"` (Shelf picks a free port, rewrites launch/url, and persists). Default launch adopts an already-listening port instead of erroring.
+8. Verify with `shelf_get_logs` / `shelf_get_status`.
+9. Tell the user the tool id and how to find it in the Shelf GUI library.
+
+## Hard rules
+
+- Do **not** invent API keys or paste secrets into Shelf env when `.env.local` already exists.
+- Do **not** use `sudo` or interactive prompts in launch commands.
+- Do **not** delete unrelated Shelf tools.
+- Prefer updating an existing tool by the same name over creating duplicates.
+- Mask/never echo secret values from MCP responses beyond what the server already sanitizes.
+- Do **not** register two tools on the same port. Prefer `shelf_find_free_port` and heed upsert warnings.
+- Prefer pinned ports in `launchCommand` (`--port` / `-p`) over relying on framework auto-increment (Next/Vite hopping to 3001+ desyncs Shelf readiness).
+
+## MCP tools
+
+- `shelf_list_tools`
+- `shelf_get_tool`
+- `shelf_find_free_port`
+- `shelf_inspect_project`
+- `shelf_upsert_tool` (`checkPort` default true; optional `autoFixPort`)
+- `shelf_remove_tool`
+- `shelf_launch_tool` (`onPortConflict`: `fail` | `reassign`)
+- `shelf_stop_tool`
+- `shelf_get_status`
+- `shelf_get_logs`
+- `shelf_list_receipts` / `shelf_clear_receipts`
+- `shelf_list_collections`
+- `shelf_get_design_md`

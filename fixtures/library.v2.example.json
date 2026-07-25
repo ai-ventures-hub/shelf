@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "tools": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "Sample Tool",
+      "description": "Fixture entry documenting the v2 library schema.",
+      "tags": ["Fixtures", "Smoke"],
+      "favorite": false,
+      "projectPath": "/absolute/path/to/project",
+      "launchCommand": "npm run dev -- --port 5173",
+      "url": "http://127.0.0.1:5173/",
+      "port": 5173,
+      "createdAt": "2026-07-24T00:00:00.000Z",
+      "updatedAt": "2026-07-24T00:00:00.000Z"
+    }
+  ],
+  "collections": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000c1",
+      "name": "Daily Drivers",
+      "description": "Tools opened most days.",
+      "toolIds": ["00000000-0000-4000-8000-000000000001"],
+      "createdAt": "2026-07-24T00:00:00.000Z",
+      "updatedAt": "2026-07-24T00:00:00.000Z"
+    }
+  ]
+}
