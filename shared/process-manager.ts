@@ -1,25 +1,24 @@
-import { spawn, type ChildProcess, execFile } from 'node:child_process'
-import net from 'node:net'
-import { promisify } from 'node:util'
+import type { ChildProcess } from 'node:child_process'
 import type { LibraryStore } from './library-store'
 import {
   findFreePort,
   findPortOccupant,
   killPortOccupant,
-  sniffLocalUrlFromText,
   urlForPort,
   withForcedPort,
 } from './ports'
+import { reconcileExternalTool } from './process-reconcile'
+import {
+  PORT_TIMEOUT_MS,
+  runOnce,
+  sanitizeEnv,
+  spawnLoginShell,
+  terminateProcess,
+  waitForPort,
+} from './process-lifecycle'
+import { ProcessRuntimeSupport } from './process-runtime-support'
 import type { ReceiptStore } from './receipt-store'
-import type { LogLine, RunReceipt, ToolRuntimeState } from './types'
-import { maskSecrets } from './types'
-
-const execFileAsync = promisify(execFile)
-
-const MAX_LOG_LINES = 3000
-const PORT_TIMEOUT_MS = 60_000
-const PORT_POLL_MS = 400
-const STOP_KILL_GRACE_MS = 4_000
+import type { LogLine, ToolRuntimeState } from './types'
 
 interface ManagedProcess {
   child: ChildProcess
@@ -60,15 +59,15 @@ export interface ProcessManagerOptions {
  */
 export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>()
-  private readonly states = new Map<string, ToolRuntimeState>()
-  private readonly logs = new Map<string, LogLine[]>()
   private readonly options: ProcessManagerOptions
+  private readonly runtime: ProcessRuntimeSupport
 
   constructor(
     private readonly store: LibraryStore,
     options: ProcessManagerOptions = {},
   ) {
     this.options = options
+    this.runtime = new ProcessRuntimeSupport(options.onEvent, options.receipts)
   }
 
   /**
@@ -76,12 +75,7 @@ export class ProcessManager {
    * MCP/orphaned listeners that this instance did not spawn.
    */
   peekState(toolId: string): ToolRuntimeState {
-    return (
-      this.states.get(toolId) || {
-        toolId,
-        status: 'stopped',
-      }
-    )
+    return this.runtime.peekState(toolId)
   }
 
   /** Probe port occupancy for tools this manager does not own, then return states. */
@@ -91,10 +85,10 @@ export class ProcessManager {
     const out: ToolRuntimeState[] = []
     for (const tool of this.store.list()) {
       seen.add(tool.id)
-      out.push(this.peekState(tool.id))
+      out.push(this.runtime.peekState(tool.id))
     }
-    for (const [id, state] of this.states) {
-      if (!seen.has(id)) out.push(state)
+    for (const state of this.runtime.listKnownStates()) {
+      if (!seen.has(state.toolId)) out.push(state)
     }
     return out
   }
@@ -103,11 +97,11 @@ export class ProcessManager {
     if (!this.processes.has(toolId)) {
       await this.reconcileTool(toolId)
     }
-    return this.peekState(toolId)
+    return this.runtime.peekState(toolId)
   }
 
   getLogs(toolId: string): LogLine[] {
-    return this.logs.get(toolId) || []
+    return this.runtime.getLogs(toolId)
   }
 
   async start(
@@ -116,13 +110,13 @@ export class ProcessManager {
   ): Promise<ToolRuntimeState> {
     let tool = this.store.get(toolId)
     if (!tool) {
-      this.emitFailedReceipt({
+      this.runtime.emitFailedReceipt({
         toolId,
         toolName: toolId,
         launchCommand: '',
         message: 'Tool not found in library.',
       })
-      return this.setState(toolId, {
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         message: 'Tool not found in library.',
@@ -130,11 +124,11 @@ export class ProcessManager {
     }
 
     if (this.processes.has(toolId)) {
-      return this.peekState(toolId)
+      return this.runtime.peekState(toolId)
     }
 
     if (!tool.launchCommand?.trim()) {
-      this.emitFailedReceipt({
+      this.runtime.emitFailedReceipt({
         toolId,
         toolName: tool.name,
         launchCommand: '',
@@ -142,7 +136,7 @@ export class ProcessManager {
         url: tool.url,
         message: 'Launch command is empty.',
       })
-      return this.setState(toolId, {
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         message: 'Launch command is empty.',
@@ -158,12 +152,12 @@ export class ProcessManager {
         // Default: adopt the external listener (MCP/orphan) instead of failing.
         // reassign still starts a second instance on a free port when requested.
         if (onPortConflict !== 'reassign') {
-          this.appendLog(
+          this.runtime.appendLog(
             toolId,
             'system',
             `Adopted existing process on port ${tool.port} (pid ${occupant}).`,
           )
-          return this.setState(toolId, {
+          return this.runtime.setState(toolId, {
             toolId,
             status: 'running',
             pid: occupant,
@@ -188,9 +182,9 @@ export class ProcessManager {
       }
     }
 
-    this.clearLogs(toolId)
+    this.runtime.clearLogs(toolId)
     const startedAt = new Date().toISOString()
-    this.setState(toolId, {
+    this.runtime.setState(toolId, {
       toolId,
       status: 'starting',
       startedAt,
@@ -201,16 +195,16 @@ export class ProcessManager {
         : 'Process starting…',
     })
 
-    this.appendLog(toolId, 'system', `Launch: ${tool.launchCommand}`)
+    this.runtime.appendLog(toolId, 'system', `Launch: ${tool.launchCommand}`)
     if (reassignedFrom && tool.port) {
-      this.appendLog(
+      this.runtime.appendLog(
         toolId,
         'system',
         `Port ${reassignedFrom} was busy; reassigned to ${tool.port} and updated library entry.`,
       )
     }
     if (tool.projectPath) {
-      this.appendLog(toolId, 'system', `cwd: ${tool.projectPath}`)
+      this.runtime.appendLog(toolId, 'system', `cwd: ${tool.projectPath}`)
     }
 
     try {
@@ -222,7 +216,7 @@ export class ProcessManager {
         }),
       })
 
-      const receipt = this.beginReceipt({
+      const receipt = this.runtime.beginReceipt({
         toolId,
         toolName: tool.name,
         launchCommand: tool.launchCommand,
@@ -244,20 +238,20 @@ export class ProcessManager {
       this.processes.set(toolId, managed)
 
       child.stdout?.on('data', (buf: Buffer) => {
-        this.appendLog(toolId, 'stdout', buf.toString('utf8'))
+        this.runtime.appendLog(toolId, 'stdout', buf.toString('utf8'))
       })
       child.stderr?.on('data', (buf: Buffer) => {
-        this.appendLog(toolId, 'stderr', buf.toString('utf8'))
+        this.runtime.appendLog(toolId, 'stderr', buf.toString('utf8'))
       })
 
       child.on('error', (err) => {
         const open = this.processes.get(toolId)
         this.processes.delete(toolId)
-        this.endReceipt(open?.receiptId, {
+        this.runtime.endReceipt(open?.receiptId, {
           outcome: 'error',
           message: err.message,
         })
-        this.setState(toolId, {
+        this.runtime.setState(toolId, {
           toolId,
           status: 'error',
           startedAt,
@@ -269,19 +263,19 @@ export class ProcessManager {
         const open = this.processes.get(toolId)
         const wasManaged = this.processes.delete(toolId)
         if (!wasManaged) return
-        const current = this.peekState(toolId)
+        const current = this.runtime.peekState(toolId)
         if (current.status === 'stopped') return
         const message =
           code === 0
             ? `Process exited (signal ${signal || 'none'}).`
             : `Process exited with code ${code}${signal ? ` (signal ${signal})` : ''}.`
-        this.endReceipt(open?.receiptId, {
+        this.runtime.endReceipt(open?.receiptId, {
           outcome: 'error',
           exitCode: code,
           message,
           pid: child.pid,
         })
-        this.setState(toolId, {
+        this.runtime.setState(toolId, {
           toolId,
           status: 'error',
           startedAt,
@@ -297,29 +291,29 @@ export class ProcessManager {
           this.processes.has(toolId),
         )
         if (!this.processes.has(toolId)) {
-          return this.peekState(toolId)
+          return this.runtime.peekState(toolId)
         }
         if (!ready) {
           // Framework may have hopped ports; sniff logs before giving up.
-          const sniffed = this.sniffReadyUrl(toolId)
+          const sniffed = this.runtime.sniffReadyUrl(toolId)
           if (sniffed) {
             const updated = this.store.save({
               ...tool,
               url: sniffed.url,
               port: sniffed.port,
             })
-            this.appendLog(
+            this.runtime.appendLog(
               toolId,
               'system',
               `Detected listening URL ${sniffed.url} (port ${sniffed.port}); updated library entry.`,
             )
-            this.markReceiptRunning(managed.receiptId, {
+            this.runtime.markReceiptRunning(managed.receiptId, {
               pid: child.pid,
               port: sniffed.port,
               url: sniffed.url,
               message: `Running · port ${sniffed.port} (from logs)`,
             })
-            this.setState(toolId, {
+            this.runtime.setState(toolId, {
               toolId,
               status: 'running',
               pid: child.pid,
@@ -329,21 +323,21 @@ export class ProcessManager {
             if (updated.url && this.options.onReadyUrl) {
               await this.options.onReadyUrl(updated.url)
             }
-            return this.peekState(toolId)
+            return this.runtime.peekState(toolId)
           }
           await this.stop(toolId, 'Port readiness timed out after 60s.')
-          return this.peekState(toolId)
+          return this.runtime.peekState(toolId)
         }
         const runningMessage = reassignedFrom
           ? `Running · port ${tool.port} (reassigned from ${reassignedFrom})`
           : `Running · port ${tool.port}`
-        this.markReceiptRunning(managed.receiptId, {
+        this.runtime.markReceiptRunning(managed.receiptId, {
           pid: child.pid,
           port: tool.port,
           url: tool.url,
           message: runningMessage,
         })
-        this.setState(toolId, {
+        this.runtime.setState(toolId, {
           toolId,
           status: 'running',
           pid: child.pid,
@@ -355,14 +349,14 @@ export class ProcessManager {
         }
       } else {
         // No configured port: still try to learn URL from framework ready logs.
-        const sniffed = await this.waitForSniffedUrl(toolId, 8_000)
+        const sniffed = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId))
         if (sniffed) {
           this.store.save({
             ...tool,
             url: sniffed.url,
             port: sniffed.port,
           })
-          this.appendLog(
+          this.runtime.appendLog(
             toolId,
             'system',
             `Detected listening URL ${sniffed.url}; updated library entry.`,
@@ -373,13 +367,13 @@ export class ProcessManager {
           : child.pid
             ? `Running · pid ${child.pid}`
             : 'Running'
-        this.markReceiptRunning(managed.receiptId, {
+        this.runtime.markReceiptRunning(managed.receiptId, {
           pid: child.pid,
           port: sniffed?.port || tool.port,
           url: sniffed?.url || tool.url,
           message: runningMessage,
         })
-        this.setState(toolId, {
+        this.runtime.setState(toolId, {
           toolId,
           status: 'running',
           pid: child.pid,
@@ -392,15 +386,15 @@ export class ProcessManager {
         }
       }
 
-      return this.peekState(toolId)
+      return this.runtime.peekState(toolId)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const open = this.processes.get(toolId)
       this.processes.delete(toolId)
       if (open?.receiptId) {
-        this.endReceipt(open.receiptId, { outcome: 'failed', message })
+        this.runtime.endReceipt(open.receiptId, { outcome: 'failed', message })
       } else {
-        this.emitFailedReceipt({
+        this.runtime.emitFailedReceipt({
           toolId,
           toolName: tool.name,
           launchCommand: tool.launchCommand,
@@ -410,47 +404,13 @@ export class ProcessManager {
           message,
         })
       }
-      return this.setState(toolId, {
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         startedAt,
         message,
       })
     }
-  }
-
-  /** Scan recent logs for a Local:/listening URL. */
-  private sniffReadyUrl(
-    toolId: string,
-  ): { url: string; port: number } | null {
-    const blob = this.getLogs(toolId)
-      .map((l) => l.text)
-      .join('\n')
-    const url = sniffLocalUrlFromText(blob)
-    if (!url) return null
-    try {
-      const parsed = new URL(url)
-      const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80))
-      if (!Number.isFinite(port)) return null
-      return { url, port }
-    } catch {
-      return null
-    }
-  }
-
-  /** Poll briefly for framework ready logs when no port was preconfigured. */
-  private async waitForSniffedUrl(
-    toolId: string,
-    timeoutMs: number,
-  ): Promise<{ url: string; port: number } | null> {
-    const started = Date.now()
-    while (Date.now() - started < timeoutMs) {
-      if (!this.processes.has(toolId)) return null
-      const found = this.sniffReadyUrl(toolId)
-      if (found) return found
-      await sleep(PORT_POLL_MS)
-    }
-    return this.sniffReadyUrl(toolId)
   }
 
   async stop(toolId: string, reason?: string): Promise<ToolRuntimeState> {
@@ -465,14 +425,14 @@ export class ProcessManager {
     }
 
     if (!managed && !tool?.stopCommand && !externalPid) {
-      return this.setState(toolId, {
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'stopped',
         message: reason || 'Already stopped.',
       })
     }
 
-    this.setState(toolId, {
+    this.runtime.setState(toolId, {
       toolId,
       status: 'stopped',
       message: reason || 'Stopping…',
@@ -481,7 +441,7 @@ export class ProcessManager {
 
     try {
       if (tool?.stopCommand?.trim()) {
-        this.appendLog(toolId, 'system', `Stop command: ${tool.stopCommand}`)
+        this.runtime.appendLog(toolId, 'system', `Stop command: ${tool.stopCommand}`)
         await runOnce(tool.stopCommand, tool.projectPath, tool.env)
       }
 
@@ -489,7 +449,7 @@ export class ProcessManager {
         await terminateProcess(managed)
         this.processes.delete(toolId)
       } else if (externalPid && tool?.port) {
-        this.appendLog(
+        this.runtime.appendLog(
           toolId,
           'system',
           `Stopping external process on port ${tool.port} (pid ${externalPid})…`,
@@ -506,27 +466,27 @@ export class ProcessManager {
       // Timeouts / forced stops count as failed runs; intentional stops as stopped.
       const outcome =
         reason && /timed out|quit|failed/i.test(reason) ? 'failed' : 'stopped'
-      this.endReceipt(receiptId, {
+      this.runtime.endReceipt(receiptId, {
         outcome,
         message,
         pid: managed?.child.pid || externalPid || undefined,
         port: tool?.port,
         url: tool?.url,
       })
-      this.appendLog(toolId, 'system', message)
-      return this.setState(toolId, {
+      this.runtime.appendLog(toolId, 'system', message)
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'stopped',
         message,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      this.appendLog(toolId, 'system', `Stop failed: ${message}`)
-      this.endReceipt(receiptId, {
+      this.runtime.appendLog(toolId, 'system', `Stop failed: ${message}`)
+      this.runtime.endReceipt(receiptId, {
         outcome: 'error',
         message: `Stop failed: ${message}`,
       })
-      return this.setState(toolId, {
+      return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         message: `Stop failed: ${message}`,
@@ -545,7 +505,7 @@ export class ProcessManager {
       ...this.processes.keys(),
       ...this.store
         .list()
-        .filter((t) => this.peekState(t.id).status === 'running')
+        .filter((t) => this.runtime.peekState(t.id).status === 'running')
         .map((t) => t.id),
     ])
     await Promise.all([...ids].map((id) => this.stop(id, reason)))
@@ -557,226 +517,10 @@ export class ProcessManager {
   }
 
   private async reconcileTool(toolId: string): Promise<void> {
-    if (this.processes.has(toolId)) return
-    const tool = this.store.get(toolId)
-    if (!tool?.port) return
-
-    const current = this.peekState(toolId)
-    // Don't interrupt an in-flight local start.
-    if (current.status === 'starting') return
-
-    const occupant = await findPortOccupant(tool.port)
-    if (occupant) {
-      if (current.status !== 'running' || current.pid !== occupant) {
-        this.setState(toolId, {
-          toolId,
-          status: 'running',
-          pid: occupant,
-          message: `Running · port ${tool.port} (external)`,
-        })
-      }
-      return
-    }
-
-    // Clear stale external-running badges when the listener is gone.
-    if (current.status === 'running' && (current.message || '').includes('external')) {
-      this.setState(toolId, {
-        toolId,
-        status: 'stopped',
-        message: 'Stopped (external process exited)',
-      })
-    }
-  }
-
-  private clearLogs(toolId: string): void {
-    this.logs.set(toolId, [])
-  }
-
-  private appendLog(
-    toolId: string,
-    stream: LogLine['stream'],
-    chunk: string,
-  ): void {
-    const lines = chunk.replace(/\r\n/g, '\n').split('\n')
-    const bucket = this.logs.get(toolId) || []
-    const at = new Date().toISOString()
-
-    for (const text of lines) {
-      if (!text && lines.length > 1) continue
-      if (!text) continue
-      const entry: LogLine = {
-        toolId,
-        stream,
-        text: maskSecrets(text),
-        at,
-      }
-      bucket.push(entry)
-      this.emit('logs:line', entry)
-    }
-
-    while (bucket.length > MAX_LOG_LINES) bucket.shift()
-    this.logs.set(toolId, bucket)
-  }
-
-  private setState(
-    toolId: string,
-    state: ToolRuntimeState,
-  ): ToolRuntimeState {
-    this.states.set(toolId, state)
-    this.emit('process:update', state)
-    return state
-  }
-
-  private beginReceipt(
-    input: Parameters<ReceiptStore['begin']>[0],
-  ): RunReceipt | undefined {
-    const store = this.options.receipts
-    if (!store) return undefined
-    const receipt = store.begin(input)
-    this.emit('receipts:update', receipt)
-    return receipt
-  }
-
-  private markReceiptRunning(
-    id: string | undefined,
-    patch: { pid?: number; port?: number; url?: string; message?: string },
-  ): void {
-    if (!id || !this.options.receipts) return
-    const receipt = this.options.receipts.markRunning(id, patch)
-    if (receipt) this.emit('receipts:update', receipt)
-  }
-
-  private endReceipt(
-    id: string | undefined,
-    input: Parameters<ReceiptStore['end']>[1],
-  ): void {
-    if (!id || !this.options.receipts) return
-    const receipt = this.options.receipts.end(id, input)
-    if (receipt) this.emit('receipts:update', receipt)
-  }
-
-  private emitFailedReceipt(
-    input: Parameters<ReceiptStore['recordFailed']>[0],
-  ): void {
-    if (!this.options.receipts) return
-    const receipt = this.options.receipts.recordFailed(input)
-    this.emit('receipts:update', receipt)
-  }
-
-  private emit(channel: string, payload: unknown): void {
-    this.options.onEvent?.(channel, payload)
-  }
-}
-
-function spawnLoginShell(
-  command: string,
-  opts: { cwd?: string; env?: Record<string, string> },
-): ChildProcess {
-  const env = {
-    ...process.env,
-    ...opts.env,
-    FORCE_COLOR: '0',
-    NO_COLOR: '1',
-  }
-
-  return spawn('/bin/zsh', ['-lc', command], {
-    cwd: opts.cwd,
-    env,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-}
-
-async function runOnce(
-  command: string,
-  cwd?: string,
-  env?: Record<string, string>,
-): Promise<void> {
-  await execFileAsync('/bin/zsh', ['-lc', command], {
-    cwd,
-    env: { ...process.env, ...sanitizeEnv(env) },
-    timeout: 30_000,
-  })
-}
-
-async function terminateProcess(managed: ManagedProcess): Promise<void> {
-  const { child, pgid } = managed
-  if (child.killed || child.exitCode !== null) return
-
-  try {
-    if (pgid) process.kill(-pgid, 'SIGTERM')
-    else child.kill('SIGTERM')
-  } catch {
-    // already exited
-  }
-
-  await waitForExit(child, STOP_KILL_GRACE_MS)
-
-  if (child.exitCode === null && !child.killed) {
-    try {
-      if (pgid) process.kill(-pgid, 'SIGKILL')
-      else child.kill('SIGKILL')
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function waitForExit(child: ChildProcess, ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null) {
-      resolve()
-      return
-    }
-    const timer = setTimeout(() => resolve(), ms)
-    child.once('exit', () => {
-      clearTimeout(timer)
-      resolve()
+    await reconcileExternalTool(toolId, {
+      store: this.store,
+      runtime: this.runtime,
+      isLocallyManaged: (id) => this.processes.has(id),
     })
-  })
-}
-
-function waitForPort(
-  port: number,
-  timeoutMs: number,
-  stillRunning: () => boolean,
-): Promise<boolean> {
-  const started = Date.now()
-  return new Promise((resolve) => {
-    const tick = () => {
-      if (!stillRunning()) {
-        resolve(false)
-        return
-      }
-      const socket = net.connect({ host: '127.0.0.1', port }, () => {
-        socket.end()
-        resolve(true)
-      })
-      socket.on('error', () => {
-        socket.destroy()
-        if (Date.now() - started >= timeoutMs) {
-          resolve(false)
-          return
-        }
-        setTimeout(tick, PORT_POLL_MS)
-      })
-    }
-    tick()
-  })
-}
-
-function sanitizeEnv(
-  env?: Record<string, string>,
-): Record<string, string> | undefined {
-  if (!env) return undefined
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(env)) {
-    if (!k.trim()) continue
-    out[k] = v
   }
-  return out
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }

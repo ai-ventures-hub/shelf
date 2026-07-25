@@ -1,0 +1,272 @@
+/* forms.css — pickers, form grid, suggest */
+.lucide-picker {
+  position:relative;
+  width:100%;
+}
+
+.lucide-picker-trigger {
+  display:flex;
+  align-items:center;
+  gap:.7rem;
+  width:100%;
+  padding:.55rem .75rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-control);
+  background:var(--input);
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+}
+
+.lucide-picker-trigger:hover {
+  border-color:var(--brand);
+}
+
+.lucide-picker-preview {
+  display:grid;
+  place-items:center;
+  width:2rem;
+  height:2rem;
+  border-radius:8px;
+  flex-shrink:0;
+}
+
+.lucide-picker-label {
+  font-weight:600;
+  letter-spacing:-.01em;
+}
+
+.lucide-picker-popover {
+  position:absolute;
+  top:calc(100% + .4rem);
+  left:0;
+  z-index:40;
+  width:min(420px,92vw);
+  padding:.65rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-card);
+  background:var(--panel);
+  box-shadow:0 18px 48px #00000059;
+}
+
+.lucide-picker-search {
+  margin-bottom:.55rem;
+}
+
+.lucide-picker-search:focus {
+  outline:2px solid var(--brand);
+  outline-offset:1px;
+}
+
+.lucide-picker-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(2.35rem,1fr));
+  gap:.3rem;
+  max-height:240px;
+  overflow:auto;
+  padding:.15rem;
+}
+
+.lucide-picker-cell {
+  display:grid;
+  place-items:center;
+  width:100%;
+  aspect-ratio:1;
+  margin:0;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--ink);
+  cursor:pointer;
+}
+
+.lucide-picker-cell:hover,.lucide-picker-cell.is-active {
+  border-color:var(--brand);
+  background:var(--panel-raised);
+  color:var(--brand-strong);
+}
+
+.lucide-picker-empty {
+  grid-column:1 / -1;
+  margin:.75rem 0;
+  color:var(--muted);
+  text-align:center;
+  font-size:.85rem;
+}
+
+.lucide-picker-clear {
+  margin-top:.45rem;
+}
+
+.color-field-control {
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  padding:.35rem .55rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-control);
+  background:var(--input);
+}
+
+.color-field-swatch {
+  width:1.65rem;
+  height:1.65rem;
+  padding:0;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:transparent;
+  cursor:pointer;
+  flex-shrink:0;
+}
+
+.color-field-swatch::-webkit-color-swatch-wrapper {
+  padding:0;
+}
+
+.color-field-swatch::-webkit-color-swatch {
+  border:none;
+  border-radius:5px;
+}
+
+.color-field-hex {
+  border:0!important;
+  background:transparent!important;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.9rem;
+  padding:.35rem 0!important;
+}
+.form-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:1rem;
+}
+
+.form-grid .span-2 {
+  grid-column:span 2;
+}
+
+/* Tool form Advanced — same disclosure language as MCP Connections. */
+.form-advanced {
+  border-top:1px solid var(--line);
+  margin-top:1.35rem;
+  padding-top:.35rem;
+}
+
+.form-advanced-toggle {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  width:100%;
+  margin:0;
+  padding:.85rem .15rem;
+  border:0;
+  background:transparent;
+  color:var(--ink);
+  font:inherit;
+  font-size:.9rem;
+  font-weight:680;
+  cursor:pointer;
+}
+
+.form-advanced-toggle:hover {
+  color:var(--brand-strong);
+}
+
+.form-advanced-chevron {
+  flex:0 0 auto;
+  color:var(--muted);
+}
+
+.form-advanced-toggle:hover .form-advanced-chevron {
+  color:var(--brand-strong);
+}
+
+.form-advanced-body {
+  padding:0 0 0.35rem;
+}
+
+.path-row {
+  display:flex;
+  gap:.5rem;
+}
+
+.path-row .field-input {
+  flex:1;
+}
+.warning-card {
+  padding:1rem 1.1rem;
+  border-radius:12px;
+  border:1px solid rgb(243 188 98 / 35%);
+  background:#f3bc621a;
+  color:var(--ink);
+  font-size:.92rem;
+}
+
+.suggest-card {
+  margin-bottom:1rem;
+  padding:1rem 1.1rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-card);
+  background:var(--panel-raised);
+}
+
+.suggest-card-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.75rem;
+  margin-bottom:.65rem;
+}
+
+.suggest-card-head strong {
+  margin-right:.55rem;
+}
+
+.suggest-confidence {
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:.15rem .55rem;
+  font-size:.72rem;
+  font-weight:700;
+  text-transform:capitalize;
+  background:var(--input);
+  color:var(--muted);
+}
+
+.suggest-confidence.is-high {
+  color:var(--success);
+}
+
+.suggest-confidence.is-medium {
+  color:var(--warning);
+}
+
+.suggest-signals {
+  margin:0 0 .75rem;
+  padding-left:1.1rem;
+  color:var(--muted);
+  font-size:.86rem;
+}
+
+.suggest-signals li {
+  margin:.2rem 0;
+}
+
+.suggest-note {
+  margin:0 0 .75rem;
+  color:var(--brand-strong);
+  font-size:.85rem;
+}
+
+.suggest-alts {
+  margin-bottom:.85rem;
+}
+
+.suggest-alt-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-top:.35rem;
+}

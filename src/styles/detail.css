@@ -1,0 +1,139 @@
+/* detail.css — extracted from app.css */
+.detail-hero {
+  display:flex;
+  align-items:flex-start;
+  gap:1rem;
+  margin-bottom:1.25rem;
+}
+
+.detail-hero .tool-icon {
+  width:64px;
+  height:64px;
+  font-size:1.4rem;
+}
+
+.action-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.55rem;
+  margin:1rem 0 1.25rem;
+}
+
+/* Tool detail: context-aware primary + Open menu + More */
+.detail-actions {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.55rem;
+  margin:1rem 0 1.25rem;
+}
+
+.detail-actions-more {
+  margin-left:.2rem;
+}
+
+.overflow-menu {
+  position:relative;
+}
+
+.overflow-menu-trigger {
+  min-width:2rem;
+  padding-inline:.45rem;
+  font-weight:700;
+  letter-spacing:.05em;
+}
+
+.overflow-menu.is-labeled .overflow-menu-trigger {
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  min-width:0;
+  padding-inline:.9rem;
+  font-weight:650;
+  letter-spacing:0;
+}
+
+.overflow-menu-chevron {
+  flex-shrink:0;
+  opacity:.75;
+}
+
+.overflow-menu-list {
+  position:absolute;
+  top:calc(100% + .3rem);
+  right:0;
+  z-index:20;
+  margin:0;
+  padding:.35rem;
+  list-style:none;
+  min-width:11.5rem;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-raised);
+  box-shadow:0 16px 40px rgb(0 0 0 / 35%);
+}
+
+.overflow-menu.is-labeled .overflow-menu-list {
+  right:auto;
+  left:0;
+}
+
+.overflow-menu-item {
+  display:block;
+  width:100%;
+  margin:0;
+  padding:.5rem .65rem;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--ink);
+  font:inherit;
+  font-size:.84rem;
+  font-weight:600;
+  text-align:left;
+  cursor:pointer;
+}
+
+.overflow-menu-item:hover,
+.overflow-menu-item:focus-visible {
+  background:var(--input);
+}
+
+.overflow-menu-item.is-danger {
+  color:var(--danger);
+}
+
+.overflow-menu-item:disabled {
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.log-panel {
+  font-family:SFMono-Regular,ui-monospace,Menlo,Consolas,Liberation Mono,monospace;
+  font-size:.86em;
+  line-height:1.45;
+  max-height:420px;
+  overflow:auto;
+  background:#070b13;
+  border-radius:12px;
+  border:1px solid var(--line);
+  padding:.85rem 1rem;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
+.log-line {
+  margin:0 0 .2rem;
+}
+
+.log-line[data-stream=stderr] {
+  color:var(--danger);
+}
+
+.log-line[data-stream=system] {
+  color:var(--brand-strong);
+}
+
+.log-line[data-stream=stdout] {
+  color:var(--muted);
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.19 — 2026-07-25
+
+- Soft-launch code hygiene: split `process-manager` helpers (`process-lifecycle`, `process-runtime-support`); ToolForm helpers + Advanced component; `app.css` feature imports; MCP `result` helper.
+- Keep TS/CSS modules near the ~500-line Community soft-launch bar.
+
 ## 0.3.18 — 2026-07-25
 
 - Library first-run empty: “Your shelf is empty” with Add tool + Connect agents, ⌘N hint; hide search/filter toolbar when there are no tools.

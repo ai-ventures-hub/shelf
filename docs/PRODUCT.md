@@ -48,7 +48,7 @@ Free, local-first, no account required:
 1. Initialize git + GitHub remote; tag releases (`v0.3.x`)
 2. Landing page + brand domain (download / waitlist — unsigned local build is fine for invitees)
 3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop copy when both exist~~ (**0.3.15**)
-4. Code size follow-ups (keep TS/TSX under ~500 lines): `shared/process-manager.ts`, `src/pages/ToolFormPage.tsx`, `src/styles/app.css` (split by feature), `mcp/server.ts`
+4. ~~Code size follow-ups (keep TS/TSX under ~500 lines)~~ (**0.3.19** — process-manager split, ToolForm extract, `app.css` feature barrel; `mcp/server.ts` already under bar)
 5. Signed/notarized macOS build + auto-update (later Community)
 
 ## Shelf Profiles (future add-on)

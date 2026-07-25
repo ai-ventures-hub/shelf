@@ -1,0 +1,62 @@
+/* settings.css — appearance + shortcuts */
+.appearance-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.75rem;
+}
+
+.appearance-card {
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  text-align:left;
+  padding:.9rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-control);
+  background:var(--input);
+  color:var(--muted);
+  cursor:pointer;
+}
+
+.appearance-card strong {
+  color:var(--ink);
+}
+
+.appearance-card.is-selected {
+  border-color:var(--brand);
+  box-shadow:0 0 0 1px var(--brand);
+}
+.shortcut-preset-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.45rem;
+  margin-top:.55rem;
+}
+
+.shortcut-list {
+  margin:0;
+  padding:0;
+  list-style:none;
+  display:grid;
+  gap:.55rem;
+}
+
+.shortcut-list li {
+  display:flex;
+  align-items:center;
+  gap:.75rem;
+  color:var(--muted);
+}
+
+.shortcut-list kbd {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:2.4rem;
+  padding:.2rem .45rem;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:var(--input);
+  color:var(--ink);
+  font:.78rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}

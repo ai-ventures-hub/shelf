@@ -19,23 +19,11 @@ import { inspectProject } from '../shared/project-import'
 import { ReceiptStore } from '../shared/receipt-store'
 import { sanitizeToolForOutput, type Tool } from '../shared/types'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { errorResult, textResult } from './result'
 
 const store = new LibraryStore()
 const receipts = new ReceiptStore()
 const processes = new ProcessManager(store, { receipts })
-
-function textResult(payload: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
-  }
-}
-
-function errorResult(message: string) {
-  return {
-    content: [{ type: 'text' as const, text: message }],
-    isError: true,
-  }
-}
 
 const server = new McpServer({
   name: 'shelf',

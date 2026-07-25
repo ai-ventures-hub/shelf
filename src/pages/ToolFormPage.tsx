@@ -1,96 +1,16 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ColorField } from '../components/ColorField'
-import { LucideIconPicker } from '../components/LucideIconPicker'
+import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
-import type { ProjectImportSuggestion, Tool, UiPrefs } from '../types'
-
-const ADVANCED_KEY = 'shelf.toolForm.advancedOpen'
-
-function emptyTool(defaults?: {
-  iconLucide?: string
-  iconColor?: string
-  iconBackground?: string
-}): Tool {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    description: '',
-    tags: [],
-    favorite: false,
-    launchCommand: '',
-    iconLucide: defaults?.iconLucide,
-    iconColor: defaults?.iconColor,
-    iconBackground: defaults?.iconBackground,
-    createdAt: now,
-    updatedAt: now,
-  }
-}
-
-function envToText(env?: Record<string, string>): string {
-  if (!env) return ''
-  return Object.entries(env)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('\n')
-}
-
-function textToEnv(text: string): Record<string, string> | undefined {
-  // Join wrapped continuation lines (no `=`) onto the previous KEY=value entry.
-  const entries: Array<[string, string]> = []
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trimEnd()
-    if (!line.trim()) continue
-    const idx = line.indexOf('=')
-    const looksLikeKey = idx > 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0, idx).trim())
-    if (looksLikeKey) {
-      entries.push([line.slice(0, idx).trim(), line.slice(idx + 1)])
-      continue
-    }
-    if (entries.length > 0) {
-      entries[entries.length - 1][1] += line.trim()
-    }
-  }
-
-  if (entries.length === 0) return undefined
-  return Object.fromEntries(entries)
-}
-
-/** True when edit should surface Advanced so existing power-user fields aren’t hidden. */
-function toolHasAdvancedContent(tool: Tool, prefs: UiPrefs): boolean {
-  if (tool.stopCommand?.trim()) return true
-  if (tool.tags.length > 0) return true
-  if (tool.env && Object.keys(tool.env).length > 0) return true
-  if (tool.notes?.trim()) return true
-  if (tool.iconPath?.trim()) return true
-  if (tool.iconLucide && tool.iconLucide !== prefs.defaultIconLucide) return true
-  if (tool.iconColor && tool.iconColor !== prefs.defaultIconColor) return true
-  if (tool.iconBackground && tool.iconBackground !== prefs.defaultIconBackground) {
-    return true
-  }
-  return false
-}
-
-/** Stroke chevron matching MCP Advanced / sidebar weight. */
-function DisclosureChevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      className="form-advanced-chevron"
-      width={18}
-      height={18}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      {open ? <path d="M6 9l6 6 6-6" /> : <path d="M9 6l6 6-6 6" />}
-    </svg>
-  )
-}
+import {
+  TOOL_FORM_ADVANCED_KEY,
+  emptyTool,
+  envToText,
+  textToEnv,
+  toolHasAdvancedContent,
+} from '../lib/toolForm'
+import type { ProjectImportSuggestion, Tool } from '../types'
 
 export function ToolFormPage() {
   const { id } = useParams()
@@ -129,7 +49,7 @@ export function ToolFormPage() {
   useEffect(() => {
     if (!existing) return
     try {
-      const stored = localStorage.getItem(ADVANCED_KEY)
+      const stored = localStorage.getItem(TOOL_FORM_ADVANCED_KEY)
       if (stored === '0') {
         setAdvancedOpen(false)
         return
@@ -152,7 +72,7 @@ export function ToolFormPage() {
     setAdvancedOpen((prev) => {
       const next = !prev
       try {
-        localStorage.setItem(ADVANCED_KEY, next ? '1' : '0')
+        localStorage.setItem(TOOL_FORM_ADVANCED_KEY, next ? '1' : '0')
       } catch {
         // ignore quota / private mode
       }
@@ -476,153 +396,18 @@ export function ToolFormPage() {
             </label>
           </div>
 
-          <section className="form-advanced">
-            <button
-              type="button"
-              className="form-advanced-toggle"
-              aria-expanded={advancedOpen}
-              onClick={toggleAdvanced}
-            >
-              <span>Advanced</span>
-              <DisclosureChevron open={advancedOpen} />
-            </button>
-            {advancedOpen ? (
-              <div className="form-advanced-body form-grid">
-                <div className="field">
-                  <label className="field-label" htmlFor="stopCommand">
-                    Stop command (optional)
-                  </label>
-                  <input
-                    id="stopCommand"
-                    className="field-input"
-                    value={form.stopCommand || ''}
-                    onChange={(e) => update('stopCommand', e.target.value)}
-                    placeholder="docker compose down"
-                  />
-                </div>
-
-                <div className="field">
-                  <label className="field-label" htmlFor="tags">
-                    Tags
-                  </label>
-                  <input
-                    id="tags"
-                    className="field-input"
-                    value={tagsText}
-                    onChange={(e) => setTagsText(e.target.value)}
-                    placeholder="Image Tools, Client Projects"
-                  />
-                </div>
-
-                <div className="field span-2">
-                  <span className="field-label" id="icon-lucide-label">
-                    Icon
-                  </span>
-                  <LucideIconPicker
-                    value={form.iconLucide}
-                    iconColor={form.iconColor || prefs.defaultIconColor}
-                    iconBackground={form.iconBackground || prefs.defaultIconBackground}
-                    onChange={(name) => {
-                      // Lucide marks take precedence over a custom file path.
-                      setForm((prev) => ({
-                        ...prev,
-                        iconLucide: name,
-                        iconPath: name ? undefined : prev.iconPath,
-                        iconColor: prev.iconColor || prefs.defaultIconColor,
-                        iconBackground: prev.iconBackground || prefs.defaultIconBackground,
-                      }))
-                    }}
-                  />
-                </div>
-
-                <ColorField
-                  id="iconBackground"
-                  label="Background Color"
-                  value={form.iconBackground || prefs.defaultIconBackground}
-                  onChange={(hex) => update('iconBackground', hex)}
-                />
-                <ColorField
-                  id="iconColor"
-                  label="Icon Color"
-                  value={form.iconColor || prefs.defaultIconColor}
-                  onChange={(hex) => update('iconColor', hex)}
-                />
-
-                <div className="field span-2">
-                  <label className="field-label" htmlFor="icon">
-                    Custom image (optional)
-                  </label>
-                  <div className="path-row">
-                    <input
-                      id="icon"
-                      className="field-input"
-                      value={form.iconPath || ''}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          iconPath: e.target.value,
-                          // File icons replace Lucide when a path is chosen.
-                          iconLucide: e.target.value.trim() ? undefined : prev.iconLucide,
-                        }))
-                      }
-                      placeholder="Optional local image path"
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-quiet"
-                      onClick={() => {
-                        void window.shelf.pickIcon().then((path) => {
-                          if (!path) return
-                          setForm((prev) => ({
-                            ...prev,
-                            iconPath: path,
-                            iconLucide: undefined,
-                          }))
-                        })
-                      }}
-                    >
-                      Choose…
-                    </button>
-                  </div>
-                  <p className="field-hint">
-                    Lucide icons are preferred when set. A custom image clears the Lucide
-                    selection.
-                  </p>
-                </div>
-
-                <div className="field span-2">
-                  <label className="field-label" htmlFor="env">
-                    Environment variables
-                  </label>
-                  <textarea
-                    id="env"
-                    className="field-textarea"
-                    value={envText}
-                    onChange={(e) => setEnvText(e.target.value)}
-                    placeholder={'NODE_ENV=development\nAPI_URL=http://localhost:3000'}
-                  />
-                  <p className="field-hint">
-                    One KEY=value per line. Prefer project <code>.env.local</code> when it
-                    already exists. For Python venvs, launch with{' '}
-                    <code>.venv/bin/python app.py</code>.
-                  </p>
-                </div>
-
-                <div className="field span-2">
-                  <label className="field-label" htmlFor="notes">
-                    Notes / operating manual
-                  </label>
-                  <textarea
-                    id="notes"
-                    className="field-textarea"
-                    value={form.notes || ''}
-                    onChange={(e) => update('notes', e.target.value)}
-                    placeholder="Required inputs, common errors, last known working setup…"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </section>
+          <ToolFormAdvanced
+            open={advancedOpen}
+            onToggle={toggleAdvanced}
+            form={form}
+            prefs={prefs}
+            tagsText={tagsText}
+            envText={envText}
+            setTagsText={setTagsText}
+            setEnvText={setEnvText}
+            update={update}
+            setForm={setForm}
+          />
 
           <div className="action-row" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>

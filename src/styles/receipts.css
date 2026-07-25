@@ -1,0 +1,118 @@
+/* receipts.css — extracted from app.css */
+.detail-layout {
+  display:grid;
+  grid-template-columns:minmax(0,1.4fr) minmax(280px,.9fr);
+  gap:1rem;
+}
+
+.receipt-history {
+  display:flex;
+  flex-direction:column;
+  gap:.75rem;
+}
+
+.receipt-toolbar {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:.65rem;
+}
+
+.receipt-filters {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+}
+
+.receipt-filters .filter-token.is-active {
+  border-color:var(--brand);
+  color:var(--brand-strong);
+  background:color-mix(in srgb,var(--brand) 12%,var(--panel));
+}
+
+.receipt-export {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+}
+
+.receipt-list {
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:.55rem;
+}
+
+.receipt-row {
+  padding:.65rem .75rem;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--input);
+}
+
+.receipt-row-main {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.45rem .7rem;
+}
+
+.receipt-outcome {
+  border-radius:999px;
+  padding:.12rem .5rem;
+  font-size:.7rem;
+  font-weight:750;
+  text-transform:capitalize;
+  background:var(--panel);
+  color:var(--muted);
+}
+
+.receipt-outcome.is-running,.receipt-outcome.is-starting {
+  color:var(--warning);
+}
+
+.receipt-outcome.is-stopped {
+  color:var(--success);
+}
+
+.receipt-outcome.is-error,.receipt-outcome.is-failed,.receipt-outcome.is-interrupted {
+  color:var(--danger);
+}
+
+.receipt-tool {
+  color:var(--ink);
+  font-weight:650;
+  text-decoration:none;
+}
+
+.receipt-tool:hover {
+  color:var(--brand-strong);
+}
+
+.receipt-when,.receipt-duration,.receipt-port {
+  color:var(--subtle);
+  font-size:.78rem;
+}
+
+.receipt-message {
+  margin:.35rem 0 0;
+  color:var(--muted);
+  font-size:.82rem;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.receipt-empty {
+  margin:0;
+  color:var(--muted);
+  font-size:.9rem;
+}
+
+.shelf-url-list .shelf-url-hint {
+  color:var(--subtle);
+  font-size:.85rem;
+}
