@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.18 — 2026-07-25
+
+- Library first-run empty: “Your shelf is empty” with Add tool + Connect agents, ⌘N hint; hide search/filter toolbar when there are no tools.
+- Tighter empty copy for Favorites / Running / Recent / Collections and filter-no-match.
+
 ## 0.3.17 — 2026-07-25
 
 - Add/Edit tool form: folder-first **Essentials** (name, launch, URL/port, favorite); icons, tags, env, stop command, and notes under collapsed **Advanced**.

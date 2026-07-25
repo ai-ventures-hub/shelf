@@ -1252,6 +1252,32 @@ animation-duration:.01ms!important;
   color:var(--muted);
 }
 
+.empty-state-actions {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:.55rem;
+  margin-bottom:.85rem;
+}
+
+.empty-state-hint {
+  margin:0;
+  color:var(--subtle);
+  font-size:.8rem;
+}
+
+.empty-state-hint kbd {
+  display:inline-block;
+  padding:.1rem .35rem;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--panel);
+  font:inherit;
+  font-size:.78rem;
+  font-weight:650;
+}
+
 .warning-card {
   padding:1rem 1.1rem;
   border-radius:12px;

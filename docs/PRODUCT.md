@@ -22,6 +22,7 @@ Sit between productivity launchers (Raycast/Alfred), script wrappers (Platypus),
 Free, local-first, no account required:
 
 - Tool library with launch, stop, restart, status, and logs
+- First-run empty Library (Add tool + Connect agents)
 - Open URL, folder, editor, and Terminal
 - MCP tools for agent registration and lifecycle control
 - Search, filters, tags, collections, list/grid view

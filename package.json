@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "private": true,
   "description": "Personal command center for the tools you build",
   "main": "dist-electron/electron/main.js",

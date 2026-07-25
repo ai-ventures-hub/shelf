@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
 import {
   ReceiptHistory,
@@ -182,6 +182,38 @@ export function LibraryPage({
 
   const emptyBecauseFilters =
     tools.length > 0 && filtered.length === 0
+  // True zero-library welcome — hide search/filter chrome until there is something to find.
+  const isFirstRun = !loading && tools.length === 0 && mode === 'all'
+
+  const emptyCopy = emptyBecauseFilters
+    ? {
+        title: 'No matching tools',
+        lede: 'Try clearing filters or broadening your search.',
+      }
+    : mode === 'favorites'
+      ? {
+          title: 'No favorites yet',
+          lede: 'Mark a tool as favorite from its detail page to pin it here.',
+        }
+      : mode === 'running'
+        ? {
+            title: 'Nothing running',
+            lede: 'Launch a tool from the library and it will show up here.',
+          }
+        : mode === 'recent'
+          ? {
+              title: 'No recent launches',
+              lede: 'Tools you launch will appear here by last-run time.',
+            }
+          : mode === 'collection'
+            ? {
+                title: 'No tools in this collection',
+                lede: 'Open a tool and add it to this collection, or pick another shelf.',
+              }
+            : {
+                title: 'No tools yet',
+                lede: 'Add a project Shelf can launch, stop, and remember.',
+              }
 
   return (
     <>
@@ -202,6 +234,7 @@ export function LibraryPage({
         </div>
       ) : null}
 
+      {!isFirstRun ? (
       <div className="toolbar">
         <input
           ref={searchRef}
@@ -312,8 +345,9 @@ export function LibraryPage({
           </button>
         </div>
       </div>
+      ) : null}
 
-      {activeFilters.length > 0 ? (
+      {!isFirstRun && activeFilters.length > 0 ? (
         <div className="active-filters" aria-label="Active filters">
           {activeFilters.map((f) => (
             <button
@@ -371,26 +405,38 @@ export function LibraryPage({
       ) : filtered.length === 0 ? (
         <div className="empty-state">
           <div>
-            <h2>{emptyBecauseFilters ? 'No matching tools' : 'No tools yet'}</h2>
-            <p>
-              {emptyBecauseFilters
-                ? 'Try clearing filters or broadening your search.'
-                : 'Add a project you already run by hand. Shelf remembers the launch command, folder, and local URL.'}
-            </p>
-            {emptyBecauseFilters ? (
-              <button
-                type="button"
-                className="btn btn-quiet"
-                onClick={() => {
-                  setQuery('')
-                  setTagFilter([])
-                  setStatusFilter('all')
-                }}
-              >
-                Clear filters
-              </button>
+            {isFirstRun ? (
+              <>
+                <h2>Your shelf is empty</h2>
+                <p>Add a local project Shelf can launch, stop, and remember.</p>
+                <div className="empty-state-actions">
+                  <AddToolButton />
+                  <Link className="btn btn-quiet" to="/mcp">
+                    Connect agents
+                  </Link>
+                </div>
+                <p className="empty-state-hint">
+                  Press <kbd>⌘N</kbd> to add a tool
+                </p>
+              </>
             ) : (
-              <AddToolButton />
+              <>
+                <h2>{emptyCopy.title}</h2>
+                <p>{emptyCopy.lede}</p>
+                {emptyBecauseFilters ? (
+                  <button
+                    type="button"
+                    className="btn btn-quiet"
+                    onClick={() => {
+                      setQuery('')
+                      setTagFilter([])
+                      setStatusFilter('all')
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
         </div>
