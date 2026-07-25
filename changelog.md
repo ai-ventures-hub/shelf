@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.16 — 2026-07-25
+
+- Tool Detail action bar: context-aware primary (Launch when stopped, Stop when running), **Open** menu for folder/editor/Terminal (URL when idle), **⋯** for Restart / Remove.
+- Shared `OverflowMenu` supports labeled triggers; styles live in `app.css` for detail + MCP Connections.
+
 ## 0.3.15 — 2026-07-25
 
 - Prefer MCP server path `/Applications/Shelf.app/...` over `~/Desktop/Shelf.app` when both exist (Connect + Advanced copy).

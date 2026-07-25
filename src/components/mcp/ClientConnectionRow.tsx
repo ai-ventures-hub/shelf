@@ -1,5 +1,5 @@
 import type { McpClientSnapshot } from '../../lib/mcpConnectionStatus'
-import { OverflowMenu, type OverflowMenuItem } from './OverflowMenu'
+import { OverflowMenu, type OverflowMenuItem } from '../OverflowMenu'
 
 export interface ClientConnectionRowProps {
   client: McpClientSnapshot

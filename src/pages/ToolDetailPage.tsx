@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { LogPanel } from '../components/LogPanel'
+import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
 import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
@@ -91,8 +92,12 @@ export function ToolDetailPage() {
     )
   }
 
+  // Narrowed after the guard so nested handlers keep a definite Tool.
+  const current = tool
+  const toolId = id
   const canStop = status === 'running' || status === 'starting'
   const canStart = status === 'stopped' || status === 'error'
+  const showOpenUrlButton = canStop && Boolean(current.url)
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -106,34 +111,93 @@ export function ToolDetailPage() {
     }
   }
 
+  function confirmRemove() {
+    if (
+      !window.confirm(
+        `Remove “${current.name}” from Shelf? This does not delete the project files.`,
+      )
+    ) {
+      return
+    }
+    void run(async () => {
+      await deleteTool(toolId)
+      navigate('/')
+    })
+  }
+
+  // Open menu: URL when idle (button while running); folder / editor / terminal.
+  const openMenuItems: OverflowMenuItem[] = []
+  if (current.url && !showOpenUrlButton) {
+    openMenuItems.push({
+      id: 'url',
+      label: 'Open URL',
+      onSelect: () => void window.shelf.openUrl(current.url!),
+    })
+  }
+  if (current.projectPath) {
+    openMenuItems.push(
+      {
+        id: 'folder',
+        label: 'Open folder',
+        onSelect: () => void window.shelf.openPath(current.projectPath!),
+      },
+      {
+        id: 'editor',
+        label: 'Open editor',
+        onSelect: () => void window.shelf.openEditor(current.projectPath!),
+      },
+      {
+        id: 'terminal',
+        label: 'Open Terminal',
+        onSelect: () => void window.shelf.openTerminal(current.projectPath!),
+      },
+    )
+  }
+
+  const moreMenuItems: OverflowMenuItem[] = [
+    {
+      id: 'restart',
+      label: 'Restart',
+      disabled: busy,
+      onSelect: () => void run(() => restartTool(toolId)),
+    },
+    {
+      id: 'remove',
+      label: 'Remove',
+      danger: true,
+      disabled: busy,
+      onSelect: confirmRemove,
+    },
+  ]
+
   return (
     <>
       <header className="page-header">
         <div className="page-header-copy">
           <p className="eyebrow">Tool detail</p>
-          <h1 className="page-title">{tool.name}</h1>
+          <h1 className="page-title">{current.name}</h1>
           <p className="page-lede">
-            {tool.description || 'No description yet. Edit this tool to document what it does.'}
+            {current.description || 'No description yet. Edit this tool to document what it does.'}
           </p>
         </div>
-        <Link className="btn btn-quiet" to={`/tools/${tool.id}/edit`}>
+        <Link className="btn btn-quiet" to={`/tools/${toolId}/edit`}>
           Edit
         </Link>
       </header>
 
       <div className="detail-hero">
         <ToolIcon
-          name={tool.name}
-          iconPath={tool.iconPath}
-          iconLucide={tool.iconLucide}
-          iconColor={tool.iconColor}
-          iconBackground={tool.iconBackground}
+          name={current.name}
+          iconPath={current.iconPath}
+          iconLucide={current.iconLucide}
+          iconColor={current.iconColor}
+          iconBackground={current.iconBackground}
         />
         <div className="stack" style={{ gap: '0.45rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <StatusPill status={status} message={state?.message} />
-            {tool.favorite ? <span className="tag-chip">Favorite</span> : null}
-            {tool.tags.map((tag) => (
+            {current.favorite ? <span className="tag-chip">Favorite</span> : null}
+            {current.tags.map((tag) => (
               <span key={tag} className="tag-chip">
                 {tag}
               </span>
@@ -141,8 +205,8 @@ export function ToolDetailPage() {
           </div>
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             {state?.message ||
-              (tool.lastLaunchedAt
-                ? `Stopped · last launch ${formatRelative(tool.lastLaunchedAt)}`
+              (current.lastLaunchedAt
+                ? `Stopped · last launch ${formatRelative(current.lastLaunchedAt)}`
                 : 'Stopped · never launched')}
           </p>
           {state?.pid ? (
@@ -160,85 +224,47 @@ export function ToolDetailPage() {
         </div>
       ) : null}
 
-      <div className="action-row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy || !canStart}
-          onClick={() => void run(() => startTool(tool.id))}
-        >
-          Launch
-        </button>
-        <button
-          type="button"
-          className="btn btn-quiet"
-          disabled={busy || !canStop}
-          onClick={() => void run(() => stopTool(tool.id))}
-        >
-          Stop
-        </button>
-        <button
-          type="button"
-          className="btn btn-quiet"
-          disabled={busy}
-          onClick={() => void run(() => restartTool(tool.id))}
-        >
-          Restart
-        </button>
-        {tool.url ? (
+      {/* Context-aware: Launch when idle, Stop when live; Open + More for the rest. */}
+      <div className="detail-actions">
+        {canStart ? (
           <button
             type="button"
-            className="btn btn-quiet btn-sm"
-            onClick={() => void window.shelf.openUrl(tool.url!)}
+            className="btn btn-primary"
+            disabled={busy}
+            onClick={() => void run(() => startTool(toolId))}
+          >
+            Launch
+          </button>
+        ) : null}
+        {canStop ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy}
+            onClick={() => void run(() => stopTool(toolId))}
+          >
+            Stop
+          </button>
+        ) : null}
+        {showOpenUrlButton ? (
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={() => void window.shelf.openUrl(current.url!)}
           >
             Open URL
           </button>
         ) : null}
-        {tool.projectPath ? (
-          <>
-            <button
-              type="button"
-              className="btn btn-quiet btn-sm"
-              onClick={() => void window.shelf.openPath(tool.projectPath!)}
-            >
-              Open folder
-            </button>
-            <button
-              type="button"
-              className="btn btn-quiet btn-sm"
-              onClick={() => void window.shelf.openEditor(tool.projectPath!)}
-            >
-              Open editor
-            </button>
-            <button
-              type="button"
-              className="btn btn-quiet btn-sm"
-              onClick={() => void window.shelf.openTerminal(tool.projectPath!)}
-            >
-              Open Terminal
-            </button>
-          </>
+        {openMenuItems.length > 0 ? (
+          <OverflowMenu
+            triggerLabel="Open"
+            label="Open project"
+            items={openMenuItems}
+          />
         ) : null}
-        <button
-          type="button"
-          className="btn btn-danger btn-sm"
-          disabled={busy}
-          onClick={() => {
-            if (
-              !window.confirm(
-                `Remove “${tool.name}” from Shelf? This does not delete the project files.`,
-              )
-            ) {
-              return
-            }
-            void run(async () => {
-              await deleteTool(tool.id)
-              navigate('/')
-            })
-          }}
-        >
-          Remove
-        </button>
+        <div className="detail-actions-more">
+          <OverflowMenu label="More actions" items={moreMenuItems} />
+        </div>
       </div>
 
       <div className="detail-layout">

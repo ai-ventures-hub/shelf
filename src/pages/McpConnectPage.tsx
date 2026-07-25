@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ClientConnectionRow } from '../components/mcp/ClientConnectionRow'
 import { McpAdvancedPanel } from '../components/mcp/McpAdvancedPanel'
-import type { OverflowMenuItem } from '../components/mcp/OverflowMenu'
+import type { OverflowMenuItem } from '../components/OverflowMenu'
 import { MCP_TEST_PROMPT } from '../lib/mcpClientGuides'
 import {
   buildClientSnapshot,
