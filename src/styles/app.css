@@ -1180,6 +1180,46 @@ animation-duration:.01ms!important;
   grid-column:span 2;
 }
 
+/* Tool form Advanced — same disclosure language as MCP Connections. */
+.form-advanced {
+  border-top:1px solid var(--line);
+  margin-top:1.35rem;
+  padding-top:.35rem;
+}
+
+.form-advanced-toggle {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  width:100%;
+  margin:0;
+  padding:.85rem .15rem;
+  border:0;
+  background:transparent;
+  color:var(--ink);
+  font:inherit;
+  font-size:.9rem;
+  font-weight:680;
+  cursor:pointer;
+}
+
+.form-advanced-toggle:hover {
+  color:var(--brand-strong);
+}
+
+.form-advanced-chevron {
+  flex:0 0 auto;
+  color:var(--muted);
+}
+
+.form-advanced-toggle:hover .form-advanced-chevron {
+  color:var(--brand-strong);
+}
+
+.form-advanced-body {
+  padding:0 0 0.35rem;
+}
+
 .path-row {
   display:flex;
   gap:.5rem;

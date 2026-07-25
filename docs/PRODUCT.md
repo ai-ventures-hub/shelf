@@ -27,6 +27,7 @@ Free, local-first, no account required:
 - Search, filters, tags, collections, list/grid view
 - Quick Open (`⌘K`) for tools, collections, and actions
 - Smart project import (scripts, port, tags, DESIGN.md suggestions)
+- Add/Edit form: essentials + Advanced (icons, env, tags, notes)
 - Lucide tool icons with customizable background / glyph colors
 - Run receipts / launch history (local, capped)
 - Menu bar tray, global show/hide shortcut, OS `shelf://` URL scheme

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.17 — 2026-07-25
+
+- Add/Edit tool form: folder-first **Essentials** (name, launch, URL/port, favorite); icons, tags, env, stop command, and notes under collapsed **Advanced**.
+- Edit auto-opens Advanced when power-user fields already have content; explicit collapse (`localStorage` `'0'`) is respected across remounts.
+
 ## 0.3.16 — 2026-07-25
 
 - Tool Detail action bar: context-aware primary (Launch when stopped, Stop when running), **Open** menu for folder/editor/Terminal (URL when idle), **⋯** for Restart / Remove.
