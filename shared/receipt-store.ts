@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { resolveShelfDataRoot } from './paths'
 import { filterReceipts, type ReceiptFilterOpts } from './receipt-export'
 import { maskSecrets, type ReceiptOutcome, type ReceiptsFile, type RunReceipt } from './types'
@@ -19,6 +20,7 @@ export interface BeginReceiptInput {
   launchCommand: string
   port?: number
   url?: string
+  pid?: number
   startedAt?: string
   message?: string
 }
@@ -38,10 +40,26 @@ export class ReceiptStore {
   constructor(root = resolveShelfDataRoot()) {
     fs.mkdirSync(root, { recursive: true })
     this.filePath = path.join(root, 'receipts.json')
-    if (!fs.existsSync(this.filePath)) {
-      this.write({ version: 1, receipts: [] })
-    } else {
-      // Mark open receipts from a prior session as interrupted.
+    withFileLockSync(this.filePath, () => {
+      if (!fs.existsSync(this.filePath)) {
+        this.write({ version: 1, receipts: [] })
+        return
+      }
+      try {
+        const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as
+          | Partial<ReceiptsFile>
+          | null
+        if (!parsed || !Array.isArray(parsed.receipts)) throw new Error('missing receipts array')
+      } catch {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const backup = path.join(root, `receipts.corrupt-backup-${stamp}.json`)
+        fs.copyFileSync(this.filePath, backup)
+        this.write({ version: 1, receipts: [] })
+      }
+    })
+    // Mark only dead open receipts as interrupted. Live processes may belong
+    // to another Shelf host (Electron or MCP) using the same receipt file.
+    if (fs.existsSync(this.filePath)) {
       this.closeOrphans()
     }
   }
@@ -61,21 +79,24 @@ export class ReceiptStore {
 
   /** Open a receipt when a process has been spawned (or is starting). */
   begin(input: BeginReceiptInput): RunReceipt {
-    const receipt: RunReceipt = {
-      id: randomUUID(),
-      toolId: input.toolId,
-      toolName: input.toolName,
-      launchCommand: maskSecrets(input.launchCommand),
-      port: input.port,
-      url: input.url,
-      startedAt: input.startedAt || new Date().toISOString(),
-      outcome: 'starting',
-      message: input.message || 'Starting…',
-    }
-    const data = this.read()
-    data.receipts.unshift(receipt)
-    this.write(this.cap(data))
-    return receipt
+    return withFileLockSync(this.filePath, () => {
+      const receipt: RunReceipt = {
+        id: randomUUID(),
+        toolId: input.toolId,
+        toolName: input.toolName,
+        launchCommand: maskSecrets(input.launchCommand),
+        port: input.port,
+        url: input.url,
+        pid: input.pid,
+        startedAt: input.startedAt || new Date().toISOString(),
+        outcome: 'starting',
+        message: input.message || 'Starting…',
+      }
+      const data = this.read()
+      data.receipts.unshift(receipt)
+      this.write(this.cap(data))
+      return receipt
+    })
   }
 
   /** Transition an open receipt to running once readiness succeeds. */
@@ -119,87 +140,138 @@ export class ReceiptStore {
 
   /** One-shot receipt for launches that never spawned (busy port, missing tool). */
   recordFailed(input: BeginReceiptInput & { message: string }): RunReceipt {
-    const startedAt = input.startedAt || new Date().toISOString()
-    const receipt: RunReceipt = {
-      id: randomUUID(),
-      toolId: input.toolId,
-      toolName: input.toolName,
-      launchCommand: maskSecrets(input.launchCommand || ''),
-      port: input.port,
-      url: input.url,
-      startedAt,
-      endedAt: startedAt,
-      durationMs: 0,
-      outcome: 'failed',
-      message: input.message,
-    }
-    const data = this.read()
-    data.receipts.unshift(receipt)
-    this.write(this.cap(data))
-    return receipt
+    return withFileLockSync(this.filePath, () => {
+      const startedAt = input.startedAt || new Date().toISOString()
+      const receipt: RunReceipt = {
+        id: randomUUID(),
+        toolId: input.toolId,
+        toolName: input.toolName,
+        launchCommand: maskSecrets(input.launchCommand || ''),
+        port: input.port,
+        url: input.url,
+        pid: input.pid,
+        startedAt,
+        endedAt: startedAt,
+        durationMs: 0,
+        outcome: 'failed',
+        message: input.message,
+      }
+      const data = this.read()
+      data.receipts.unshift(receipt)
+      this.write(this.cap(data))
+      return receipt
+    })
   }
 
   clear(opts: { toolId?: string } = {}): { removed: number } {
-    const data = this.read()
-    const before = data.receipts.length
-    data.receipts = opts.toolId
-      ? data.receipts.filter((r) => r.toolId !== opts.toolId)
-      : []
-    this.write(data)
-    return { removed: before - data.receipts.length }
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const before = data.receipts.length
+      data.receipts = opts.toolId
+        ? data.receipts.filter(
+            (receipt) => receipt.toolId !== opts.toolId || isActiveReceipt(receipt),
+          )
+        : data.receipts.filter(isActiveReceipt)
+      this.write(data)
+      return { removed: before - data.receipts.length }
+    })
+  }
+
+  /** Newest open Shelf-owned process for cross-process adoption. */
+  findActiveProcess(toolId: string, port?: number): RunReceipt | undefined {
+    return this.list({ toolId, limit: MAX_RECEIPTS }).find(
+      (receipt) =>
+        !receipt.endedAt &&
+        (receipt.outcome === 'starting' || receipt.outcome === 'running') &&
+        typeof receipt.pid === 'number' &&
+        (port === undefined || receipt.port === port) &&
+        isProcessOrGroupAlive(receipt.pid),
+    )
   }
 
   private update(
     id: string,
     mutator: (receipt: RunReceipt) => RunReceipt,
   ): RunReceipt | undefined {
-    const data = this.read()
-    const index = data.receipts.findIndex((r) => r.id === id)
-    if (index < 0) return undefined
-    const next = mutator(data.receipts[index])
-    data.receipts[index] = next
-    this.write(data)
-    return next
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const index = data.receipts.findIndex((r) => r.id === id)
+      if (index < 0) return undefined
+      const next = mutator(data.receipts[index])
+      data.receipts[index] = next
+      this.write(data)
+      return next
+    })
   }
 
   private closeOrphans(): void {
-    const data = this.read()
-    let dirty = false
-    const now = new Date().toISOString()
-    data.receipts = data.receipts.map((r) => {
-      if (r.endedAt) return r
-      dirty = true
-      const started = Date.parse(r.startedAt)
-      const ended = Date.parse(now)
-      return {
-        ...r,
-        endedAt: now,
-        durationMs: Number.isFinite(started) ? Math.max(0, ended - started) : undefined,
-        outcome: 'interrupted' as const,
-        message: r.message || 'Shelf quit while this run was still active.',
-      }
+    withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      let dirty = false
+      const now = new Date().toISOString()
+      data.receipts = data.receipts.map((r) => {
+        if (r.endedAt || (r.pid && isProcessOrGroupAlive(r.pid))) return r
+        dirty = true
+        const started = Date.parse(r.startedAt)
+        const ended = Date.parse(now)
+        return {
+          ...r,
+          endedAt: now,
+          durationMs: Number.isFinite(started) ? Math.max(0, ended - started) : undefined,
+          outcome: 'interrupted' as const,
+          message: r.message || 'Shelf quit while this run was still active.',
+        }
+      })
+      if (dirty) this.write(this.cap(data))
     })
-    if (dirty) this.write(this.cap(data))
   }
 
   private cap(data: ReceiptsFile): ReceiptsFile {
     if (data.receipts.length <= MAX_RECEIPTS) return data
-    return { ...data, receipts: data.receipts.slice(0, MAX_RECEIPTS) }
+    const activeIds = new Set(
+      data.receipts.filter(isActiveReceipt).map((receipt) => receipt.id),
+    )
+    let finalizedKept = 0
+    const finalizedLimit = Math.max(0, MAX_RECEIPTS - activeIds.size)
+    return {
+      ...data,
+      receipts: data.receipts.filter((receipt) => {
+        if (activeIds.has(receipt.id)) return true
+        if (finalizedKept >= finalizedLimit) return false
+        finalizedKept += 1
+        return true
+      }),
+    }
   }
 
   private read(): ReceiptsFile {
     try {
       const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as ReceiptsFile
-      if (!Array.isArray(raw.receipts)) return { version: 1, receipts: [] }
+      if (!Array.isArray(raw.receipts)) throw new Error('missing receipts array')
       return { version: 1, receipts: raw.receipts }
-    } catch {
-      return { version: 1, receipts: [] }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      throw new Error(`Shelf could not read receipts.json: ${detail}`)
     }
   }
 
   private write(data: ReceiptsFile): void {
-    const tmp = `${this.filePath}.tmp`
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8')
-    fs.renameSync(tmp, this.filePath)
+    atomicWriteFileSync(this.filePath, JSON.stringify(data, null, 2))
   }
+}
+
+function isProcessOrGroupAlive(pid: number): boolean {
+  for (const candidate of [-pid, pid]) {
+    try {
+      process.kill(candidate, 0)
+      return true
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return true
+    }
+  }
+  return false
+}
+
+function isActiveReceipt(receipt: RunReceipt): boolean {
+  return Boolean(!receipt.endedAt && receipt.pid && isProcessOrGroupAlive(receipt.pid))
 }

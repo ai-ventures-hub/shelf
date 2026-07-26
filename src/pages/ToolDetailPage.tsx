@@ -131,7 +131,7 @@ export function ToolDetailPage() {
     openMenuItems.push({
       id: 'url',
       label: 'Open URL',
-      onSelect: () => void window.shelf.openUrl(current.url!),
+      onSelect: () => void run(() => window.shelf.openUrl(current.url!)),
     })
   }
   if (current.projectPath) {
@@ -139,17 +139,17 @@ export function ToolDetailPage() {
       {
         id: 'folder',
         label: 'Open folder',
-        onSelect: () => void window.shelf.openPath(current.projectPath!),
+        onSelect: () => void run(() => window.shelf.openPath(current.projectPath!)),
       },
       {
         id: 'editor',
         label: 'Open editor',
-        onSelect: () => void window.shelf.openEditor(current.projectPath!),
+        onSelect: () => void run(() => window.shelf.openEditor(current.projectPath!)),
       },
       {
         id: 'terminal',
         label: 'Open Terminal',
-        onSelect: () => void window.shelf.openTerminal(current.projectPath!),
+        onSelect: () => void run(() => window.shelf.openTerminal(current.projectPath!)),
       },
     )
   }
@@ -250,7 +250,7 @@ export function ToolDetailPage() {
           <button
             type="button"
             className="btn btn-quiet"
-            onClick={() => void window.shelf.openUrl(current.url!)}
+            onClick={() => void run(() => window.shelf.openUrl(current.url!))}
           >
             Open URL
           </button>
@@ -324,7 +324,7 @@ export function ToolDetailPage() {
                   <button
                     type="button"
                     className="btn btn-quiet btn-sm"
-                    onClick={() => void window.shelf.openPath(designMd.path!)}
+                    onClick={() => void run(() => window.shelf.openPath(designMd.path!))}
                   >
                     Reveal DESIGN.md
                   </button>

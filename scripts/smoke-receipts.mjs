@@ -66,6 +66,19 @@ try {
   assert.ok(cleared.removed >= 2)
   assert.equal(reopened.list({ toolId: 't1' }).length, 0)
 
+  const live = reopened.begin({
+    toolId: 'live',
+    toolName: 'Live process',
+    launchCommand: 'node server.mjs',
+    pid: process.pid,
+  })
+  const liveReopened = new ReceiptStore(root)
+  assert.equal(liveReopened.get(live.id).outcome, 'starting')
+  assert.ok(!liveReopened.get(live.id).endedAt)
+  liveReopened.clear()
+  assert.ok(liveReopened.get(live.id), 'clear must preserve active ownership receipts')
+  liveReopened.end(live.id, { outcome: 'stopped' })
+
   console.log('OK: receipt store smoke passed')
 } finally {
   fs.rmSync(root, { recursive: true, force: true })

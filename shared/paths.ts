@@ -6,6 +6,9 @@ import path from 'node:path'
  * Shared by Electron GUI and the MCP server so both see the same tools.
  */
 export function resolveShelfDataRoot(): string {
+  // Explicit override for isolated development and smoke-test hosts.
+  const override = process.env.SHELF_DATA_ROOT?.trim()
+  if (override) return path.resolve(override)
   return path.join(os.homedir(), 'Library', 'Application Support', 'Shelf')
 }
 

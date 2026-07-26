@@ -1,5 +1,5 @@
 /**
- * Adopt external listeners (MCP / other ProcessManager) by configured port.
+ * Adopt verified Shelf listeners (MCP / other ProcessManager) by configured port.
  */
 import type { LibraryStore } from './library-store'
 import { findPortOccupant } from './ports'
@@ -11,6 +11,11 @@ export async function reconcileExternalTool(
     store: LibraryStore
     runtime: ProcessRuntimeSupport
     isLocallyManaged: (toolId: string) => boolean
+    trustedExternalPgid: (
+      toolId: string,
+      port: number,
+      occupantPid: number,
+    ) => Promise<number | null>
   },
 ): Promise<void> {
   if (opts.isLocallyManaged(toolId)) return
@@ -23,11 +28,22 @@ export async function reconcileExternalTool(
 
   const occupant = await findPortOccupant(tool.port)
   if (occupant) {
-    if (current.status !== 'running' || current.pid !== occupant) {
+    const pgid = await opts.trustedExternalPgid(toolId, tool.port, occupant)
+    if (!pgid) {
+      if (current.status === 'running' && (current.message || '').includes('external')) {
+        opts.runtime.setState(toolId, {
+          toolId,
+          status: 'stopped',
+          message: `Port ${tool.port} is in use by another process`,
+        })
+      }
+      return
+    }
+    if (current.status !== 'running' || current.pid !== pgid) {
       opts.runtime.setState(toolId, {
         toolId,
         status: 'running',
-        pid: occupant,
+        pid: pgid,
         message: `Running · port ${tool.port} (external)`,
       })
     }

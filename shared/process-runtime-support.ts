@@ -75,9 +75,15 @@ export class ProcessRuntimeSupport {
 
   beginReceipt(input: Parameters<ReceiptStore['begin']>[0]): RunReceipt | undefined {
     if (!this.receipts) return undefined
-    const receipt = this.receipts.begin(input)
-    this.emit('receipts:update', receipt)
-    return receipt
+    try {
+      const receipt = this.receipts.begin(input)
+      this.emit('receipts:update', receipt)
+      return receipt
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.appendLog(input.toolId, 'system', `Run history unavailable: ${message}`)
+      return undefined
+    }
   }
 
   markReceiptRunning(
@@ -85,8 +91,12 @@ export class ProcessRuntimeSupport {
     patch: { pid?: number; port?: number; url?: string; message?: string },
   ): void {
     if (!id || !this.receipts) return
-    const receipt = this.receipts.markRunning(id, patch)
-    if (receipt) this.emit('receipts:update', receipt)
+    try {
+      const receipt = this.receipts.markRunning(id, patch)
+      if (receipt) this.emit('receipts:update', receipt)
+    } catch {
+      // Receipt persistence is secondary to keeping the process supervised.
+    }
   }
 
   endReceipt(
@@ -94,14 +104,23 @@ export class ProcessRuntimeSupport {
     input: Parameters<ReceiptStore['end']>[1],
   ): void {
     if (!id || !this.receipts) return
-    const receipt = this.receipts.end(id, input)
-    if (receipt) this.emit('receipts:update', receipt)
+    try {
+      const receipt = this.receipts.end(id, input)
+      if (receipt) this.emit('receipts:update', receipt)
+    } catch {
+      // Receipt persistence is secondary to accurate process state.
+    }
   }
 
   emitFailedReceipt(input: Parameters<ReceiptStore['recordFailed']>[0]): void {
     if (!this.receipts) return
-    const receipt = this.receipts.recordFailed(input)
-    this.emit('receipts:update', receipt)
+    try {
+      const receipt = this.receipts.recordFailed(input)
+      this.emit('receipts:update', receipt)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.appendLog(input.toolId, 'system', `Run history unavailable: ${message}`)
+    }
   }
 
   /** Scan recent logs for a Local:/listening URL. */

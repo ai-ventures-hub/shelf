@@ -102,7 +102,11 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const { tools, collections, states, saveCollection } = useLibrary()
   const { prefs, updatePrefs } = usePrefs()
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const dragRef = useRef<{
+    startX: number
+    startWidth: number
+    currentWidth: number
+  } | null>(null)
   const collapsed = prefs.sidebarCollapsed
   // Electron has no window.prompt — use an in-app dialog instead.
   const [collectionPromptOpen, setCollectionPromptOpen] = useState(false)
@@ -119,16 +123,26 @@ export function StudioShell({ children }: { children: ReactNode }) {
 
   function onResizeStart(e: React.MouseEvent) {
     if (collapsed) return
-    dragRef.current = { startX: e.clientX, startWidth: prefs.sidebarWidth }
+    dragRef.current = {
+      startX: e.clientX,
+      startWidth: prefs.sidebarWidth,
+      currentWidth: prefs.sidebarWidth,
+    }
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return
       const next = dragRef.current.startWidth + (ev.clientX - dragRef.current.startX)
-      void updatePrefs({ sidebarWidth: Math.min(280, Math.max(210, next)) })
+      dragRef.current.currentWidth = Math.min(280, Math.max(210, next))
+      document.documentElement.style.setProperty(
+        '--sidebar-width',
+        `${dragRef.current.currentWidth}px`,
+      )
     }
     const onUp = () => {
+      const width = dragRef.current?.currentWidth
       dragRef.current = null
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      if (width !== undefined) void updatePrefs({ sidebarWidth: width })
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)

@@ -4,6 +4,7 @@ import {
   findFreePort,
   findPortOccupant,
   killPortOccupant,
+  processBelongsToGroup,
   urlForPort,
   withForcedPort,
 } from './ports'
@@ -55,7 +56,8 @@ export interface ProcessManagerOptions {
  * and (when a port is configured) TCP readiness is confirmed.
  *
  * Electron and MCP each own a ProcessManager instance. When one launches a
- * tool, the other adopts it by port occupancy so Stop/Launch stay usable.
+ * tool, the other adopts it only when the live receipt and process group prove
+ * Shelf ownership; unrelated listeners are never stopped.
  */
 export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>()
@@ -149,19 +151,39 @@ export class ProcessManager {
     if (tool.port) {
       const occupant = await findPortOccupant(tool.port)
       if (occupant) {
-        // Default: adopt the external listener (MCP/orphan) instead of failing.
-        // reassign still starts a second instance on a free port when requested.
         if (onPortConflict !== 'reassign') {
-          this.runtime.appendLog(
+          const externalPgid = await this.trustedExternalPgid(
             toolId,
-            'system',
-            `Adopted existing process on port ${tool.port} (pid ${occupant}).`,
+            tool.port,
+            occupant,
           )
+          if (externalPgid) {
+            this.runtime.appendLog(
+              toolId,
+              'system',
+              `Adopted Shelf process on port ${tool.port} (process group ${externalPgid}).`,
+            )
+            return this.runtime.setState(toolId, {
+              toolId,
+              status: 'running',
+              pid: externalPgid,
+              message: `Running · port ${tool.port} (external)`,
+            })
+          }
+
+          const message = `Port ${tool.port} is already in use by another process.`
+          this.runtime.emitFailedReceipt({
+            toolId,
+            toolName: tool.name,
+            launchCommand: tool.launchCommand,
+            port: tool.port,
+            url: tool.url,
+            message,
+          })
           return this.runtime.setState(toolId, {
             toolId,
-            status: 'running',
-            pid: occupant,
-            message: `Running · port ${tool.port} (external)`,
+            status: 'error',
+            message,
           })
         }
 
@@ -216,26 +238,29 @@ export class ProcessManager {
         }),
       })
 
+      const managed: ManagedProcess = {
+        child,
+        toolId,
+        startedAt,
+        pgid: typeof child.pid === 'number' ? child.pid : undefined,
+      }
+      // Track immediately so any later persistence/readiness failure can cleanly
+      // terminate the child instead of leaving an unowned background process.
+      this.processes.set(toolId, managed)
+
       const receipt = this.runtime.beginReceipt({
         toolId,
         toolName: tool.name,
         launchCommand: tool.launchCommand,
         port: tool.port,
         url: tool.url,
+        pid: child.pid,
         startedAt,
         message: tool.port
           ? `Waiting for localhost:${tool.port}`
           : 'Process starting…',
       })
-
-      const managed: ManagedProcess = {
-        child,
-        toolId,
-        startedAt,
-        pgid: typeof child.pid === 'number' ? child.pid : undefined,
-        receiptId: receipt?.id,
-      }
-      this.processes.set(toolId, managed)
+      managed.receiptId = receipt?.id
 
       child.stdout?.on('data', (buf: Buffer) => {
         this.runtime.appendLog(toolId, 'stdout', buf.toString('utf8'))
@@ -265,19 +290,24 @@ export class ProcessManager {
         if (!wasManaged) return
         const current = this.runtime.peekState(toolId)
         if (current.status === 'stopped') return
-        const message =
-          code === 0
-            ? `Process exited (signal ${signal || 'none'}).`
-            : `Process exited with code ${code}${signal ? ` (signal ${signal})` : ''}.`
+        const exitedBeforeReady = current.status === 'starting' && Boolean(tool.port)
+        const cleanExit =
+          !exitedBeforeReady &&
+          (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT')
+        const message = exitedBeforeReady
+          ? `Process exited before port ${tool.port} became ready.`
+          : cleanExit
+            ? `Process exited${signal ? ` (${signal})` : ' cleanly'}.`
+            : `Process exited with code ${code}${signal ? ` (${signal})` : ''}.`
         this.runtime.endReceipt(open?.receiptId, {
-          outcome: 'error',
+          outcome: cleanExit ? 'stopped' : 'error',
           exitCode: code,
           message,
           pid: child.pid,
         })
         this.runtime.setState(toolId, {
           toolId,
-          status: 'error',
+          status: cleanExit ? 'stopped' : 'error',
           startedAt,
           exitCode: code,
           message,
@@ -320,9 +350,7 @@ export class ProcessManager {
               startedAt,
               message: `Running · port ${sniffed.port} (from logs)`,
             })
-            if (updated.url && this.options.onReadyUrl) {
-              await this.options.onReadyUrl(updated.url)
-            }
+            if (updated.url) await this.openReadyUrl(toolId, updated.url)
             return this.runtime.peekState(toolId)
           }
           await this.stop(toolId, 'Port readiness timed out after 60s.')
@@ -344,12 +372,13 @@ export class ProcessManager {
           startedAt,
           message: runningMessage,
         })
-        if (tool.url && this.options.onReadyUrl) {
-          await this.options.onReadyUrl(tool.url)
-        }
+        if (tool.url) await this.openReadyUrl(toolId, tool.url)
       } else {
         // No configured port: still try to learn URL from framework ready logs.
         const sniffed = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId))
+        if (!this.processes.has(toolId)) {
+          return this.runtime.peekState(toolId)
+        }
         if (sniffed) {
           this.store.save({
             ...tool,
@@ -381,9 +410,7 @@ export class ProcessManager {
           message: runningMessage,
         })
         const readyUrl = sniffed?.url || tool.url
-        if (readyUrl && this.options.onReadyUrl) {
-          await this.options.onReadyUrl(readyUrl)
-        }
+        if (readyUrl) await this.openReadyUrl(toolId, readyUrl)
       }
 
       return this.runtime.peekState(toolId)
@@ -391,6 +418,13 @@ export class ProcessManager {
       const message = err instanceof Error ? err.message : String(err)
       const open = this.processes.get(toolId)
       this.processes.delete(toolId)
+      if (open) {
+        try {
+          await terminateProcess(open)
+        } catch {
+          // Preserve the original launch error below.
+        }
+      }
       if (open?.receiptId) {
         this.runtime.endReceipt(open.receiptId, { outcome: 'failed', message })
       } else {
@@ -420,8 +454,25 @@ export class ProcessManager {
 
     // External/MCP launch: no ChildProcess here, but the configured port is live.
     let externalPid: number | null = null
+    let externalPgid: number | null = null
+    let untrustedOccupant: number | null = null
     if (!managed && tool?.port) {
       externalPid = await findPortOccupant(tool.port)
+      if (externalPid) {
+        externalPgid = await this.trustedExternalPgid(toolId, tool.port, externalPid)
+        if (!externalPgid) {
+          untrustedOccupant = externalPid
+          externalPid = null
+        }
+      }
+    }
+
+    if (!managed && !tool?.stopCommand && untrustedOccupant && tool?.port) {
+      return this.runtime.setState(toolId, {
+        toolId,
+        status: 'error',
+        message: `Refusing to stop process ${untrustedOccupant} on port ${tool.port} because Shelf did not launch it.`,
+      })
     }
 
     if (!managed && !tool?.stopCommand && !externalPid) {
@@ -436,7 +487,7 @@ export class ProcessManager {
       toolId,
       status: 'stopped',
       message: reason || 'Stopping…',
-      pid: managed?.child.pid || externalPid || undefined,
+      pid: managed?.child.pid || externalPgid || undefined,
     })
 
     try {
@@ -454,7 +505,12 @@ export class ProcessManager {
           'system',
           `Stopping external process on port ${tool.port} (pid ${externalPid})…`,
         )
-        const result = await killPortOccupant(tool.port)
+        const result = await killPortOccupant(tool.port, {
+          expectedPgid: externalPgid || undefined,
+        })
+        if (result.refused) {
+          throw new Error('Port ownership changed; Shelf left the new process running.')
+        }
         if (!result.freed) {
           throw new Error(
             `Port ${tool.port} still in use after stop (pid ${result.pid ?? externalPid}).`,
@@ -521,6 +577,28 @@ export class ProcessManager {
       store: this.store,
       runtime: this.runtime,
       isLocallyManaged: (id) => this.processes.has(id),
+      trustedExternalPgid: (id, port, occupantPid) =>
+        this.trustedExternalPgid(id, port, occupantPid),
     })
+  }
+
+  private async trustedExternalPgid(
+    toolId: string,
+    port: number,
+    occupantPid: number,
+  ): Promise<number | null> {
+    const receipt = this.options.receipts?.findActiveProcess(toolId, port)
+    if (!receipt?.pid) return null
+    return (await processBelongsToGroup(occupantPid, receipt.pid)) ? receipt.pid : null
+  }
+
+  private async openReadyUrl(toolId: string, url: string): Promise<void> {
+    if (!this.options.onReadyUrl) return
+    try {
+      await this.options.onReadyUrl(url)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.runtime.appendLog(toolId, 'system', `Tool is running, but its URL could not be opened: ${message}`)
+    }
   }
 }

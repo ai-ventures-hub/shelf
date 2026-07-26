@@ -50,7 +50,7 @@ export async function runOnce(
 
 export async function terminateProcess(managed: TerminableProcess): Promise<void> {
   const { child, pgid } = managed
-  if (child.killed || child.exitCode !== null) return
+  if (child.exitCode !== null || child.signalCode !== null) return
 
   try {
     if (pgid) process.kill(-pgid, 'SIGTERM')
@@ -61,13 +61,15 @@ export async function terminateProcess(managed: TerminableProcess): Promise<void
 
   await waitForExit(child, STOP_KILL_GRACE_MS)
 
-  if (child.exitCode === null && !child.killed) {
+  // child.killed only means a signal was sent; it does not mean the process exited.
+  if (child.exitCode === null && child.signalCode === null) {
     try {
       if (pgid) process.kill(-pgid, 'SIGKILL')
       else child.kill('SIGKILL')
     } catch {
       // ignore
     }
+    await waitForExit(child, 1_000)
   }
 }
 

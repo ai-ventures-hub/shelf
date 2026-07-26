@@ -7,6 +7,7 @@ import {
   Notification,
   Tray,
   app,
+  dialog,
   globalShortcut,
   nativeImage,
   shell,
@@ -353,18 +354,44 @@ export async function handleShelfUrl(
     return
   }
 
-  if (parsed.action === 'launch' && toolId) {
+  const tool = toolId ? host.store.get(toolId) : undefined
+  if (toolId && !tool) {
+    host.navigate('/')
+    return
+  }
+  if (
+    toolId &&
+    tool &&
+    (parsed.action === 'launch' || parsed.action === 'stop' || parsed.action === 'restart')
+  ) {
     host.navigate(`/tools/${toolId}`)
+    const verb = parsed.action === 'launch' ? 'Launch' : parsed.action === 'stop' ? 'Stop' : 'Restart'
+    const options: Electron.MessageBoxOptions = {
+      type: parsed.action === 'stop' ? 'warning' : 'question',
+      title: `${verb} tool`,
+      message: `${verb} “${tool.name}”?`,
+      detail: 'This request came from a shelf:// link outside the Shelf window.',
+      buttons: [verb, 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    }
+    const window = host.getMainWindow()
+    const result = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options)
+    if (result.response !== 0) return
+  }
+
+  if (parsed.action === 'launch' && toolId) {
     void host.processes.start(toolId)
     return
   }
   if (parsed.action === 'stop' && toolId) {
-    host.navigate(`/tools/${toolId}`)
     void host.processes.stop(toolId)
     return
   }
   if (parsed.action === 'restart' && toolId) {
-    host.navigate(`/tools/${toolId}`)
     void host.processes.restart(toolId)
     return
   }

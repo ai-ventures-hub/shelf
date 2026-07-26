@@ -21,6 +21,7 @@
     "smoke:receipts": "tsc -p tsconfig.electron.json && node scripts/smoke-receipts.mjs",
     "smoke:shelf-url": "tsc -p tsconfig.electron.json && node scripts/smoke-shelf-url.mjs",
     "smoke:adopt": "tsc -p tsconfig.electron.json && node scripts/smoke-adopt.mjs",
+    "smoke:library-safety": "tsc -p tsconfig.electron.json && node scripts/smoke-library-safety.mjs",
     "smoke:claude-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-claude-connect.mjs",
     "smoke:cursor-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-cursor-connect.mjs",
     "smoke:codex-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-codex-connect.mjs",

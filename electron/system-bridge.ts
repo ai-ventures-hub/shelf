@@ -6,7 +6,16 @@ import fs from 'node:fs'
  * macOS system bridges — prefer `open` over AppleScript to avoid Automation prompts.
  */
 export async function openUrl(url: string): Promise<void> {
-  await shell.openExternal(url)
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('URL is invalid.')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Shelf only opens http:// and https:// tool URLs.')
+  }
+  await shell.openExternal(parsed.toString())
 }
 
 export async function openPath(targetPath: string): Promise<void> {

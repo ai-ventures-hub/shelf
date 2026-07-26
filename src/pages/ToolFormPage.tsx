@@ -151,6 +151,18 @@ export function ToolFormPage() {
       setError('Launch command is required.')
       return
     }
+    if (form.url?.trim()) {
+      try {
+        const parsed = new URL(form.url.trim())
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          setError('Local URL must start with http:// or https://.')
+          return
+        }
+      } catch {
+        setError('Local URL is invalid.')
+        return
+      }
+    }
 
     setSaving(true)
     try {
@@ -359,6 +371,7 @@ export function ToolFormPage() {
               <input
                 id="url"
                 className="field-input"
+                type="url"
                 value={form.url || ''}
                 onChange={(e) => update('url', e.target.value)}
                 placeholder="http://localhost:5173"

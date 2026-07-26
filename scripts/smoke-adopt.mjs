@@ -1,33 +1,40 @@
 /**
- * Smoke: ProcessManager A launches; ProcessManager B adopts-by-port and stops.
- * Mirrors Electron vs MCP split-brain without requiring both hosts.
+ * Smoke cross-process adoption without ever taking ownership of an unrelated
+ * listener. Also covers clean one-shot completion and forced-stop escalation.
  */
-import { spawn } from 'node:child_process'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { spawn } from 'node:child_process'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const require = createRequire(import.meta.url)
 
-// Compile shared+electron units before loading (same pattern as other smokes).
 const { LibraryStore } = require('../dist-electron/shared/library-store')
 const { ProcessManager } = require('../dist-electron/shared/process-manager')
-const { findPortOccupant } = require('../dist-electron/shared/ports')
+const { ReceiptStore } = require('../dist-electron/shared/receipt-store')
+const {
+  findPortOccupant,
+  killPortOccupant,
+} = require('../dist-electron/shared/ports')
+const { terminateProcess } = require('../dist-electron/shared/process-lifecycle')
 
 const fixture = path.join(root, 'fixtures/sample-tool')
+const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-adopt-'))
 const port = 8767
 const now = new Date().toISOString()
-
-const store = new LibraryStore()
-const owner = new ProcessManager(store)
-const outsider = new ProcessManager(store)
+const store = new LibraryStore(dataRoot)
+const owner = new ProcessManager(store, { receipts: new ReceiptStore(dataRoot) })
+const outsider = new ProcessManager(store, { receipts: new ReceiptStore(dataRoot) })
 
 const tool = store.save({
   id: `smoke-adopt-${Date.now()}`,
   name: 'Adopt Smoke',
-  description: 'External launch adopt-by-port smoke',
+  description: 'Verified cross-process adoption smoke',
   tags: ['Fixtures'],
   favorite: false,
   projectPath: fixture,
@@ -38,72 +45,132 @@ const tool = store.save({
   updatedAt: now,
 })
 
-let orphan = null
+let unrelated = null
+let stubborn = null
+
+async function waitForPort(expectedOccupied) {
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    const occupied = Boolean(await findPortOccupant(port))
+    if (occupied === expectedOccupied) return
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`Port ${port} did not become ${expectedOccupied ? 'occupied' : 'free'}`)
+}
+
 try {
-  // Simulate MCP: spawn outside the "Electron" ProcessManager.
-  orphan = spawn('/bin/zsh', ['-lc', tool.launchCommand], {
+  // A random listener must never be adopted or killed merely because its port matches.
+  unrelated = spawn('/bin/zsh', ['-lc', tool.launchCommand], {
     cwd: fixture,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  await waitForPort(true)
 
-  const deadline = Date.now() + 15_000
-  while (Date.now() < deadline) {
-    const pid = await findPortOccupant(port)
-    if (pid) break
-    await new Promise((r) => setTimeout(r, 200))
-  }
-  if (!(await findPortOccupant(port))) {
-    throw new Error(`Orphan never listened on ${port}`)
-  }
+  const unrelatedState = await outsider.getState(tool.id)
+  assert.equal(unrelatedState.status, 'stopped')
+
+  const refusedStart = await outsider.start(tool.id)
+  assert.equal(refusedStart.status, 'error')
+  assert.match(refusedStart.message || '', /already in use/)
+
+  const refusedStop = await outsider.stop(tool.id)
+  assert.equal(refusedStop.status, 'error')
+  assert.match(refusedStop.message || '', /did not launch/)
+  assert.ok(await findPortOccupant(port), 'unrelated listener should still be running')
+  console.log('OK: unrelated port owner was neither adopted nor stopped')
+
+  if (unrelated.pid) process.kill(-unrelated.pid, 'SIGKILL')
+  unrelated = null
+  await waitForPort(false)
+
+  // A launch with a shared active receipt is safe for another manager to adopt.
+  const started = await owner.start(tool.id)
+  assert.equal(started.status, 'running')
 
   const adopted = await outsider.getState(tool.id)
-  if (adopted.status !== 'running' || !(adopted.message || '').includes('external')) {
-    throw new Error(`Expected external running, got ${adopted.status}: ${adopted.message}`)
-  }
-  console.log('OK: adopted external listener', adopted.pid)
-
-  const startAdopt = await outsider.start(tool.id)
-  if (startAdopt.status !== 'running') {
-    throw new Error(`Expected start() to adopt, got ${startAdopt.status}: ${startAdopt.message}`)
-  }
-  console.log('OK: start() adopts busy port')
+  assert.equal(adopted.status, 'running')
+  assert.match(adopted.message || '', /external/)
 
   const stopped = await outsider.stop(tool.id)
-  if (stopped.status !== 'stopped') {
-    throw new Error(`Expected stopped, got ${stopped.status}: ${stopped.message}`)
-  }
-  if (await findPortOccupant(port)) {
-    throw new Error(`Port ${port} still occupied after stop`)
-  }
-  console.log('OK: stop freed external port')
+  assert.equal(stopped.status, 'stopped')
+  await waitForPort(false)
+  console.log('OK: verified Shelf process was adopted and stopped')
 
-  // Owner manager still works for a normal launch/stop cycle.
-  const started = await owner.start(tool.id)
-  if (started.status !== 'running') {
-    throw new Error(`Expected owner running, got ${started.status}: ${started.message}`)
-  }
-  await owner.stop(tool.id)
-  console.log('OK: adopt smoke passed')
+  // Browser-open failures must not turn a healthy child into an untracked orphan.
+  const urlFailOwner = new ProcessManager(store, {
+    receipts: new ReceiptStore(dataRoot),
+    onReadyUrl: async () => {
+      throw new Error('simulated browser failure')
+    },
+  })
+  const runningAfterUrlFailure = await urlFailOwner.start(tool.id)
+  assert.equal(runningAfterUrlFailure.status, 'running')
+  assert.ok(
+    urlFailOwner
+      .getLogs(tool.id)
+      .some((line) => line.text.includes('URL could not be opened')),
+  )
+  await urlFailOwner.stop(tool.id)
+  await waitForPort(false)
+  console.log('OK: URL-open failure left the process managed and stoppable')
+
+  // One-shot commands that complete successfully must settle as stopped, never running/error.
+  const oneShot = store.save({
+    ...tool,
+    id: `smoke-oneshot-${Date.now()}`,
+    name: 'One-shot Smoke',
+    launchCommand: `node -e "process.exit(0)"`,
+    port: undefined,
+    url: undefined,
+  })
+  const oneShotState = await owner.start(oneShot.id)
+  assert.equal(oneShotState.status, 'stopped')
+  assert.match(oneShotState.message || '', /cleanly/)
+  console.log('OK: clean one-shot exit reported stopped')
+
+  const earlyExitServer = store.save({
+    ...tool,
+    id: `smoke-early-exit-${Date.now()}`,
+    name: 'Early-exit Server Smoke',
+    launchCommand: `node -e "process.exit(0)"`,
+    port: 8768,
+    url: 'http://127.0.0.1:8768',
+  })
+  const earlyExitState = await owner.start(earlyExitServer.id)
+  assert.equal(earlyExitState.status, 'error')
+  assert.match(earlyExitState.message || '', /before port 8768 became ready/)
+  console.log('OK: server exit before readiness reported error')
+
+  // A process that ignores SIGTERM must be escalated and actually exit.
+  stubborn = spawn(
+    process.execPath,
+    ['-e', "process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)"],
+    { detached: true, stdio: 'ignore' },
+  )
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  await terminateProcess({ child: stubborn, pgid: stubborn.pid })
+  assert.ok(stubborn.exitCode !== null || stubborn.signalCode)
+  console.log('OK: stubborn process escalated to SIGKILL')
 } finally {
-  store.delete(tool.id)
-  if (orphan?.pid) {
+  await owner.stopAll('Smoke cleanup failed.')
+  if (unrelated?.pid) {
     try {
-      process.kill(-orphan.pid, 'SIGKILL')
+      process.kill(-unrelated.pid, 'SIGKILL')
     } catch {
-      try {
-        orphan.kill('SIGKILL')
-      } catch {
-        // ignore
-      }
+      // already exited
+    }
+  }
+  if (stubborn?.pid && stubborn.exitCode === null) {
+    try {
+      process.kill(-stubborn.pid, 'SIGKILL')
+    } catch {
+      // already exited
     }
   }
   const leftover = await findPortOccupant(port)
-  if (leftover) {
-    try {
-      process.kill(leftover, 'SIGKILL')
-    } catch {
-      // ignore
-    }
-  }
+  if (leftover) await killPortOccupant(port, { graceMs: 100 })
+  fs.rmSync(dataRoot, { recursive: true, force: true })
 }
+
+console.log('OK: adoption/lifecycle smoke passed')

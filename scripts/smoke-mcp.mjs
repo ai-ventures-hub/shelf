@@ -29,6 +29,9 @@ async function main() {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [serverEntry],
+    // The SDK intentionally forwards only a small default env allowlist.
+    // Preserve the isolated SHELF_DATA_ROOT supplied by smoke:all.
+    env: { ...process.env },
     stderr: 'pipe',
   })
 

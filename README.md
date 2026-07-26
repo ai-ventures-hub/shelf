@@ -59,6 +59,9 @@ open 'shelf://tools/<id>/launch'
 open 'shelf://launch?name=Photo%20Prepper'
 ```
 
+Action links (`launch`, `stop`, and `restart`) require confirmation in Shelf so a web page or
+other application cannot control local tools silently.
+
 ## MCP (Cursor / agents)
 
 **Easiest path:** open Shelf → **MCP Connections** → Connect Claude, Cursor, or Codex. Shelf writes the client MCP config for you (Claude: quit and reopen; Cursor: reload MCP; Codex: restart / new CLI session), then ask “List my Shelf tools.”
@@ -105,6 +108,7 @@ Project skill for agents: [`.cursor/skills/shelf-register/SKILL.md`](.cursor/ski
 | `npm run smoke:receipt-export` | Receipt filter + JSON/CSV export |
 | `npm run smoke:shelf-url` | `shelf://` URL parser |
 | `npm run smoke:adopt` | Adopt/stop a tool launched by another ProcessManager |
+| `npm run smoke:library-safety` | Corrupt-library backup and fail-closed recovery |
 | `npm run smoke:claude-connect` | One-click Claude Desktop config merge |
 | `npm run smoke:cursor-connect` | One-click Cursor MCP config merge |
 | `npm run smoke:codex-connect` | One-click Codex `config.toml` upsert |

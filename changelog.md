@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Pre-launch process safety: only verified Shelf-owned process groups can be adopted/stopped; unrelated port listeners are refused.
+- Correct lifecycle reporting for clean one-shot exits, early server exits, stubborn-process escalation, and URL-open failures.
+- Confirm external `shelf://` launch/stop/restart actions and restrict tool URLs to HTTP(S).
+- Serialize Electron/MCP JSON updates, use collision-free atomic writes, and back up corrupt library/preferences/receipt files before recovery.
+- Preserve live ownership receipts during history cleanup and across Electron/MCP host startup.
+- Run the full smoke gate against an isolated temporary data root; add library recovery and lifecycle regressions.
+- Debounce window geometry writes and persist sidebar width once per drag.
+
 ## 0.3.19 — 2026-07-25
 
 - Soft-launch code hygiene: split `process-manager` helpers (`process-lifecycle`, `process-runtime-support`); ToolForm helpers + Advanced component; `app.css` feature imports; MCP `result` helper.

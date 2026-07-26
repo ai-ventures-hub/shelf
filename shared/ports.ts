@@ -44,6 +44,27 @@ export async function findPortOccupant(port: number): Promise<number | null> {
   }
 }
 
+/** Resolve the OS process group for ownership checks across Shelf processes. */
+export async function findProcessGroupId(pid: number): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync('ps', [
+      '-o',
+      'pgid=',
+      '-p',
+      String(pid),
+    ])
+    const pgid = parseInt(stdout.trim(), 10)
+    return Number.isFinite(pgid) ? pgid : null
+  } catch {
+    return null
+  }
+}
+
+export async function processBelongsToGroup(pid: number, pgid: number): Promise<boolean> {
+  if (pid === pgid) return true
+  return (await findProcessGroupId(pid)) === pgid
+}
+
 /** True when nothing is listening on the port. */
 export async function isPortFree(port: number): Promise<boolean> {
   const occupant = await findPortOccupant(port)
@@ -58,18 +79,26 @@ export async function isPortFree(port: number): Promise<boolean> {
  */
 export async function killPortOccupant(
   port: number,
-  opts: { graceMs?: number } = {},
-): Promise<{ pid: number | null; freed: boolean }> {
+  opts: { graceMs?: number; expectedPgid?: number } = {},
+): Promise<{ pid: number | null; freed: boolean; refused?: boolean }> {
   const graceMs = opts.graceMs ?? 4_000
   const pid = await findPortOccupant(port)
   if (!pid) return { pid: null, freed: true }
 
-  signalPid(pid, 'SIGTERM')
+  if (opts.expectedPgid && !(await processBelongsToGroup(pid, opts.expectedPgid))) {
+    return { pid, freed: false, refused: true }
+  }
+
+  signalPid(opts.expectedPgid || pid, 'SIGTERM')
   await sleep(graceMs)
 
   let still = await findPortOccupant(port)
   if (still) {
-    signalPid(still, 'SIGKILL')
+    if (opts.expectedPgid && !(await processBelongsToGroup(still, opts.expectedPgid))) {
+      // The Shelf-owned process released the port and another process claimed it.
+      return { pid, freed: true }
+    }
+    signalPid(opts.expectedPgid || still, 'SIGKILL')
     await sleep(400)
     still = await findPortOccupant(port)
   }

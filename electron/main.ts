@@ -7,7 +7,6 @@ import {
   ipcMain,
   net,
   protocol,
-  shell,
 } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -51,6 +50,7 @@ let processes: ProcessManager
 let prefs: PrefsStore
 let receipts: ReceiptStore
 let isQuitting = false
+const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
 let externalReconcileTimer: ReturnType<typeof setInterval> | null = null
 
@@ -98,12 +98,30 @@ app.on('second-instance', (_event, argv) => {
 })
 
 function sendToRenderer(channel: string, ...args: unknown[]): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(channel, ...args)
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    mainWindow.webContents.isLoadingMainFrame()
+  ) {
+    pendingRendererMessages.push({ channel, args })
+    // Prevent a long-hidden or failed window from growing this queue forever.
+    if (pendingRendererMessages.length > 200) pendingRendererMessages.shift()
+    return
+  }
+  mainWindow.webContents.send(channel, ...args)
+}
+
+function flushRendererMessages(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const queued = pendingRendererMessages.splice(0)
+  for (const item of queued) {
+    mainWindow.webContents.send(item.channel, ...item.args)
   }
 }
 
 function navigate(route: string): void {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow()
+  mainWindow?.show()
   sendToRenderer('app:navigate', route)
 }
 
@@ -151,20 +169,38 @@ function createWindow(): void {
     // Packaged: …/app.asar/dist-electron/electron → ../../dist
     void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
+  mainWindow.webContents.on('did-finish-load', flushRendererMessages)
 
-  // Persist window geometry for the next launch.
-  const persistBounds = () => {
+  // Persist window geometry after interaction settles; move/resize can emit
+  // hundreds of events and preferences use synchronous atomic disk writes.
+  let boundsPersistTimer: ReturnType<typeof setTimeout> | null = null
+  const writeBounds = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
     const b = mainWindow.getBounds()
     prefs.update({
       windowBounds: { width: b.width, height: b.height, x: b.x, y: b.y },
     })
   }
-  mainWindow.on('resize', persistBounds)
-  mainWindow.on('move', persistBounds)
+  const scheduleBoundsPersist = () => {
+    if (boundsPersistTimer) clearTimeout(boundsPersistTimer)
+    boundsPersistTimer = setTimeout(() => {
+      boundsPersistTimer = null
+      writeBounds()
+    }, 150)
+  }
+  const flushBounds = () => {
+    if (boundsPersistTimer) {
+      clearTimeout(boundsPersistTimer)
+      boundsPersistTimer = null
+    }
+    writeBounds()
+  }
+  mainWindow.on('resize', scheduleBoundsPersist)
+  mainWindow.on('move', scheduleBoundsPersist)
 
   // Close to menu bar when enabled (Quit still exits via tray / ⌘Q).
   mainWindow.on('close', (event) => {
+    flushBounds()
     if (isQuitting) return
     const p = prefs.get()
     if (p.menuBarEnabled && p.closeToMenuBar) {
@@ -174,6 +210,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('closed', () => {
+    if (boundsPersistTimer) clearTimeout(boundsPersistTimer)
     mainWindow = null
   })
 }
@@ -439,7 +476,7 @@ if (gotLock) {
     receipts = new ReceiptStore()
     processes = new ProcessManager(store, {
       receipts,
-      onReadyUrl: (url) => shell.openExternal(url),
+      onReadyUrl: (url) => system.openUrl(url),
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
         if (channel === 'process:update') {

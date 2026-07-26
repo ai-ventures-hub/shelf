@@ -10,12 +10,14 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
+const smokeDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-smoke-all-'))
 
 function run(label, command, args) {
   return new Promise((resolve, reject) => {
     console.log(`\n==> ${label}`)
     const env = { ...process.env }
     delete env.ELECTRON_RUN_AS_NODE
+    env.SHELF_DATA_ROOT = smokeDataRoot
     const child = spawn(command, args, {
       cwd: root,
       stdio: 'inherit',
@@ -29,29 +31,12 @@ function run(label, command, args) {
   })
 }
 
-function assertLibraryPath() {
-  const canonical = path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Shelf',
-    'library.json',
-  )
-  if (!fs.existsSync(canonical)) {
-    throw new Error(`Canonical library missing: ${canonical}`)
-  }
-  const parsed = JSON.parse(fs.readFileSync(canonical, 'utf8'))
-  if (!Array.isArray(parsed.tools)) {
-    throw new Error('Canonical library.json has invalid tools array')
-  }
-  console.log(`OK: library path ${canonical} (${parsed.tools.length} tools)`)
-}
-
 async function main() {
-  assertLibraryPath()
+  console.log(`OK: isolated smoke data root ${smokeDataRoot}`)
   await run('process smoke', 'node', ['scripts/smoke-process.mjs'])
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
+  await run('library safety', 'node', ['scripts/smoke-library-safety.mjs'])
   await run('smart import', 'node', ['scripts/smoke-import.mjs'])
   await run('receipts', 'node', ['scripts/smoke-receipts.mjs'])
   await run('receipt export', 'node', ['scripts/smoke-receipt-export.mjs'])
@@ -67,7 +52,11 @@ async function main() {
   console.log('\nOK: smoke:all passed')
 }
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+main()
+  .catch((err) => {
+    console.error(err)
+    process.exitCode = 1
+  })
+  .finally(() => {
+    fs.rmSync(smokeDataRoot, { recursive: true, force: true })
+  })
