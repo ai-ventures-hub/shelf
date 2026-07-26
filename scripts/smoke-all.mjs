@@ -37,6 +37,7 @@ async function main() {
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
   await run('library safety', 'node', ['scripts/smoke-library-safety.mjs'])
+  await run('capability intelligence', 'node', ['scripts/smoke-capabilities.mjs'])
   await run('smart import', 'node', ['scripts/smoke-import.mjs'])
   await run('receipts', 'node', ['scripts/smoke-receipts.mjs'])
   await run('receipt export', 'node', ['scripts/smoke-receipt-export.mjs'])

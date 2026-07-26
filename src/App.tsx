@@ -3,6 +3,7 @@ import { StudioShell } from './components/StudioShell'
 import { LibraryProvider } from './hooks/useLibrary'
 import { PrefsProvider } from './hooks/usePrefs'
 import { CollectionPage } from './pages/CollectionPage'
+import { CapabilityGapsPage } from './pages/CapabilityGapsPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { McpConnectPage } from './pages/McpConnectPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/favorites" element={<LibraryPage mode="favorites" />} />
             <Route path="/running" element={<LibraryPage mode="running" />} />
             <Route path="/recent" element={<LibraryPage mode="recent" />} />
+            <Route path="/gaps" element={<CapabilityGapsPage />} />
             <Route path="/tags/:tag" element={<LibraryPage mode="tag" />} />
             <Route path="/collections/:collectionId" element={<CollectionPage />} />
             <Route path="/mcp" element={<McpConnectPage />} />

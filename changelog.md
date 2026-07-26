@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-- Marketing site (`site/`): waitlist-first landing on Vercel (**shelf-site**, team `carlos-projects-882b0b3c`) with DESIGN.md tokens; hero omits MCP jargon; agents/MCP section below the fold; Neon `waitlist_signups` + Server Action. Domain: shelfmcp.com.
-- Landing vision Phase 1: dual-surface Agent + Shelf demo hero, full product narrative (graveyard → import → launch → shared library → connect → examples → local-first → community), waitlist + GitHub CTAs.
+- Marketing site follow-ups: incorporate Capability Intelligence into landing Phase 2+ narrative (see `docs/LANDING.md`).
+
+## 0.4.0 — 2026-07-26
+
+- Community Capability Intelligence: task-oriented tool capabilities, declared agent access and readiness, explainable MCP discovery (`shelf_find_capability`), and a local Capability Gaps inbox.
+- Library schema v3 migration (v2 backup on upgrade); gaps persist separately in `capability-gaps.json`.
+- Tool form Advanced + Tool Detail surface capabilities/access/readiness; System nav adds Capability gaps.
+- Child MCP activation/invocation remains out of scope — metadata and discovery only.
+- Marketing site (`site/`): waitlist-first landing on Vercel (**shelf-site**); Domain: shelfmcp.com. Landing vision Phase 1 dual-surface demo shipped earlier on `main`.
 
 ## 0.3.20 — 2026-07-26
 

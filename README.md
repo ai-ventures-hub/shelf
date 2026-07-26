@@ -55,6 +55,10 @@ Library data lives at:
 
 `~/Library/Application Support/Shelf/library.json`
 
+Capability gaps recorded by agents live separately at:
+
+`~/Library/Application Support/Shelf/capability-gaps.json`
+
 Run receipts (launch history):
 
 `~/Library/Application Support/Shelf/receipts.json`
@@ -102,7 +106,11 @@ Add to Cursor MCP settings (prefer the path shown in **MCP Connect** inside Shel
 }
 ```
 
-Tools: `shelf_list_tools`, `shelf_get_tool`, `shelf_find_free_port`, `shelf_inspect_project`, `shelf_upsert_tool`, `shelf_remove_tool`, `shelf_launch_tool`, `shelf_stop_tool`, `shelf_get_status`, `shelf_get_logs`, `shelf_list_receipts`, `shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_design_md`. Resource: `shelf://tools/{id}/design-md`.
+Capability intelligence is descriptive and local: agents can discover declared interfaces and record missing capabilities, but Shelf does not connect to or invoke child MCP servers.
+
+Tools: `shelf_list_tools`, `shelf_get_tool`, `shelf_find_capability`, `shelf_check_tool_readiness`, `shelf_record_capability_gap`, `shelf_list_capability_gaps`, `shelf_find_free_port`, `shelf_inspect_project`, `shelf_upsert_tool`, `shelf_remove_tool`, `shelf_launch_tool`, `shelf_stop_tool`, `shelf_get_status`, `shelf_get_logs`, `shelf_list_receipts`, `shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_design_md`. Resource: `shelf://tools/{id}/design-md`.
+
+Example prompts: “What Shelf tool can batch optimize images?” or “If nothing can fill PDF forms, record that capability gap and explain why.”
 
 Project skill for agents: [`.cursor/skills/shelf-register/SKILL.md`](.cursor/skills/shelf-register/SKILL.md).
 
@@ -116,6 +124,7 @@ Project skill for agents: [`.cursor/skills/shelf-register/SKILL.md`](.cursor/ski
 | `npm run typecheck` | TypeScript checks |
 | `npm run smoke` | Shell/port readiness smoke test |
 | `npm run smoke:quick-open` | Quick Open ranking helpers |
+| `npm run smoke:capabilities` | Capability migration, ranking, readiness, and gap persistence |
 | `npm run smoke:import` | Smart project-import inspector |
 | `npm run smoke:receipts` | Run receipt store |
 | `npm run smoke:receipt-export` | Receipt filter + JSON/CSV export |

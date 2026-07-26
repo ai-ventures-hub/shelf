@@ -4,6 +4,28 @@ export type ToolStatus = 'stopped' | 'starting' | 'running' | 'error'
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
 export type SortMode = 'name' | 'recent' | 'status'
+export type AgentAccessKind = 'cli' | 'mcp' | 'http-api'
+export type McpTransport = 'stdio' | 'streamable-http'
+export type CapabilityReadinessState =
+  | 'ready'
+  | 'needs_setup'
+  | 'manual_only'
+  | 'unavailable'
+
+export interface AgentAccess {
+  id: string
+  kind: AgentAccessKind
+  entrypoint: string
+  transport?: McpTransport
+  setupRequired: boolean
+  notes?: string
+}
+
+export interface ToolReadiness {
+  state: CapabilityReadinessState
+  summary: string
+  reasons: string[]
+}
 
 export interface Tool {
   id: string
@@ -16,6 +38,8 @@ export interface Tool {
   iconColor?: string
   iconBackground?: string
   tags: string[]
+  capabilities: string[]
+  agentAccess: AgentAccess[]
   favorite: boolean
   projectPath?: string
   launchCommand: string
@@ -173,6 +197,28 @@ export interface RunReceipt {
   message?: string
 }
 
+export type CapabilityGapStatus = 'open' | 'planned' | 'resolved' | 'dismissed'
+
+export interface CapabilityGapExample {
+  task: string
+  at: string
+}
+
+export interface CapabilityGap {
+  id: string
+  capabilities: string[]
+  task: string
+  reason: string
+  relatedToolIds: string[]
+  suggestedAccess?: AgentAccessKind
+  status: CapabilityGapStatus
+  occurrenceCount: number
+  examples: CapabilityGapExample[]
+  createdAt: string
+  updatedAt: string
+  lastRequestedAt: string
+}
+
 export interface LaunchAlternative {
   command: string
   label: string
@@ -213,6 +259,23 @@ export interface ShelfApi {
   ) => Promise<{ prefs: UiPrefs; shortcutStatus: ShortcutStatus }>
   getShortcutStatus: () => Promise<ShortcutStatus>
   getDesignMd: (opts: { id?: string; projectPath?: string }) => Promise<DesignMdResult>
+  checkToolReadiness: (id: string) => Promise<ToolReadiness>
+  listCapabilityGaps: (opts?: {
+    status?: CapabilityGapStatus
+    limit?: number
+  }) => Promise<CapabilityGap[]>
+  recordCapabilityGap: (input: {
+    task: string
+    capabilities: string[]
+    reason: string
+    relatedToolIds?: string[]
+    suggestedAccess?: AgentAccessKind
+  }) => Promise<{ action: 'created' | 'updated'; gap: CapabilityGap }>
+  updateCapabilityGapStatus: (
+    id: string,
+    status: CapabilityGapStatus,
+  ) => Promise<CapabilityGap>
+  deleteCapabilityGap: (id: string) => Promise<void>
   getRuntimeStates: () => Promise<ToolRuntimeState[]>
   startTool: (id: string) => Promise<ToolRuntimeState>
   stopTool: (id: string) => Promise<ToolRuntimeState>

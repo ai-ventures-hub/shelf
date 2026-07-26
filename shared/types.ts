@@ -8,6 +8,42 @@ export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
 export type SortMode = 'name' | 'recent' | 'status'
 
+export type AgentAccessKind = 'cli' | 'mcp' | 'http-api'
+export type McpTransport = 'stdio' | 'streamable-http'
+export type CapabilityReadinessState =
+  | 'ready'
+  | 'needs_setup'
+  | 'manual_only'
+  | 'unavailable'
+
+/** Declarative agent access metadata. Shelf does not invoke these endpoints in v0.4. */
+export interface AgentAccess {
+  id: string
+  kind: AgentAccessKind
+  /** Command for CLI/stdio MCP, URL for HTTP API/Streamable HTTP MCP. */
+  entrypoint: string
+  transport?: McpTransport
+  setupRequired: boolean
+  notes?: string
+}
+
+export interface ToolReadiness {
+  state: CapabilityReadinessState
+  summary: string
+  reasons: string[]
+}
+
+export interface CapabilityMatch {
+  toolId: string
+  name: string
+  capabilities: string[]
+  accessKinds: AgentAccessKind[]
+  readiness: ToolReadiness
+  score: number
+  reasons: string[]
+  suggestedAction: 'launch' | 'configure' | 'manual_use'
+}
+
 export interface Tool {
   id: string
   name: string
@@ -21,6 +57,10 @@ export interface Tool {
   /** Hex background behind the Lucide glyph, e.g. "#3b82f6". */
   iconBackground?: string
   tags: string[]
+  /** Task-oriented phrases used for agent capability discovery. */
+  capabilities: string[]
+  /** Declared access methods; informational until a user/client configures them. */
+  agentAccess: AgentAccess[]
   favorite: boolean
   projectPath?: string
   launchCommand: string
@@ -93,9 +133,36 @@ export interface ReceiptsFile {
   receipts: RunReceipt[]
 }
 
-/** Current on-disk library schema (v1 migrates to v2 on read). */
+export type CapabilityGapStatus = 'open' | 'planned' | 'resolved' | 'dismissed'
+
+export interface CapabilityGapExample {
+  task: string
+  at: string
+}
+
+export interface CapabilityGap {
+  id: string
+  capabilities: string[]
+  task: string
+  reason: string
+  relatedToolIds: string[]
+  suggestedAccess?: AgentAccessKind
+  status: CapabilityGapStatus
+  occurrenceCount: number
+  examples: CapabilityGapExample[]
+  createdAt: string
+  updatedAt: string
+  lastRequestedAt: string
+}
+
+export interface CapabilityGapsFile {
+  version: 1
+  gaps: CapabilityGap[]
+}
+
+/** Current on-disk library schema (v1/v2 migrate to v3 on read). */
 export interface LibraryFile {
-  version: 2
+  version: 3
   tools: Tool[]
   collections: Collection[]
 }

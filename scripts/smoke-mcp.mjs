@@ -5,6 +5,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import path from 'node:path'
+import fs from 'node:fs'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -12,6 +14,7 @@ const root = path.resolve(__dirname, '..')
 const serverEntry = path.join(root, 'dist-mcp/mcp/server.js')
 const fixture = path.join(root, 'fixtures/sample-tool')
 const smokeName = `MCP Smoke ${Date.now()}`
+const smokeDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-mcp-smoke-'))
 
 function parseToolText(result) {
   const text = result.content?.find((c) => c.type === 'text')?.text
@@ -31,7 +34,7 @@ async function main() {
     args: [serverEntry],
     // The SDK intentionally forwards only a small default env allowlist.
     // Preserve the isolated SHELF_DATA_ROOT supplied by smoke:all.
-    env: { ...process.env },
+    env: { ...process.env, SHELF_DATA_ROOT: smokeDataRoot },
     stderr: 'pipe',
   })
 
@@ -43,6 +46,16 @@ async function main() {
       name: smokeName,
       description: 'Temporary MCP smoke fixture',
       tags: ['Fixtures', 'Smoke'],
+      capabilities: ['serve a local smoke fixture', 'inspect local service logs'],
+      agentAccess: [
+        {
+          kind: 'mcp',
+          transport: 'stdio',
+          entrypoint: 'node ./mcp/server.js',
+          setupRequired: true,
+          notes: 'Smoke metadata only.',
+        },
+      ],
       projectPath: fixture,
       launchCommand: 'PORT=8766 node server.mjs',
       url: 'http://127.0.0.1:8766',
@@ -76,6 +89,40 @@ async function main() {
     const got = await callTool(client, 'shelf_get_tool', { id: toolId })
     if (got.tool.name !== smokeName) throw new Error('get_tool name mismatch')
     console.log('OK: get')
+
+    const found = await callTool(client, 'shelf_find_capability', {
+      task: 'I need to serve a local smoke fixture',
+      accessKind: 'mcp',
+    })
+    if (found.matches?.[0]?.toolId !== toolId || !found.matches[0].reasons?.length) {
+      throw new Error('shelf_find_capability did not return an explainable match')
+    }
+    console.log('OK: capability match')
+
+    const readiness = await callTool(client, 'shelf_check_tool_readiness', { id: toolId })
+    if (readiness.readiness?.state !== 'needs_setup') {
+      throw new Error('Expected declared MCP access to need setup')
+    }
+    console.log('OK: capability readiness')
+
+    const gapInput = {
+      task: `Transcribe smoke audio ${smokeName}`,
+      capabilities: [`transcribe smoke audio ${smokeName}`],
+      reason: 'No Shelf fixture handles transcription.',
+      relatedToolIds: [toolId, 'unknown-tool'],
+      suggestedAccess: 'cli',
+    }
+    await callTool(client, 'shelf_record_capability_gap', gapInput)
+    const repeated = await callTool(client, 'shelf_record_capability_gap', gapInput)
+    if (repeated.action !== 'updated' || repeated.gap.occurrenceCount !== 2) {
+      throw new Error('Expected repeated capability gap to deduplicate')
+    }
+    const gapList = await callTool(client, 'shelf_list_capability_gaps', { status: 'open' })
+    const smokeGap = gapList.gaps.find((gap) => gap.capabilities.includes(gapInput.capabilities[0]))
+    if (!smokeGap || smokeGap.relatedToolIds.includes('unknown-tool')) {
+      throw new Error('Capability gap list or related-tool validation failed')
+    }
+    console.log('OK: capability gap')
 
     const inspected = await callTool(client, 'shelf_inspect_project', {
       projectPath: fixture,
@@ -132,6 +179,7 @@ async function main() {
     console.log('OK: mcp smoke passed')
   } finally {
     await client.close()
+    fs.rmSync(smokeDataRoot, { recursive: true, force: true })
   }
 }
 

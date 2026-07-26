@@ -7,7 +7,7 @@ import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
-import type { DesignMdResult, LogLine } from '../types'
+import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
 
 function formatRelative(iso?: string): string {
   if (!iso) return 'Unknown'
@@ -44,6 +44,7 @@ export function ToolDetailPage() {
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
+  const [readiness, setReadiness] = useState<ToolReadiness | null>(null)
   const { receipts, clear: clearReceipts } = useReceipts({
     toolId: id,
     limit: 25,
@@ -77,6 +78,17 @@ export function ToolDetailPage() {
       active = false
     }
   }, [id, tool?.projectPath])
+
+  useEffect(() => {
+    if (!id || !window.shelf?.checkToolReadiness) return
+    let active = true
+    void window.shelf.checkToolReadiness(id).then((result) => {
+      if (active) setReadiness(result)
+    })
+    return () => {
+      active = false
+    }
+  }, [id, tool?.updatedAt])
 
   if (!tool || !id) {
     return (
@@ -266,6 +278,52 @@ export function ToolDetailPage() {
           <OverflowMenu label="More actions" items={moreMenuItems} />
         </div>
       </div>
+
+      <section className="panel capability-panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Capability intelligence</h2>
+          {readiness ? (
+            <span className={`readiness-badge is-${readiness.state}`}>
+              {readiness.state.replace('_', ' ')}
+            </span>
+          ) : null}
+        </div>
+        <div className="panel-body capability-detail-grid">
+          <div>
+            <div className="field-label">Capabilities</div>
+            {tool.capabilities.length > 0 ? (
+              <div className="capability-chips">
+                {tool.capabilities.map((capability) => (
+                  <span className="tag-chip" key={capability}>{capability}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="capability-empty">No capabilities described yet.</p>
+            )}
+          </div>
+          <div>
+            <div className="field-label">Agent access</div>
+            {tool.agentAccess.length > 0 ? (
+              <div className="access-summary-list">
+                {tool.agentAccess.map((access) => (
+                  <div className="access-summary" key={access.id}>
+                    <div>
+                      <strong>{access.kind === 'http-api' ? 'HTTP API' : access.kind.toUpperCase()}</strong>
+                      {access.kind === 'mcp' ? ` · ${access.transport}` : ''}
+                      {access.setupRequired ? ' · setup required' : ' · declared ready'}
+                    </div>
+                    <code>{access.entrypoint}</code>
+                    {access.notes ? <p>{access.notes}</p> : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="capability-empty">Manual use only; no agent interface is declared.</p>
+            )}
+            {readiness ? <p className="readiness-summary">{readiness.summary}</p> : null}
+          </div>
+        </div>
+      </section>
 
       <div className="detail-layout">
         <section className="panel">

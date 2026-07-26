@@ -16,6 +16,8 @@ export function emptyTool(defaults?: {
     name: '',
     description: '',
     tags: [],
+    capabilities: [],
+    agentAccess: [],
     favorite: false,
     launchCommand: '',
     iconLucide: defaults?.iconLucide,
@@ -58,6 +60,8 @@ export function textToEnv(text: string): Record<string, string> | undefined {
 export function toolHasAdvancedContent(tool: Tool, prefs: UiPrefs): boolean {
   if (tool.stopCommand?.trim()) return true
   if (tool.tags.length > 0) return true
+  if (tool.capabilities.length > 0) return true
+  if (tool.agentAccess.length > 0) return true
   if (tool.env && Object.keys(tool.env).length > 0) return true
   if (tool.notes?.trim()) return true
   if (tool.iconPath?.trim()) return true

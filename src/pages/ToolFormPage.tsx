@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
@@ -15,19 +15,29 @@ import type { ProjectImportSuggestion, Tool } from '../types'
 export function ToolFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { tools, saveTool } = useLibrary()
   const { prefs } = usePrefs()
   const existing = tools.find((t) => t.id === id)
 
-  const [form, setForm] = useState<Tool>(() =>
-    existing ||
-    emptyTool({
+  const prefilledCapabilities = existing
+    ? existing.capabilities
+    : (searchParams.get('capabilities') || '').split('\n').filter(Boolean)
+  const [form, setForm] = useState<Tool>(() => {
+    if (existing) return existing
+    return {
+      ...emptyTool({
       iconLucide: prefs.defaultIconLucide,
       iconColor: prefs.defaultIconColor,
       iconBackground: prefs.defaultIconBackground,
-    }),
-  )
+      }),
+      capabilities: prefilledCapabilities,
+    }
+  })
   const [tagsText, setTagsText] = useState(() => (existing?.tags || []).join(', '))
+  const [capabilitiesText, setCapabilitiesText] = useState(() =>
+    prefilledCapabilities.join('\n'),
+  )
   const [envText, setEnvText] = useState(() => envToText(existing?.env))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +52,7 @@ export function ToolFormPage() {
     if (!existing) return
     setForm(existing)
     setTagsText(existing.tags.join(', '))
+    setCapabilitiesText(existing.capabilities.join('\n'))
     setEnvText(envToText(existing.env))
   }, [existing?.id, existing?.updatedAt])
 
@@ -173,6 +184,10 @@ export function ToolFormPage() {
         tags: tagsText
           .split(',')
           .map((t) => t.trim())
+          .filter(Boolean),
+        capabilities: capabilitiesText
+          .split(/[\n,]/)
+          .map((capability) => capability.trim())
           .filter(Boolean),
         env: textToEnv(envText),
         port: form.port && Number.isFinite(form.port) ? Number(form.port) : undefined,
@@ -415,8 +430,10 @@ export function ToolFormPage() {
             form={form}
             prefs={prefs}
             tagsText={tagsText}
+            capabilitiesText={capabilitiesText}
             envText={envText}
             setTagsText={setTagsText}
+            setCapabilitiesText={setCapabilitiesText}
             setEnvText={setEnvText}
             update={update}
             setForm={setForm}

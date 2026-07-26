@@ -107,7 +107,19 @@ export function LibraryPage({
         if (status !== statusFilter) return false
       }
       if (!q) return true
-      const haystack = [tool.name, tool.description, tool.launchCommand, ...tool.tags]
+      const haystack = [
+        tool.name,
+        tool.description,
+        tool.launchCommand,
+        ...tool.tags,
+        ...tool.capabilities,
+        ...tool.agentAccess.flatMap((access) => [
+          access.kind,
+          access.transport,
+          access.entrypoint,
+          access.notes,
+        ]),
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()

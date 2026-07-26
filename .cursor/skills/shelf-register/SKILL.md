@@ -39,6 +39,8 @@ built, register it so the user can launch it later without remembering commands.
      - Docker → `docker compose up`
    - **port** / **url** when it is a local web app (must match the launch flags)
    - **tags**: small set (e.g. `Image Tools`, `Client Projects`)
+   - **capabilities**: short task phrases an agent can match (e.g. `batch optimize images`, `convert images to WebP`)
+   - **agentAccess**: declare only real CLI, MCP, or HTTP API interfaces; mark `setupRequired` honestly. Never include credentials. Omit this field for GUI-only tools.
    - **notes**: inputs, common errors, last known working setup
 5. Show the draft to the user and get confirmation before writing.
 6. Call MCP `shelf_upsert_tool` with the confirmed fields.
@@ -61,6 +63,9 @@ built, register it so the user can launch it later without remembering commands.
 
 - `shelf_list_tools`
 - `shelf_get_tool`
+- `shelf_find_capability`
+- `shelf_check_tool_readiness`
+- `shelf_record_capability_gap` / `shelf_list_capability_gaps`
 - `shelf_find_free_port`
 - `shelf_inspect_project`
 - `shelf_upsert_tool` (`checkPort` default true; optional `autoFixPort`)

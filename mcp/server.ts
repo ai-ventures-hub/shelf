@@ -7,6 +7,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { resolveDesignMd } from '../shared/design-md'
+import { CapabilityGapStore } from '../shared/capability-gap-store'
+import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { LibraryStore } from '../shared/library-store'
 import { ProcessManager } from '../shared/process-manager'
 import {
@@ -17,17 +19,32 @@ import {
 } from '../shared/ports'
 import { inspectProject } from '../shared/project-import'
 import { ReceiptStore } from '../shared/receipt-store'
-import { sanitizeToolForOutput, type Tool } from '../shared/types'
+import {
+  sanitizeToolForOutput,
+  type AgentAccess,
+  type Tool,
+} from '../shared/types'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { errorResult, textResult } from './result'
+import { registerCapabilityTools } from './capability-tools'
 
 const store = new LibraryStore()
 const receipts = new ReceiptStore()
+const capabilityGaps = new CapabilityGapStore()
 const processes = new ProcessManager(store, { receipts })
 
 const server = new McpServer({
   name: 'shelf',
   version: '0.1.0',
+})
+
+const agentAccessSchema = z.object({
+  id: z.string().optional(),
+  kind: z.enum(['cli', 'mcp', 'http-api']),
+  entrypoint: z.string().min(1),
+  transport: z.enum(['stdio', 'streamable-http']).optional(),
+  setupRequired: z.boolean().optional(),
+  notes: z.string().optional(),
 })
 
 server.registerTool(
@@ -43,6 +60,9 @@ server.registerTool(
           id: tool.id,
           name: tool.name,
           tags: tool.tags,
+          capabilities: tool.capabilities,
+          accessKinds: Array.from(new Set(tool.agentAccess.map((access) => access.kind))),
+          readiness: deriveToolReadiness(tool),
           favorite: tool.favorite,
           projectPath: tool.projectPath,
           port: tool.port,
@@ -69,6 +89,7 @@ server.registerTool(
     if (!tool) return errorResult(`Tool not found: ${id}`)
     return textResult({
       tool: sanitizeToolForOutput(tool),
+      readiness: deriveToolReadiness(tool),
       state: await processes.getState(id),
     })
   },
@@ -122,6 +143,8 @@ server.registerTool(
       name: z.string().min(1).describe('Display name'),
       description: z.string().optional(),
       tags: z.array(z.string()).optional(),
+      capabilities: z.array(z.string()).optional(),
+      agentAccess: z.array(agentAccessSchema).optional(),
       favorite: z.boolean().optional(),
       projectPath: z.string().optional().describe('Absolute project folder path'),
       launchCommand: z.string().min(1).describe('Shell command to launch the tool'),
@@ -217,6 +240,12 @@ server.registerTool(
       name: args.name,
       description: args.description,
       tags: args.tags || existing?.tags || [],
+      capabilities: args.capabilities ?? existing?.capabilities ?? [],
+      agentAccess: (args.agentAccess ?? existing?.agentAccess ?? []).map((access) => ({
+        ...access,
+        id: access.id || randomUUID(),
+        setupRequired: Boolean(access.setupRequired),
+      })) as AgentAccess[],
       favorite: args.favorite ?? existing?.favorite ?? false,
       projectPath: args.projectPath ?? existing?.projectPath,
       launchCommand,
@@ -346,6 +375,8 @@ server.registerTool(
     return textResult({ id, count: capped.length, lines: capped })
   },
 )
+
+registerCapabilityTools({ server, store, processes, gaps: capabilityGaps })
 
 server.registerTool(
   'shelf_list_collections',

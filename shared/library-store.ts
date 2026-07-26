@@ -2,13 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
+import { normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { resolveAppDataRoot, resolveShelfDataRoot } from './paths'
 import type { Collection, LibraryFile, Tool } from './types'
 
 /**
  * Persists the tool library under a stable Application Support root.
  * Icons are stored as absolute paths (or under icons/) — never inline base64.
- * Schema v2 adds collections; v1 files migrate on read with a backup.
+ * Schema v3 adds capability intelligence; older files migrate on read with a backup.
  */
 export class LibraryStore {
   private readonly root: string
@@ -32,7 +33,7 @@ export class LibraryStore {
 
     withFileLockSync(this.filePath, () => {
       if (!fs.existsSync(this.filePath)) {
-        this.write({ version: 2, tools: [], collections: [] })
+        this.write({ version: 3, tools: [], collections: [] })
         return
       }
 
@@ -43,13 +44,13 @@ export class LibraryStore {
           | null
         if (!existing || !Array.isArray(existing.tools)) {
           this.backupCorruptLibrary()
-          this.write({ version: 2, tools: [], collections: [] })
-        } else if (existing.version !== 2) {
+          this.write({ version: 3, tools: [], collections: [] })
+        } else if (existing.version !== 3) {
           this.write(this.read())
         }
       } catch {
         this.backupCorruptLibrary()
-        this.write({ version: 2, tools: [], collections: [] })
+        this.write({ version: 3, tools: [], collections: [] })
       }
     })
   }
@@ -81,6 +82,13 @@ export class LibraryStore {
         id: input.id || randomUUID(),
         name: input.name.trim(),
         tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
+        capabilities: normalizeCapabilities(input.capabilities),
+        agentAccess: normalizeAgentAccess(
+          (input.agentAccess || []).map((access) => ({
+            ...access,
+            id: access.id || randomUUID(),
+          })),
+        ),
         favorite: Boolean(input.favorite),
         launchCommand: input.launchCommand.trim(),
         stopCommand: input.stopCommand?.trim() || undefined,
@@ -195,8 +203,8 @@ export class LibraryStore {
       if (!parsed.tools || !Array.isArray(parsed.tools)) throw new Error('missing tools array')
       const collections = Array.isArray(parsed.collections) ? parsed.collections : []
       return {
-        version: 2,
-        tools: parsed.tools,
+        version: 3,
+        tools: parsed.tools.map(normalizeTool),
         collections: collections.map(normalizeCollection),
       }
     } catch (err) {
@@ -207,8 +215,8 @@ export class LibraryStore {
 
   private write(data: LibraryFile): void {
     const normalized: LibraryFile = {
-      version: 2,
-      tools: data.tools,
+      version: 3,
+      tools: data.tools.map(normalizeTool),
       collections: (data.collections || []).map(normalizeCollection),
     }
 
@@ -218,9 +226,10 @@ export class LibraryStore {
         const existing = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as {
           version?: number
         }
-        if (existing.version !== 2) {
+        if (existing.version !== 3) {
           const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-          const backup = path.join(this.root, `library.v1-backup-${stamp}.json`)
+          const fromVersion = Number.isInteger(existing.version) ? existing.version : 'legacy'
+          const backup = path.join(this.root, `library.v${fromVersion}-backup-${stamp}.json`)
           fs.copyFileSync(this.filePath, backup)
         }
       } catch {
@@ -250,14 +259,46 @@ function normalizeCollection(input: Partial<Collection>): Collection {
   }
 }
 
+function normalizeTool(input: Partial<Tool>): Tool {
+  const now = new Date().toISOString()
+  return {
+    id: input.id || randomUUID(),
+    name: (input.name || 'Untitled').trim(),
+    description: input.description?.trim() || undefined,
+    iconPath: input.iconPath?.trim() || undefined,
+    iconLucide: input.iconLucide?.trim() || undefined,
+    iconColor: input.iconColor?.trim() || undefined,
+    iconBackground: input.iconBackground?.trim() || undefined,
+    tags: (input.tags || []).map((tag) => tag.trim()).filter(Boolean),
+    capabilities: normalizeCapabilities(input.capabilities),
+    agentAccess: normalizeAgentAccess(
+      (input.agentAccess || []).map((access) => ({
+        ...access,
+        id: access.id || randomUUID(),
+      })),
+    ),
+    favorite: Boolean(input.favorite),
+    projectPath: input.projectPath?.trim() || undefined,
+    launchCommand: input.launchCommand?.trim() || '',
+    stopCommand: input.stopCommand?.trim() || undefined,
+    url: input.url?.trim() || undefined,
+    port: input.port,
+    env: input.env,
+    notes: input.notes?.trim() || undefined,
+    lastLaunchedAt: input.lastLaunchedAt,
+    createdAt: input.createdAt || now,
+    updatedAt: input.updatedAt || now,
+  }
+}
+
 function readLibraryFile(filePath: string): LibraryFile | null {
   try {
     if (!fs.existsSync(filePath)) return null
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<LibraryFile>
     if (!parsed?.tools || !Array.isArray(parsed.tools)) return null
     return {
-      version: 2,
-      tools: parsed.tools,
+      version: 3,
+      tools: parsed.tools.map(normalizeTool),
       collections: Array.isArray(parsed.collections)
         ? parsed.collections.map(normalizeCollection)
         : [],

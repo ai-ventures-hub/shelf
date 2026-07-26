@@ -12,6 +12,8 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { resolveDesignMd } from '../shared/design-md'
+import { deriveToolReadiness } from '../shared/capability-intelligence'
+import { CapabilityGapStore } from '../shared/capability-gap-store'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
 import { inspectProject } from '../shared/project-import'
@@ -41,7 +43,13 @@ import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { registerMcpConnectIpc } from './mcp-connect-ipc'
 import { ProcessManager } from './process-manager'
 import * as system from './system-bridge'
-import type { Collection, Tool, UiPrefs } from './types'
+import type {
+  AgentAccessKind,
+  CapabilityGapStatus,
+  Collection,
+  Tool,
+  UiPrefs,
+} from './types'
 
 const isDev = process.env.SHELF_DEV === '1'
 let mainWindow: BrowserWindow | null = null
@@ -49,6 +57,7 @@ let store: LibraryStore
 let processes: ProcessManager
 let prefs: PrefsStore
 let receipts: ReceiptStore
+let capabilityGaps: CapabilityGapStore
 let isQuitting = false
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
@@ -319,6 +328,44 @@ function registerIpc(): void {
     void processes.stop(id)
     store.delete(id)
   })
+  ipcMain.handle('tools:readiness', (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    return deriveToolReadiness(tool)
+  })
+
+  ipcMain.handle(
+    'capabilityGaps:list',
+    (_e, opts?: { status?: CapabilityGapStatus; limit?: number }) =>
+      capabilityGaps.list(opts || {}),
+  )
+  ipcMain.handle(
+    'capabilityGaps:record',
+    (
+      _e,
+      input: {
+        task: string
+        capabilities: string[]
+        reason: string
+        relatedToolIds?: string[]
+        suggestedAccess?: AgentAccessKind
+      },
+    ) => {
+      const knownIds = new Set(store.list().map((tool) => tool.id))
+      return capabilityGaps.record({
+        ...input,
+        relatedToolIds: (input.relatedToolIds || []).filter((id) => knownIds.has(id)),
+      })
+    },
+  )
+  ipcMain.handle(
+    'capabilityGaps:updateStatus',
+    (_e, id: string, status: CapabilityGapStatus) =>
+      capabilityGaps.updateStatus(id, status),
+  )
+  ipcMain.handle('capabilityGaps:delete', (_e, id: string) => {
+    capabilityGaps.delete(id)
+  })
 
   ipcMain.handle('collections:list', () => store.listCollections())
   ipcMain.handle('collections:save', (_e, collection: Collection) =>
@@ -474,6 +521,7 @@ if (gotLock) {
     prefs = new PrefsStore()
     store = new LibraryStore()
     receipts = new ReceiptStore()
+    capabilityGaps = new CapabilityGapStore()
     processes = new ProcessManager(store, {
       receipts,
       onReadyUrl: (url) => system.openUrl(url),

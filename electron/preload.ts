@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type {
   ClaudeConnectResult,
   ClaudeDesktopStatus,
+  AgentAccessKind,
+  CapabilityGap,
+  CapabilityGapStatus,
   CodexConnectResult,
   CodexMcpStatus,
   Collection,
@@ -14,6 +17,7 @@ import type {
   RunReceipt,
   ShortcutStatus,
   Tool,
+  ToolReadiness,
   ToolRuntimeState,
   UiPrefs,
 } from './types'
@@ -53,6 +57,27 @@ const api = {
     id?: string
     projectPath?: string
   }): Promise<DesignMdResult> => ipcRenderer.invoke('designMd:get', opts),
+  checkToolReadiness: (id: string): Promise<ToolReadiness> =>
+    ipcRenderer.invoke('tools:readiness', id),
+  listCapabilityGaps: (opts?: {
+    status?: CapabilityGapStatus
+    limit?: number
+  }): Promise<CapabilityGap[]> => ipcRenderer.invoke('capabilityGaps:list', opts),
+  recordCapabilityGap: (input: {
+    task: string
+    capabilities: string[]
+    reason: string
+    relatedToolIds?: string[]
+    suggestedAccess?: AgentAccessKind
+  }): Promise<{ action: 'created' | 'updated'; gap: CapabilityGap }> =>
+    ipcRenderer.invoke('capabilityGaps:record', input),
+  updateCapabilityGapStatus: (
+    id: string,
+    status: CapabilityGapStatus,
+  ): Promise<CapabilityGap> =>
+    ipcRenderer.invoke('capabilityGaps:updateStatus', id, status),
+  deleteCapabilityGap: (id: string): Promise<void> =>
+    ipcRenderer.invoke('capabilityGaps:delete', id),
 
   getRuntimeStates: (): Promise<ToolRuntimeState[]> =>
     ipcRenderer.invoke('process:states'),

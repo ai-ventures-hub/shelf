@@ -18,6 +18,15 @@ export type {
   RunReceipt,
   ReceiptOutcome,
   ReceiptsFile,
+  AgentAccess,
+  AgentAccessKind,
+  McpTransport,
+  ToolReadiness,
+  CapabilityReadinessState,
+  CapabilityMatch,
+  CapabilityGap,
+  CapabilityGapStatus,
+  CapabilityGapsFile,
 } from '../shared/types'
 export { DEFAULT_UI_PREFS } from '../shared/types'
 export type { ShortcutStatus } from '../shared/global-shortcut'

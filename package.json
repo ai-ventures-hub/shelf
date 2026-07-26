@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "0.3.20",
+  "version": "0.4.0",
   "private": true,
   "description": "Personal command center for the tools you build",
   "main": "dist-electron/electron/main.js",
@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.shared.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.mcp.json --noEmit",
     "smoke": "node scripts/smoke-process.mjs",
     "smoke:quick-open": "node scripts/smoke-quick-open.mjs",
+    "smoke:capabilities": "tsc -p tsconfig.electron.json && node scripts/smoke-capabilities.mjs",
     "smoke:import": "tsc -p tsconfig.electron.json && node scripts/smoke-import.mjs",
     "smoke:receipts": "tsc -p tsconfig.electron.json && node scripts/smoke-receipts.mjs",
     "smoke:shelf-url": "tsc -p tsconfig.electron.json && node scripts/smoke-shelf-url.mjs",

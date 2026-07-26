@@ -189,6 +189,12 @@ export function McpAdvancedPanel({
                 <code>shelf_list_tools</code> — library overview + status
               </li>
               <li>
+                <code>shelf_find_capability</code> / <code>shelf_check_tool_readiness</code> — task matching &amp; declared access
+              </li>
+              <li>
+                <code>shelf_record_capability_gap</code> / <code>shelf_list_capability_gaps</code> — unmet-needs inbox
+              </li>
+              <li>
                 <code>shelf_upsert_tool</code> / <code>shelf_launch_tool</code> — register &amp; run
               </li>
               <li>

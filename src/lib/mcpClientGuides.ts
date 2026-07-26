@@ -12,7 +12,7 @@ export interface ClientGuide {
 }
 
 export const MCP_TEST_PROMPT =
-  'List my Shelf tools and tell me which ones are running.'
+  'List my Shelf tools, tell me which ones are running, and summarize their declared capabilities.'
 
 export const SHELF_URL_EXAMPLES = [
   { url: "open 'shelf://open'", hint: 'Show the library' },

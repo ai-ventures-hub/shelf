@@ -38,6 +38,7 @@ Free, local-first, no account required:
 - Menu bar Running submenu (open / URL / stop) and `shelf://` deep-link docs
 - System, light, and dark appearance
 - Detect a project-local `DESIGN.md` and expose it to the current agent (`shelf_get_design_md`, `shelf://tools/{id}/design-md`)
+- Capability Intelligence (0.4.0): task capabilities, declared agent access, readiness, `shelf_find_capability`, Capability Gaps inbox
 
 ## Soft-launch readiness (Community)
 
@@ -45,8 +46,8 @@ Free, local-first, no account required:
 
 **Before public soft launch:**
 
-1. Initialize git + GitHub remote; tag releases (`v0.3.x`) — remote done; soft-launch tag still deferred
-2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel **shelf-site** (AI Ventures); live at **https://shelfmcp.com**. Vision Phase 1: dual-surface demo + full product narrative. Interactive demo / voice later. Product name remains Shelf.
+1. Initialize git + GitHub remote; tag releases (`v0.4.0` for Capability Intelligence) — remote done
+2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel **shelf-site** (AI Ventures); live at **https://shelfmcp.com**. Vision Phase 1 shipped; Phase 2+ should incorporate Capability Intelligence (see [`LANDING.md`](LANDING.md)). Product name remains Shelf.
 3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop copy when both exist~~ (**0.3.15**)
 4. ~~Code size follow-ups (keep TS/TSX under ~500 lines)~~ (**0.3.19** — process-manager split, ToolForm extract, `app.css` feature barrel; `mcp/server.ts` already under bar)
 5. Signed/notarized macOS build + auto-update (later Community)
@@ -60,6 +61,24 @@ Separately licensed commercial add-on — **not** required for Community use. Pl
 - Compile tokens, drift checks, agent receipts
 
 Do not weaken or paywall Community capabilities to sell Profiles.
+
+## Community Phase — Capability Intelligence (v0.4.x)
+
+Free, local-first evolution from launcher to capability catalog:
+
+- Task-oriented capabilities and declared CLI, MCP, or HTTP API access on each tool
+- Deterministic, explainable agent discovery through `shelf_find_capability`
+- Honest readiness: ready, needs setup, manual only, or unavailable
+- Dedicated Capability Gaps inbox for unmet agent needs, recurrence, planning, and related tools
+- Local schema-v3 migration with a v2 backup; gaps remain separate in `capability-gaps.json`
+- No embeddings, hosted inference, accounts, child-MCP proxy, automatic installation, or tool invocation
+
+**Approval gate:** existing libraries migrate without loss; connected agents can find a suitable
+tool or record one deduplicated gap; all results explain the match and distinguish declared agent
+access from GUI-only use.
+
+Only after real usage demonstrates demand should Shelf consider curated one-click activation for
+selected MCP tools. A universal child-MCP gateway remains out of scope.
 
 ## Later Community enhancements
 

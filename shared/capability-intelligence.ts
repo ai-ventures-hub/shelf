@@ -1,0 +1,261 @@
+import fs from 'node:fs'
+import type {
+  AgentAccess,
+  AgentAccessKind,
+  CapabilityMatch,
+  Tool,
+  ToolReadiness,
+} from './types'
+
+const STOP_WORDS = new Set([
+  'a', 'an', 'and', 'can', 'could', 'do', 'for', 'from', 'have', 'i', 'in', 'is',
+  'it', 'me', 'my', 'need', 'of', 'on', 'please', 'the', 'this', 'to', 'tool',
+  'use', 'want', 'with', 'would',
+])
+
+const SECRET_ASSIGNMENT = /\b(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)\s*=\s*(?!\*{3}|\$\{?[A-Z0-9_]+\}?)([^\s]+)/i
+const BEARER_SECRET = /\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/i
+
+export function normalizeCapabilities(values: string[] | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const value of values || []) {
+    const clean = value.trim().replace(/\s+/g, ' ')
+    const key = clean.toLowerCase()
+    if (!clean || seen.has(key)) continue
+    seen.add(key)
+    normalized.push(clean)
+  }
+  return normalized
+}
+
+export function normalizeAgentAccess(values: AgentAccess[] | undefined): AgentAccess[] {
+  const seen = new Set<string>()
+  return (values || []).map((value) => {
+    const entrypoint = value.entrypoint?.trim() || ''
+    const notes = value.notes?.trim() || undefined
+    if (!entrypoint) throw new Error(`${accessLabel(value.kind)} entrypoint is required.`)
+    if (containsLikelySecret(entrypoint) || (notes && containsLikelySecret(notes))) {
+      throw new Error('Agent access metadata cannot contain credentials or secret values.')
+    }
+    if (value.kind === 'mcp' && !value.transport) {
+      throw new Error('MCP access requires a transport.')
+    }
+    if (
+      (value.kind === 'http-api' || value.transport === 'streamable-http') &&
+      !isSafeHttpEndpoint(entrypoint)
+    ) {
+      throw new Error('HTTP access requires an http(s) endpoint without embedded credentials.')
+    }
+    const key = `${value.kind}:${value.transport || ''}:${entrypoint.toLowerCase()}`
+    if (seen.has(key)) throw new Error(`Duplicate ${accessLabel(value.kind)} access entry.`)
+    seen.add(key)
+    return {
+      id: value.id,
+      kind: value.kind,
+      entrypoint,
+      transport: value.kind === 'mcp' ? value.transport : undefined,
+      setupRequired: Boolean(value.setupRequired),
+      notes,
+    }
+  })
+}
+
+export function deriveToolReadiness(tool: Tool): ToolReadiness {
+  if (tool.projectPath && !fs.existsSync(tool.projectPath)) {
+    return {
+      state: 'unavailable',
+      summary: 'Project folder is unavailable.',
+      reasons: [`Project folder not found: ${tool.projectPath}`],
+    }
+  }
+
+  if (tool.agentAccess.length === 0) {
+    return {
+      state: 'manual_only',
+      summary: 'Shelf can launch this tool, but no agent interface is declared.',
+      reasons: ['No CLI, MCP, or HTTP API access method is configured.'],
+    }
+  }
+
+  const invalid = tool.agentAccess.find((access) => !isAccessComplete(access))
+  if (invalid) {
+    return {
+      state: 'unavailable',
+      summary: `${accessLabel(invalid.kind)} access metadata is incomplete.`,
+      reasons: [`${accessLabel(invalid.kind)} requires a valid entrypoint${invalid.kind === 'mcp' ? ' and transport' : ''}.`],
+    }
+  }
+
+  const ready = tool.agentAccess.filter((access) => !access.setupRequired)
+  if (ready.length > 0) {
+    return {
+      state: 'ready',
+      summary: `Declared ready through ${ready.map((access) => accessLabel(access.kind)).join(', ')}.`,
+      reasons: ready.map((access) => `${accessLabel(access.kind)} is declared ready.`),
+    }
+  }
+
+  return {
+    state: 'needs_setup',
+    summary: 'Agent access is declared but still needs setup.',
+    reasons: tool.agentAccess.map(
+      (access) => `${accessLabel(access.kind)} is marked setup required.`,
+    ),
+  }
+}
+
+export function findCapabilityMatches(
+  tools: Tool[],
+  task: string,
+  opts: { accessKind?: AgentAccessKind; limit?: number } = {},
+): CapabilityMatch[] {
+  const query = normalizeText(task)
+  const queryTokens = significantTokens(task)
+  if (!query || queryTokens.length === 0) return []
+
+  const matches: CapabilityMatch[] = []
+  for (const tool of tools) {
+    if (opts.accessKind && !tool.agentAccess.some((access) => access.kind === opts.accessKind)) {
+      continue
+    }
+    const ranked = scoreTool(tool, query, queryTokens)
+    if (!ranked || ranked.score < 120) continue
+    const readiness = deriveToolReadiness(tool)
+    matches.push({
+      toolId: tool.id,
+      name: tool.name,
+      capabilities: tool.capabilities,
+      accessKinds: Array.from(new Set(tool.agentAccess.map((access) => access.kind))),
+      readiness,
+      score: ranked.score,
+      reasons: ranked.reasons,
+      suggestedAction:
+        readiness.state === 'ready'
+          ? 'launch'
+          : readiness.state === 'needs_setup' || readiness.state === 'unavailable'
+            ? 'configure'
+            : 'manual_use',
+    })
+  }
+
+  matches.sort(
+    (a, b) =>
+      b.score - a.score ||
+      Number(Boolean(tools.find((tool) => tool.id === b.toolId)?.favorite)) -
+        Number(Boolean(tools.find((tool) => tool.id === a.toolId)?.favorite)) ||
+      launchedAt(tools, b.toolId) - launchedAt(tools, a.toolId) ||
+      a.name.localeCompare(b.name),
+  )
+  return matches.slice(0, Math.max(1, Math.min(opts.limit ?? 5, 10)))
+}
+
+export function containsLikelySecret(value: string): boolean {
+  if (SECRET_ASSIGNMENT.test(value) || BEARER_SECRET.test(value)) return true
+  try {
+    const parsed = new URL(value)
+    if (parsed.username || parsed.password) return true
+    for (const key of parsed.searchParams.keys()) {
+      if (/TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY/i.test(key)) return true
+    }
+  } catch {
+    // Commands and notes are not expected to be URLs.
+  }
+  return false
+}
+
+function scoreTool(
+  tool: Tool,
+  query: string,
+  queryTokens: string[],
+): { score: number; reasons: string[] } | null {
+  let score = 0
+  const reasons: string[] = []
+
+  for (const capability of tool.capabilities) {
+    const normalized = normalizeText(capability)
+    const coverage = tokenCoverage(queryTokens, significantTokens(capability))
+    if (normalized === query) {
+      score = Math.max(score, 1000)
+      reasons.push(`Exact capability: ${capability}`)
+    } else if (query.includes(normalized) || normalized.includes(query)) {
+      score = Math.max(score, 850)
+      reasons.push(`Capability phrase: ${capability}`)
+    } else if (coverage > 0) {
+      const capabilityScore = 250 + Math.round(coverage * 450)
+      score = Math.max(score, capabilityScore)
+      reasons.push(`Capability match: ${capability}`)
+    }
+  }
+
+  const fields: Array<[string, string | undefined, number]> = [
+    ['Tool name', tool.name, 420],
+    ['Description', tool.description, 300],
+    ['Tags', tool.tags.join(' '), 240],
+    ['Operating notes', tool.notes, 160],
+  ]
+  for (const [label, value, weight] of fields) {
+    if (!value) continue
+    const normalized = normalizeText(value)
+    const coverage = tokenCoverage(queryTokens, significantTokens(value))
+    if (normalized === query) {
+      score += weight
+      reasons.push(`${label} exactly matches.`)
+    } else if (coverage > 0) {
+      score += Math.round(weight * coverage)
+      reasons.push(`${label} shares relevant terms.`)
+    }
+  }
+
+  return score > 0 ? { score, reasons: Array.from(new Set(reasons)).slice(0, 4) } : null
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
+}
+
+function significantTokens(value: string): string[] {
+  return Array.from(
+    new Set(normalizeText(value).split(' ').filter((token) => token.length > 1 && !STOP_WORDS.has(token))),
+  )
+}
+
+function tokenCoverage(queryTokens: string[], fieldTokens: string[]): number {
+  if (queryTokens.length === 0 || fieldTokens.length === 0) return 0
+  const fields = new Set(fieldTokens)
+  const matched = queryTokens.filter((token) => fields.has(token)).length
+  return matched / queryTokens.length
+}
+
+function isAccessComplete(access: AgentAccess): boolean {
+  if (!access.entrypoint.trim()) return false
+  if (access.kind === 'mcp' && !access.transport) return false
+  if (access.kind === 'http-api' || access.transport === 'streamable-http') {
+    return isSafeHttpEndpoint(access.entrypoint)
+  }
+  return true
+}
+
+function isSafeHttpEndpoint(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      !parsed.username &&
+      !parsed.password
+    )
+  } catch {
+    return false
+  }
+}
+
+function accessLabel(kind: AgentAccessKind): string {
+  if (kind === 'http-api') return 'HTTP API'
+  return kind === 'mcp' ? 'MCP' : 'CLI'
+}
+
+function launchedAt(tools: Tool[], id: string): number {
+  const value = tools.find((tool) => tool.id === id)?.lastLaunchedAt
+  const parsed = value ? Date.parse(value) : 0
+  return Number.isFinite(parsed) ? parsed : 0
+}

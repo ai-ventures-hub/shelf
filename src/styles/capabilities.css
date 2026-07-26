@@ -1,0 +1,219 @@
+/* Capability intelligence — tool access summaries and gap inbox. */
+.capability-panel {
+  margin-bottom:1rem;
+}
+
+.capability-detail-grid {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);
+  gap:1.25rem;
+}
+
+.capability-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-top:.45rem;
+}
+
+.capability-empty,.readiness-summary {
+  margin:.45rem 0 0;
+  color:var(--subtle);
+  font-size:.86rem;
+}
+
+.readiness-badge {
+  display:inline-flex;
+  align-items:center;
+  padding:.2rem .58rem;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:var(--input);
+  color:var(--muted);
+  font-size:.72rem;
+  font-weight:700;
+  text-transform:capitalize;
+}
+
+.readiness-badge.is-ready,.readiness-badge.is-resolved {
+  color:var(--success);
+}
+
+.readiness-badge.is-needs_setup,.readiness-badge.is-planned {
+  color:var(--warning);
+}
+
+.readiness-badge.is-unavailable,.readiness-badge.is-open {
+  color:var(--danger);
+}
+
+.access-summary-list,.access-list {
+  display:grid;
+  gap:.65rem;
+  margin-top:.45rem;
+}
+
+.access-summary,.access-editor {
+  padding:.75rem;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--input);
+}
+
+.access-summary strong {
+  font-size:.8rem;
+}
+
+.access-summary code {
+  display:block;
+  margin-top:.3rem;
+  color:var(--brand-strong);
+  font-size:.78rem;
+  overflow-wrap:anywhere;
+}
+
+.access-summary p {
+  margin:.35rem 0 0;
+  color:var(--muted);
+  font-size:.82rem;
+}
+
+.access-fieldset {
+  min-width:0;
+  margin:0;
+  padding:0;
+  border:0;
+}
+
+.access-editor {
+  display:grid;
+  gap:.55rem;
+}
+
+.access-editor-head {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:.5rem;
+}
+
+.access-add-row {
+  margin:.65rem 0 0;
+}
+
+.gap-filters {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.45rem;
+  margin-bottom:1rem;
+}
+
+.gap-filters .is-active {
+  border-color:var(--brand);
+  color:var(--brand-strong);
+}
+
+.gap-list {
+  display:grid;
+  gap:1rem;
+}
+
+.gap-card-header {
+  align-items:flex-start;
+}
+
+.gap-title {
+  margin:.65rem 0 0;
+  font-size:1.02rem;
+  letter-spacing:-.015em;
+}
+
+.gap-reason {
+  margin:0;
+  color:var(--muted);
+  line-height:1.55;
+}
+
+.gap-meta {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.75rem;
+  margin:1rem 0;
+}
+
+.gap-meta div {
+  padding:.65rem .75rem;
+  border-radius:10px;
+  background:var(--input);
+}
+
+.gap-meta dt {
+  color:var(--subtle);
+  font-size:.72rem;
+  font-weight:700;
+  text-transform:uppercase;
+}
+
+.gap-meta dd {
+  margin:.25rem 0 0;
+  color:var(--ink);
+  font-size:.86rem;
+}
+
+.gap-related {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.55rem;
+}
+
+.gap-related a {
+  color:var(--brand-strong);
+  font-size:.86rem;
+}
+
+.gap-examples {
+  margin-top:.85rem;
+  color:var(--muted);
+  font-size:.84rem;
+}
+
+.gap-examples summary {
+  cursor:pointer;
+  color:var(--ink);
+  font-weight:650;
+}
+
+.gap-examples li {
+  margin:.35rem 0;
+}
+
+.gap-examples span {
+  color:var(--subtle);
+}
+
+.gap-actions {
+  margin:1rem 0 0;
+}
+
+.gap-actions .is-danger {
+  color:var(--danger);
+  margin-left:auto;
+}
+
+.gap-empty {
+  min-height:280px;
+}
+
+@media (max-width:760px) {
+  .capability-detail-grid,.gap-meta {
+    grid-template-columns:1fr;
+  }
+
+  .access-editor-head {
+    grid-template-columns:1fr;
+  }
+
+  .gap-actions .is-danger {
+    margin-left:0;
+  }
+}

@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
+import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
 import { usePrefs } from '../hooks/usePrefs'
 import { NamePromptDialog } from './NamePromptDialog'
 import { QuickOpen } from './QuickOpen'
@@ -48,6 +49,13 @@ function NavIcon({ name }: { name: string }) {
         <svg {...common}>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 7v5l3 2" />
+        </svg>
+      )
+    case 'gaps':
+      return (
+        <svg {...common}>
+          <path d="M12 3 2.8 20h18.4L12 3z" />
+          <path d="M12 9v5M12 17.2h.01" />
         </svg>
       )
     case 'collection':
@@ -102,6 +110,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const { tools, collections, states, saveCollection } = useLibrary()
   const { prefs, updatePrefs } = usePrefs()
+  const { gaps: openGaps } = useCapabilityGaps({ status: 'open', limit: 200 })
   const dragRef = useRef<{
     startX: number
     startWidth: number
@@ -225,6 +234,16 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavIcon name="recent" />
             <NavLabel collapsed={collapsed}>Recent</NavLabel>
             <NavCount collapsed={collapsed} value={recent} />
+          </NavLink>
+          <NavLink
+            to="/gaps"
+            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+            title="Capability gaps"
+            aria-label="Capability gaps"
+          >
+            <NavIcon name="gaps" />
+            <NavLabel collapsed={collapsed}>Capability gaps</NavLabel>
+            <NavCount collapsed={collapsed} value={openGaps.length} />
           </NavLink>
 
           {!collapsed ? <p className="nav-label">Collections</p> : <div className="nav-divider" />}
