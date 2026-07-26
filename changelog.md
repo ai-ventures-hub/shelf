@@ -4,7 +4,7 @@
 
 - Invite-ready pack for Community 0.4.0: `docs/INVITE.md` (Gatekeeper install, Connect agents, example prompts, soft-launch checklist + draft GH release notes).
 - Annotated the maintainer’s real library tools with capabilities + agentAccess so `shelf_find_capability` returns useful matches (library data only; backup under Application Support).
-- Marketing site follow-ups: incorporate Capability Intelligence into landing Phase 2+ narrative (see `docs/LANDING.md`).
+- Marketing site Phase 2: interactive Capability Intelligence demo (match + readiness pills, Capability Gaps beat, prompt chips, Running vs agent-ready); benefit-first copy; redeploy shelf-site.
 
 ## 0.4.0 — 2026-07-26
 

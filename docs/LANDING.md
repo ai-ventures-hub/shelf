@@ -22,9 +22,9 @@ Shelf is no longer only “launch and monitor local tools.” Community **0.4.0*
 
 Landing copy must make this legible without overselling a gateway.
 
-## Phase 2 — Interactive demo (next)
+## Phase 2 — Interactive demo (shipped)
 
-Keep Direction A (Library Comes Alive). Extend the prepared state machine:
+Keep Direction A (Library Comes Alive). Prepared state machine on shelfmcp.com:
 
 1. **Capability beat** — Agent asks “What can batch-optimize images?” → Shelf highlights a tool with matching capabilities + readiness pill (`ready` / `needs_setup` / `manual_only`)
 2. **Gap beat** — Agent asks for a missing capability → Gaps inbox gains a row (deduped, occurrence count)
@@ -33,6 +33,7 @@ Keep Direction A (Library Comes Alive). Extend the prepared state machine:
    - “Record a gap if nothing can fill PDF forms.”
    - “Which tools are ready for agents?”
 4. Import / launch / MCP connect sequences remain; readiness must stay distinct from process status (Running ≠ agent-ready)
+5. Auto-tour (~20s) + clickable chips; `prefers-reduced-motion` lands on the capability beat
 
 ## Phase 3 — Guided audio
 

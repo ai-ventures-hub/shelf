@@ -11,8 +11,8 @@ export function SiteHeader() {
         </a>
         <nav className="header-nav" aria-label="Page">
           <a href="#demo">Demo</a>
+          <a href="#capabilities">Capabilities</a>
           <a href="#agents">Agents</a>
-          <a href="#local">Local-first</a>
           <a href="#access">Request access</a>
         </nav>
       </div>

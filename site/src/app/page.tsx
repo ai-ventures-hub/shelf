@@ -3,7 +3,7 @@ import { NarrativeSections } from '@/components/landing/NarrativeSections'
 import { SiteFooter } from '@/components/landing/SiteFooter'
 import { SiteHeader } from '@/components/landing/SiteHeader'
 
-/** Vision Phase 1 — product story with dual-surface demo + full narrative. */
+/** Vision Phase 2 — interactive Capability Intelligence demo + narrative. */
 export default function HomePage() {
   return (
     <>

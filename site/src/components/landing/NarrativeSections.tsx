@@ -4,6 +4,7 @@ import {
   EXAMPLE_TOOLS,
   GRAVEYARD_ITEMS,
   IMPORT_SUGGESTIONS,
+  READINESS_LABEL,
 } from '@/lib/demo-states'
 
 function SectionShell({
@@ -29,7 +30,7 @@ function SectionShell({
   )
 }
 
-/** Sections 2–10 from the landing vision narrative. */
+/** Narrative after the interactive demo — benefit first; MCP mid-page. */
 export function NarrativeSections() {
   return (
     <>
@@ -50,7 +51,7 @@ export function NarrativeSections() {
           ))}
         </ul>
         <p className="section-outro">
-          Shelf gives those tools a permanent home—and lets your agents help maintain it.
+          Shelf gives those tools a permanent home—and lets agents discover what they can actually do.
         </p>
       </SectionShell>
 
@@ -60,9 +61,8 @@ export function NarrativeSections() {
         title="Smart import remembers the ritual for you"
       >
         <p className="section-lead">
-          Choose a project folder. Shelf suggests a name, launch command, port, tags, package
-          manager, and DESIGN.md when it can. Accept what looks right—then the tool lives in your
-          library.
+          Choose a project folder. Shelf suggests a name, launch command, port, tags, capabilities,
+          and DESIGN.md when it can. Accept what looks right—then the tool lives in your library.
         </p>
         <dl className="import-grid">
           {IMPORT_SUGGESTIONS.map((row) => (
@@ -77,30 +77,60 @@ export function NarrativeSections() {
       <SectionShell
         id="launch"
         eyebrow="Launch without the ritual"
-        title="Starting, ready, running—with truthful status and logs"
+        title="Running is not the same as agent-ready"
       >
         <p className="section-lead">
-          Shelf is not a bookmark manager. Port-backed tools report Running only when they are
-          actually listening. Open the URL, watch live logs, then Stop or Restart when you are done.
+          Port-backed tools report Running only when they are actually listening. Separately, each
+          tool declares whether agents can reach it—ready, needs setup, or manual only. Open the
+          URL, watch live logs, then Stop or Restart when you are done.
         </p>
-        <ol className="lifecycle-row" aria-label="Launch lifecycle">
+        <ol className="lifecycle-row" aria-label="Process lifecycle">
           {['Starting', 'Ready', 'Running', 'Logs', 'Stop'].map((step) => (
             <li key={step}>
               <span className="lifecycle-step">{step}</span>
             </li>
           ))}
         </ol>
+        <ol className="lifecycle-row lifecycle-row--readiness" aria-label="Agent readiness">
+          {(
+            Object.keys(READINESS_LABEL) as Array<keyof typeof READINESS_LABEL>
+          ).map((key) => (
+            <li key={key}>
+              <span className="lifecycle-step lifecycle-step--readiness" data-state={key}>
+                {READINESS_LABEL[key]}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </SectionShell>
+
+      <SectionShell
+        id="capabilities"
+        eyebrow="Capability Intelligence"
+        title="Agents find the right tool—or record an honest gap"
+      >
+        <p className="section-lead">
+          Tools declare task-oriented capabilities and how agents may access them. Connected agents
+          ask Shelf what can handle a job; matches come back with explainable scores and readiness.
+          When nothing fits, Shelf records a deduplicated Capability Gap locally—so unmet needs
+          become a plan, not a silent failure.
+        </p>
+        <ul className="truth-list">
+          <li>Discovery and honesty first—Shelf does not proxy or invoke child MCP servers for you.</li>
+          <li>No embeddings, hosted inference, or cloud sync of your library.</li>
+          <li>Gaps live on your Mac in a separate local file from the tool library.</li>
+        </ul>
       </SectionShell>
 
       <SectionShell
         id="agents"
         eyebrow="One library shared with your agents"
-        title="Your coding agent can see the tools you already have"
+        title="Your coding agent sees the same tools you do"
       >
         <p className="section-lead">
           The Shelf desktop app and connected agents use the same local library. Agents list tools,
-          inspect projects, register new utilities, launch and stop processes, and read status or
-          logs—without a separate registry.
+          register new utilities, launch and stop processes, read status or logs, and discover
+          capabilities—without a separate registry.
         </p>
         <div className="share-model" aria-label="You, Shelf, and agents">
           <span className="share-node">You</span>
@@ -114,8 +144,9 @@ export function NarrativeSections() {
           <span className="share-node">Claude · Cursor · Codex</span>
         </div>
         <p className="section-outro">
-          That access is provided through MCP—an open protocol for tool-using agents. Benefit first;
-          acronym second.
+          That shared access uses MCP—an open protocol for tool-using agents. Benefit first;
+          acronym second. Shelf exposes its own library tools; it does not run every MCP server
+          on your machine for you.
         </p>
       </SectionShell>
 
@@ -163,7 +194,7 @@ export function NarrativeSections() {
           <li>Community Shelf does not require a cloud account.</li>
           <li>Launch commands are authored by you—Shelf does not invent privileged access.</li>
           <li>
-            Library, preferences, and run receipts live under{' '}
+            Library, preferences, run receipts, and capability gaps live under{' '}
             <code>~/Library/Application Support/Shelf/</code>.
           </li>
           <li>Sensitive env values are masked in logs and MCP responses.</li>
@@ -183,9 +214,9 @@ export function NarrativeSections() {
         title="Free, open source, and complete without a subscription"
       >
         <p className="section-lead">
-          Shelf Community is MIT-licensed and meant to remain a full product on its own. Profiles—a
-          possible future add-on for reusable design profiles—will not paywall the core library or
-          MCP tools.
+          Shelf Community is MIT-licensed and meant to remain a full product on its own—including
+          Capability Intelligence. Profiles—a possible future add-on for reusable design
+          profiles—will not paywall the core library, discovery, or MCP tools.
         </p>
       </SectionShell>
 
@@ -195,7 +226,7 @@ export function NarrativeSections() {
           <h2 id="final-heading">Stop losing the tools you build.</h2>
           <p className="section-lead">
             macOS Community is invite-only while we finish the public soft launch. Request access,
-            take another look at the demo, or read the source.
+            try the interactive demo, or read the source.
           </p>
           <div className="final-cta-grid">
             <WaitlistForm inputId="waitlist-email-final" />

@@ -1,6 +1,6 @@
 /**
  * Shelf marketing site — Suds System Studio tokens (DESIGN.md).
- * Vision Phase 1: dual-surface demo + narrative sections.
+ * Vision Phase 2: interactive Capability Intelligence demo + narrative.
  */
 :root {
   color-scheme: dark;
@@ -367,12 +367,69 @@ kbd {
   gap: 0.75rem;
 }
 
+.dual-demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
 .dual-demo-caption {
   font-size: 0.72rem;
   font-weight: 680;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--subtle);
+}
+
+.demo-tour-btn {
+  min-height: 32px;
+  padding: 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.demo-tour-btn:hover {
+  border-color: var(--brand);
+}
+
+.demo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.demo-chip {
+  min-height: 34px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.demo-chip:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  color: var(--ink);
+}
+
+.demo-chip[data-active='true'] {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: color-mix(in srgb, var(--brand) 14%, var(--panel));
+  color: var(--brand-strong);
 }
 
 .dual-demo-grid {
@@ -429,11 +486,23 @@ kbd {
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--input);
+  animation: demo-fade-up 320ms ease both;
 }
 
 .demo-chat-bubble[data-role='agent'] {
   background: color-mix(in srgb, var(--brand) 10%, var(--panel));
   border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+}
+
+@keyframes demo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .demo-chat-role {
@@ -474,12 +543,102 @@ kbd {
 .demo-tool-card[data-featured='true'] {
   border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 20%, transparent);
+  animation: demo-feature-pulse 480ms ease both;
+}
+
+@keyframes demo-feature-pulse {
+  from {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  to {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 20%, transparent);
+  }
+}
+
+.demo-shelf-note {
+  margin: 0;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--brand-strong);
+  background: color-mix(in srgb, var(--brand) 8%, var(--panel));
+  animation: demo-fade-up 280ms ease both;
+}
+
+.demo-gaps {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--warning) 6%, var(--panel));
+  animation: demo-fade-up 320ms ease both;
+}
+
+.demo-gaps-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem 0.35rem;
+}
+
+.demo-gaps-head h4 {
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.demo-gaps-meta {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+.demo-gaps-list {
+  list-style: none;
+  padding: 0 0.75rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.demo-gap-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line));
+  border-radius: 12px;
+  background: var(--input);
+}
+
+.demo-gap-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.demo-gap-main strong {
+  font-size: 0.86rem;
+}
+
+.demo-gap-main span {
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .demo-tool-top {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
+}
+
+.demo-tool-pills {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
 }
 
 .demo-tool-icon {
@@ -539,6 +698,39 @@ kbd {
 
 .demo-pill[data-tone='warning'] {
   color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--line));
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.demo-pill[data-tone='danger'] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.demo-pill[data-tone='muted'] {
+  color: var(--subtle);
+}
+
+.demo-pill--readiness {
+  font-size: 0.64rem;
+}
+
+.demo-cap-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.demo-cap-list li {
+  font-size: 0.7rem;
+  font-weight: 650;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line));
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  color: var(--brand-strong);
 }
 
 .demo-tool-meta {
@@ -692,6 +884,27 @@ kbd {
   background: var(--panel);
   font-size: 0.82rem;
   font-weight: 680;
+}
+
+.lifecycle-row--readiness {
+  margin-top: 0.55rem;
+}
+
+.lifecycle-step--readiness[data-state='ready'] {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  background: color-mix(in srgb, var(--success) 10%, var(--panel));
+}
+
+.lifecycle-step--readiness[data-state='needs_setup'] {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--line));
+  background: color-mix(in srgb, var(--warning) 10%, var(--panel));
+}
+
+.lifecycle-step--readiness[data-state='manual_only'],
+.lifecycle-step--readiness[data-state='unavailable'] {
+  color: var(--subtle);
 }
 
 .share-model {
@@ -856,5 +1069,29 @@ kbd {
 
   .hero-title {
     max-width: none;
+  }
+
+  .demo-chips {
+    /* Horizontal scroll keeps chips tappable without wrapping into a tall stack. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .demo-chip {
+    flex: 0 0 auto;
+    max-width: 16rem;
+  }
+
+  .demo-tool-pills {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .demo-tool-top {
+    flex-wrap: wrap;
   }
 }

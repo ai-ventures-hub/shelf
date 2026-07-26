@@ -2,7 +2,7 @@ import { ShelfMark } from '@/components/ShelfMark'
 import { WaitlistForm } from '@/components/WaitlistForm'
 import { DualDemo } from './DualDemo'
 
-/** Brand-first hero + waitlist + dual-surface demo. */
+/** Brand-first hero + waitlist + interactive dual-surface demo. */
 export function HeroSection() {
   return (
     <section className="hero hero--vision" aria-labelledby="hero-heading">
@@ -15,7 +15,8 @@ export function HeroSection() {
           A personal command center for the tools you build.
         </h1>
         <p className="hero-support">
-          One home for every local tool—and a library your AI agents can operate with you.
+          One home for every local tool—and a capability catalog so your agents
+          find the right one, honestly.
         </p>
         <div className="hero-cta-row">
           <a className="btn-quiet" href="#demo">
