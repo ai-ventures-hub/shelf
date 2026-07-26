@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.20 — 2026-07-26
 
 - Pre-launch process safety: only verified Shelf-owned process groups can be adopted/stopped; unrelated port listeners are refused.
 - Correct lifecycle reporting for clean one-shot exits, early server exits, stubborn-process escalation, and URL-open failures.
