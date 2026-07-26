@@ -46,11 +46,12 @@ Free, local-first, no account required:
 
 **Before public soft launch:**
 
-1. Initialize git + GitHub remote; tag releases (`v0.4.0` for Capability Intelligence) — remote done
-2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel **shelf-site** (AI Ventures); live at **https://shelfmcp.com**. Vision Phase 1 shipped; Phase 2+ should incorporate Capability Intelligence (see [`LANDING.md`](LANDING.md)). Product name remains Shelf.
-3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop copy when both exist~~ (**0.3.15**)
-4. ~~Code size follow-ups (keep TS/TSX under ~500 lines)~~ (**0.3.19** — process-manager split, ToolForm extract, `app.css` feature barrel; `mcp/server.ts` already under bar)
-5. Signed/notarized macOS build + auto-update (later Community)
+1. ~~Initialize git + GitHub remote; tag releases (`v0.4.0`)~~ — done (`v0.4.0` / `c6dad98`)
+2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel **shelf-site**; live at **https://shelfmcp.com**. Phase 2+ should incorporate Capability Intelligence (see [`LANDING.md`](LANDING.md)).
+3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop~~ (**0.3.15**)
+4. ~~Code size follow-ups~~ (**0.3.19**)
+5. Invite wave — see [`INVITE.md`](INVITE.md) (Gatekeeper, Connect, example prompts). Optional private GitHub Release notes for `v0.4.0`. Prefer small private invites over a public blast until Connect + discovery are proven with strangers.
+6. Signed/notarized macOS build + auto-update (later Community)
 
 ## Shelf Profiles (future add-on)
 

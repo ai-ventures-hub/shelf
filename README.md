@@ -43,6 +43,8 @@ First launch of an unsigned local build: right-click → **Open** if macOS Gatek
 
 Rebuild/reinstall after code changes with the same command.
 
+Community invite checklist (Gatekeeper, Connect agents, example prompts): [`docs/INVITE.md`](docs/INVITE.md).
+
 ## Use
 
 1. Click **Add tool** (or press `⌘N`).
