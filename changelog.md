@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Marketing site (`site/`): waitlist-first landing on Vercel (**shelf-site**, team `carlos-projects-882b0b3c`) with DESIGN.md tokens; hero omits MCP jargon; agents/MCP section below the fold; Neon `waitlist_signups` + Server Action. Domain target: shelfmcp.com (attach when owned).
+
 ## 0.3.20 — 2026-07-26
 
 - Pre-launch process safety: only verified Shelf-owned process groups can be adopted/stopped; unrelated port listeners are refused.

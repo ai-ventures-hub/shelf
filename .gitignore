@@ -9,3 +9,7 @@ release/
 .env
 .env.*
 !.env.example
+.vercel
+site/.vercel
+site/.deploy-payload.json
+site/scripts/payload.json

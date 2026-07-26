@@ -18,6 +18,19 @@ npm run electron:dev
 
 This starts the Vite renderer on `http://127.0.0.1:5173` and opens the Electron shell.
 
+## Marketing site
+
+Waitlist landing lives in [`site/`](site/) (Next.js). Soft-launch URL: [shelf-site-one.vercel.app](https://shelf-site-one.vercel.app). Brand domain target: **shelfmcp.com** (product name stays **Shelf**).
+
+```bash
+cd site
+cp .env.example .env.local   # DATABASE_URL from Neon project shelf-waitlist
+npm install
+npm run dev
+```
+
+See [`site/README.md`](site/README.md). On Vercel, set `DATABASE_URL` for Production/Preview on project **shelf-site** under [carlos-projects-882b0b3c](https://vercel.com/carlos-projects-882b0b3c/shelf-site).
+
 ## Install a desktop prototype (.app)
 
 ```bash
