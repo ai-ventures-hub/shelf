@@ -10,12 +10,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Shelf — The Local Tool Hub for AI Agents',
   description:
-    'A home for every tool you build. Launch them yourself—or let your AI agents handle it. macOS Community soft launch.',
+    'A personal command center for the tools you build. Organize, launch, and share a local library with your AI agents. macOS Community soft launch.',
   metadataBase: new URL('https://shelfmcp.com'),
   openGraph: {
     title: 'Shelf — The Local Tool Hub for AI Agents',
     description:
-      'A home for every tool you build. Launch them yourself—or let your AI agents handle it.',
+      'A personal command center for the tools you build—and a library your AI agents can operate with you.',
     url: 'https://shelfmcp.com',
     siteName: 'Shelf',
     type: 'website',

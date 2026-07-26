@@ -46,7 +46,7 @@ Free, local-first, no account required:
 **Before public soft launch:**
 
 1. Initialize git + GitHub remote; tag releases (`v0.3.x`) — remote done; soft-launch tag still deferred
-2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel project **shelf-site** (AI Ventures / `carlos-projects-882b0b3c`); live at `shelf-site-one.vercel.app`. Attach **shelfmcp.com** when owned. Product name remains Shelf (MCP is mid-page / domain descriptor only).
+2. ~~Landing page + brand domain~~ — waitlist site in [`site/`](../site/) on Vercel **shelf-site** (AI Ventures); live at **https://shelfmcp.com**. Vision Phase 1: dual-surface demo + full product narrative. Interactive demo / voice later. Product name remains Shelf.
 3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop copy when both exist~~ (**0.3.15**)
 4. ~~Code size follow-ups (keep TS/TSX under ~500 lines)~~ (**0.3.19** — process-manager split, ToolForm extract, `app.css` feature barrel; `mcp/server.ts` already under bar)
 5. Signed/notarized macOS build + auto-update (later Community)

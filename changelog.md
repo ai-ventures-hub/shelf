@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Marketing site (`site/`): waitlist-first landing on Vercel (**shelf-site**, team `carlos-projects-882b0b3c`) with DESIGN.md tokens; hero omits MCP jargon; agents/MCP section below the fold; Neon `waitlist_signups` + Server Action. Domain target: shelfmcp.com (attach when owned).
+- Marketing site (`site/`): waitlist-first landing on Vercel (**shelf-site**, team `carlos-projects-882b0b3c`) with DESIGN.md tokens; hero omits MCP jargon; agents/MCP section below the fold; Neon `waitlist_signups` + Server Action. Domain: shelfmcp.com.
+- Landing vision Phase 1: dual-surface Agent + Shelf demo hero, full product narrative (graveyard → import → launch → shared library → connect → examples → local-first → community), waitlist + GitHub CTAs.
 
 ## 0.3.20 — 2026-07-26
 

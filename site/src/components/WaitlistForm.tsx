@@ -23,13 +23,19 @@ function statusCopy(result: WaitlistResult): { tone: string; text: string } {
 }
 
 /** Client waitlist form — request access for soft-launch invites. */
-export function WaitlistForm() {
+export function WaitlistForm({
+  inputId = 'waitlist-email',
+  className = 'waitlist-card',
+}: {
+  inputId?: string
+  className?: string
+}) {
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<WaitlistResult | null>(null)
 
   return (
     <form
-      className="waitlist-card"
+      className={className}
       onSubmit={(event) => {
         event.preventDefault()
         const form = event.currentTarget
@@ -43,12 +49,12 @@ export function WaitlistForm() {
         })
       }}
     >
-      <label className="waitlist-label" htmlFor="waitlist-email">
+      <label className="waitlist-label" htmlFor={inputId}>
         Request access
       </label>
       <div className="waitlist-row">
         <input
-          id="waitlist-email"
+          id={inputId}
           className="waitlist-input"
           type="email"
           name="email"

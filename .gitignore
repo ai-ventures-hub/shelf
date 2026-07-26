@@ -13,3 +13,5 @@ release/
 site/.vercel
 site/.deploy-payload.json
 site/scripts/payload.json
+site/*.docx
+site/**/*Vision*
