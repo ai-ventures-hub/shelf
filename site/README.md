@@ -15,7 +15,7 @@ npm run dev
 
 Vercel project: **shelf-site** on team [carlos-projects-882b0b3c](https://vercel.com/carlos-projects-882b0b3c/shelf-site) (AI Ventures).
 
-When linking this git monorepo, set **Root Directory** to `site` in the Vercel project settings.
+Git integration is connected to `ai-ventures-hub/shelf` with **Root Directory** = `site` — pushes to `main` that touch `site/` deploy to production automatically.
 
 **Required env:** set `DATABASE_URL` (Production + Preview) from Neon project `shelf-waitlist` — waitlist inserts fail closed without it:
 https://vercel.com/carlos-projects-882b0b3c/shelf-site/settings/environment-variables
