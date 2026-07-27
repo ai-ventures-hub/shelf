@@ -350,6 +350,12 @@ a:hover {
   color: var(--av-danger);
 }
 
+.link-with-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Tool icon tiles — Lucide glyphs on colored tiles, the app's icon language. */
 .tool-tile {
   width: 32px;
@@ -1595,12 +1601,30 @@ a:hover {
     width: 100%;
   }
 
-  .demo-tool-row,
-  .demo-gap-row {
+  .demo-tool-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'tile copy'
+      'pills pills';
+    row-gap: 8px;
+  }
+
+  .demo-tool-row .tool-tile {
+    grid-area: tile;
+  }
+
+  .demo-tool-row .demo-tool-copy {
+    grid-area: copy;
+  }
+
+  .demo-tool-row .demo-tool-pills {
+    grid-area: pills;
+    justify-content: flex-start;
     flex-wrap: wrap;
   }
 
-  .demo-tool-pills {
+  .demo-gap-row {
     flex-wrap: wrap;
   }
 

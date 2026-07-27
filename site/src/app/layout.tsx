@@ -35,6 +35,9 @@ export const metadata: Metadata = {
     siteName: 'Shelf',
     type: 'website',
   },
+  twitter: {
+    card: 'summary_large_image',
+  },
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
   },

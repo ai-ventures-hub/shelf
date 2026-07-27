@@ -1,3 +1,4 @@
+import { GitHubMark } from '@/components/GitHubMark'
 import { WaitlistForm } from '@/components/WaitlistForm'
 import { RECEIPT_FACTS, RECEIPT_FILES } from '@/lib/landing-content'
 
@@ -37,7 +38,12 @@ export function FinalCta() {
           <WaitlistForm inputId="waitlist-email-final" className="waitlist-form" />
           <p className="final-links">
             <a href="#demo">Take the interactive tour →</a>
-            <a href="https://github.com/ai-ventures-hub/shelf" rel="noopener noreferrer">
+            <a
+              className="link-with-mark"
+              href="https://github.com/ai-ventures-hub/shelf"
+              rel="noopener noreferrer"
+            >
+              <GitHubMark size={14} />
               View the source
             </a>
           </p>
