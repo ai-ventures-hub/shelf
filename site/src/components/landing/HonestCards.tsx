@@ -1,4 +1,5 @@
 import { HONEST_CARDS } from '@/lib/landing-content'
+import { ToolTile } from './ToolTile'
 
 /** Beat 04 — three tool cards that tell the truth twice. */
 export function HonestCards() {
@@ -16,9 +17,12 @@ export function HonestCards() {
         </div>
         <ul className="honest-grid">
           {HONEST_CARDS.map((card) => (
-            <li key={card.name} className="honest-card" data-edge={card.edge}>
+            <li key={card.id} className="honest-card" data-edge={card.edge}>
               <div className="honest-card-top">
-                <strong>{card.name}</strong>
+                <span className="honest-card-id">
+                  <ToolTile toolId={card.id} size={19} />
+                  <strong>{card.name}</strong>
+                </span>
                 <span className="pill" data-tone={card.statusTone}>
                   {card.status}
                 </span>

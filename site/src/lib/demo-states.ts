@@ -28,14 +28,12 @@ export type DemoGap = {
   reason: string
 }
 
-/** Interactive / auto-tour beats visitors can jump to via chips. */
+/** Beats the demo loop cycles through. */
 export type DemoBeatId = 'import' | 'launch' | 'capability' | 'gap' | 'ready'
 
 export type DemoBeat = {
   id: DemoBeatId
-  /** Chip label (visitor-facing prompt). */
-  chip: string
-  /** The YOU message. */
+  /** The YOU message — typed out live in the demo loop. */
   user: string
   /** The AGENT reply. */
   agent: string
@@ -104,7 +102,6 @@ export const DEMO_BEAT_ORDER: DemoBeatId[] = [
 export const DEMO_BEATS: Record<DemoBeatId, DemoBeat> = {
   import: {
     id: 'import',
-    chip: 'Add the tool I just built',
     user: 'I finished the image-preparation tool. Add it to Shelf.',
     agent:
       'Found npm run dev on port 4173, tagged it Image · Utility, declared batch-optimize images, and shelved it.',
@@ -114,7 +111,6 @@ export const DEMO_BEATS: Record<DemoBeatId, DemoBeat> = {
   },
   launch: {
     id: 'launch',
-    chip: 'Launch Image Prepper',
     user: 'Launch Image Prepper.',
     agent: 'Launched — Running on :4173. That is process status, not agent readiness.',
     tools: library('Running'),
@@ -123,7 +119,6 @@ export const DEMO_BEATS: Record<DemoBeatId, DemoBeat> = {
   },
   capability: {
     id: 'capability',
-    chip: 'What can optimize images?',
     user: 'What can batch-optimize images?',
     agent:
       'Matched Image Prepper — declares batch-optimize images, readiness ready (CLI). Explainable match, no proxying.',
@@ -133,7 +128,6 @@ export const DEMO_BEATS: Record<DemoBeatId, DemoBeat> = {
   },
   gap: {
     id: 'gap',
-    chip: 'Can anything fill PDF forms?',
     user: 'Can anything fill PDF forms?',
     agent:
       'Nothing declares that capability. Recorded one deduped row in Capability Gaps so it becomes a plan.',
@@ -143,7 +137,6 @@ export const DEMO_BEATS: Record<DemoBeatId, DemoBeat> = {
   },
   ready: {
     id: 'ready',
-    chip: 'Which tools are agent-ready?',
     user: 'Which tools are ready for agents?',
     agent:
       'Image Prepper is agent-ready. WordPress Manager needs setup. Document Converter is manual-only.',

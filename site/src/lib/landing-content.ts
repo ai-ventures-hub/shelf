@@ -93,6 +93,7 @@ export const IMPORT_FIELDS = [
 /** Beat 04 — honest cards: process status and agent access, separately. */
 export const HONEST_CARDS = [
   {
+    id: 'image-prepper',
     name: 'Image Prepper',
     status: 'Running',
     statusTone: 'success',
@@ -104,6 +105,7 @@ export const HONEST_CARDS = [
     action: 'Open · Logs · Stop',
   },
   {
+    id: 'wp-manager',
     name: 'Local WordPress Manager',
     status: 'Ready',
     statusTone: 'neutral',
@@ -115,6 +117,7 @@ export const HONEST_CARDS = [
     action: 'Start · Configure',
   },
   {
+    id: 'doc-converter',
     name: 'Document Converter',
     status: 'Stopped',
     statusTone: 'neutral',
@@ -126,6 +129,7 @@ export const HONEST_CARDS = [
     action: 'Run once',
   },
 ] as const satisfies readonly {
+  id: string
   name: string
   status: string
   statusTone: PillTone

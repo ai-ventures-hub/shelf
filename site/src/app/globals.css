@@ -211,7 +211,12 @@ html {
 
 body {
   min-height: 100%;
-  background: var(--av-bg-canvas);
+  /* Wash anchored in viewport units so it spans the full page width,
+     not the hero's content box (percentages would scale with body height). */
+  background:
+    radial-gradient(circle at 15vw -8rem, rgb(73 98 193 / 18%), transparent 30rem),
+    var(--av-bg-canvas);
+  background-repeat: no-repeat;
   color: var(--av-text-primary);
   font-family: var(--av-font-ui);
   font-size: var(--av-text-body);
@@ -233,17 +238,6 @@ a:hover {
 :focus-visible {
   outline: 2px solid var(--av-focus-ring);
   outline-offset: var(--av-focus-offset);
-}
-
-@keyframes demo-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* ==========================================================================
@@ -354,6 +348,29 @@ a:hover {
   background: var(--av-danger-surface);
   border-color: var(--av-danger-border);
   color: var(--av-danger);
+}
+
+/* Tool icon tiles — Lucide glyphs on colored tiles, the app's icon language. */
+.tool-tile {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.tool-tile[data-hue='green'] {
+  background: var(--av-green-600);
+}
+
+.tool-tile[data-hue='indigo'] {
+  background: var(--av-indigo-500);
+}
+
+.tool-tile[data-hue='slate'] {
+  background: var(--av-slate-700);
 }
 
 /* Decorative controls inside product mock-ups — spans, never buttons. */
@@ -539,6 +556,9 @@ a:hover {
 }
 
 .header-nav .header-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 9px 16px;
   border: 1px solid var(--av-border-default);
   border-radius: var(--av-radius-md);
@@ -556,7 +576,6 @@ a:hover {
   gap: 56px;
   align-items: center;
   padding: 72px var(--page-pad-x) 64px;
-  background: var(--av-bg-canvas-wash), var(--av-bg-canvas);
   max-width: calc(var(--av-content-max) + 2 * 72px);
   margin: 0 auto;
 }
@@ -611,37 +630,6 @@ a:hover {
   min-width: 0;
 }
 
-.demo-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--av-space-2);
-}
-
-.demo-chip {
-  padding: 7px 12px;
-  border-radius: var(--av-radius-full);
-  border: 1px solid var(--av-border-default);
-  background: transparent;
-  color: var(--av-text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: var(--av-weight-medium);
-  cursor: pointer;
-  transition: border-color var(--av-dur-fast) var(--av-ease-out),
-    color var(--av-dur-fast) var(--av-ease-out);
-}
-
-.demo-chip:hover {
-  border-color: var(--av-accent-border);
-  color: var(--av-text-primary);
-}
-
-.demo-chip[data-active='true'] {
-  background: var(--av-accent-quiet);
-  border-color: var(--av-accent-border);
-  color: var(--av-accent-text);
-}
-
 .demo-panel {
   border: 1px solid var(--av-border-default);
   border-radius: var(--av-radius-lg);
@@ -673,11 +661,22 @@ a:hover {
   color: var(--av-text-tertiary);
 }
 
+/* All beats render stacked in one grid cell; the tallest sizes the panel,
+   so switching beats never changes the page height. */
 .demo-msgs {
+  display: grid;
+  padding: 14px 18px;
+}
+
+.demo-msg-pair {
+  grid-area: 1 / 1;
   display: flex;
   flex-direction: column;
   gap: var(--av-space-2);
-  padding: 14px 18px;
+}
+
+.demo-msg-pair[data-active='false'] {
+  visibility: hidden;
 }
 
 .demo-msg {
@@ -685,12 +684,32 @@ a:hover {
   padding: 10px 12px;
   background: var(--av-bg-well);
   border: 1px solid var(--av-border-subtle);
-  animation: demo-fade-up var(--av-dur-slow) var(--av-ease-out) both;
 }
 
 .demo-msg[data-role='agent'] {
   background: var(--av-accent-quiet);
   border-color: var(--av-accent-border);
+  transition: opacity var(--av-dur-slow) var(--av-ease-out);
+}
+
+.demo-msg[data-role='agent'][data-shown='false'] {
+  opacity: 0;
+}
+
+.demo-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--av-accent);
+  animation: demo-caret-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes demo-caret-blink {
+  to {
+    visibility: hidden;
+  }
 }
 
 .demo-msg-label {
@@ -710,14 +729,22 @@ a:hover {
   text-wrap: pretty;
 }
 
-.demo-note {
-  padding: 8px 18px;
+.demo-note-stack {
+  display: grid;
   border-bottom: 1px solid var(--av-border-subtle);
   background: var(--av-accent-quiet);
+}
+
+.demo-note {
+  grid-area: 1 / 1;
+  padding: 8px 18px;
   font-size: 12px;
   font-weight: var(--av-weight-medium);
   color: var(--av-accent-text);
-  animation: demo-fade-up var(--av-dur-base) var(--av-ease-out) both;
+}
+
+.demo-note[data-active='false'] {
+  visibility: hidden;
 }
 
 .demo-tool-list {
@@ -738,19 +765,26 @@ a:hover {
   border: 1px solid var(--av-border-subtle);
   border-radius: var(--av-radius-md);
   background: var(--av-bg-canvas);
-  animation: demo-fade-up var(--av-dur-slow) var(--av-ease-out) both;
 }
 
 .demo-tool-row[data-featured='true'] {
   border-color: var(--av-accent-border);
 }
 
+/* Always mounted so the panel height never changes; fades in when a beat
+   records the gap. */
 .demo-gap-row {
   border-color: var(--av-warning-border);
   background: var(--av-warning-surface);
+  transition: opacity var(--av-dur-slow) var(--av-ease-out);
+}
+
+.demo-gap-row[data-shown='false'] {
+  opacity: 0;
 }
 
 .demo-tool-copy {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -783,37 +817,12 @@ a:hover {
   flex: none;
 }
 
-.demo-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--av-space-3);
-  flex-wrap: wrap;
-}
-
 .demo-caption {
   font-size: 11px;
   font-weight: var(--av-weight-medium);
   letter-spacing: var(--av-tracking-micro);
   text-transform: uppercase;
   color: var(--av-text-tertiary);
-}
-
-.demo-tour-btn {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--av-border-default);
-  border-radius: var(--av-radius-sm);
-  background: transparent;
-  color: var(--av-accent-text);
-  font: inherit;
-  font-size: 12px;
-  font-weight: var(--av-weight-semibold);
-  cursor: pointer;
-}
-
-.demo-tour-btn:hover {
-  border-color: var(--av-accent-border);
 }
 
 /* —— 02 · Graveyard ledger —— */
@@ -971,9 +980,17 @@ a:hover {
 }
 
 .import-sheet-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--av-font-mono);
   font-size: 12.5px;
   color: var(--av-text-secondary);
+}
+
+.import-sheet-path svg {
+  color: var(--av-text-tertiary);
+  flex: none;
 }
 
 .import-fields {
@@ -1055,6 +1072,19 @@ a:hover {
   justify-content: space-between;
   align-items: center;
   gap: var(--av-space-3);
+}
+
+.honest-card-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.honest-card .tool-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
 }
 
 .honest-card-top strong {

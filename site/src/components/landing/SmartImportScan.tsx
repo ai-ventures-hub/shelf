@@ -1,3 +1,4 @@
+import { FolderOpen } from 'lucide-react'
 import { IMPORT_FIELDS, IMPORT_STEPS } from '@/lib/landing-content'
 
 /** Beat 03 — smart import: three steps beside the suggestion sheet. */
@@ -33,7 +34,10 @@ export function SmartImportScan() {
         </div>
         <div className="import-sheet">
           <div className="import-sheet-head">
-            <span className="import-sheet-path">~/Projects/image-prepper</span>
+            <span className="import-sheet-path">
+              <FolderOpen size={14} aria-hidden />
+              ~/Projects/image-prepper
+            </span>
             <span className="pill" data-tone="accent">
               Scanned
             </span>
