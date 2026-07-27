@@ -16,6 +16,7 @@ export function SiteHeader() {
           <a href="#demo">Demo</a>
           <a href="#capabilities">Capabilities</a>
           <a href="#agents">Agents</a>
+          <a href="#app">App</a>
           <a
             className="header-github"
             href="https://github.com/ai-ventures-hub/shelf"

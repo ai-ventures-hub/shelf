@@ -1526,6 +1526,78 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   text-align: center;
 }
 
+/* —— 06.5 · App showcase —— */
+.app-showcase {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--av-space-5);
+}
+
+.app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--av-space-2);
+}
+
+.app-tab {
+  padding: 8px 16px;
+  border-radius: var(--av-radius-full);
+  border: 1px solid var(--av-border-default);
+  background: transparent;
+  color: var(--av-text-secondary);
+  font: inherit;
+  font-size: var(--av-text-xs);
+  font-weight: var(--av-weight-medium);
+  cursor: pointer;
+  transition:
+    border-color var(--av-dur-fast) var(--av-ease-out),
+    color var(--av-dur-fast) var(--av-ease-out),
+    background-color var(--av-dur-fast) var(--av-ease-out);
+}
+
+.app-tab:hover {
+  border-color: var(--av-accent-border);
+  color: var(--av-text-primary);
+}
+
+.app-tab[data-active='true'] {
+  background: var(--av-accent-quiet);
+  border-color: var(--av-accent-border);
+  color: var(--av-accent-text);
+}
+
+/* All four screens stack in one cell (identical dimensions) — switching
+   crossfades with zero layout shift. */
+.app-frame {
+  display: grid;
+  max-width: 1080px;
+  width: 100%;
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--av-shadow-3);
+}
+
+.app-frame img {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: opacity var(--av-dur-slow) var(--av-ease-out);
+}
+
+.app-frame img[data-active='false'] {
+  opacity: 0;
+}
+
+.app-caption {
+  font-size: var(--av-text-sm);
+  color: var(--av-text-secondary);
+  text-align: center;
+}
+
 /* —— 07 · Final CTA receipt —— */
 .section--final {
   background: var(--av-bg-canvas-wash), var(--av-bg-canvas);
@@ -1697,7 +1769,8 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   }
 
   .header-nav a[href='#capabilities'],
-  .header-nav a[href='#agents'] {
+  .header-nav a[href='#agents'],
+  .header-nav a[href='#app'] {
     display: none;
   }
 

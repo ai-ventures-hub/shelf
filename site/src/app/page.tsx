@@ -1,3 +1,4 @@
+import { AppShowcase } from '@/components/landing/AppShowcase'
 import { CapabilityAskAnswer } from '@/components/landing/CapabilityAskAnswer'
 import { FinalCta } from '@/components/landing/FinalCta'
 import { GraveyardLedger } from '@/components/landing/GraveyardLedger'
@@ -21,6 +22,7 @@ export default function HomePage() {
         <HonestCards />
         <CapabilityAskAnswer />
         <SharedLibraryHub />
+        <AppShowcase />
         <FinalCta />
       </main>
       <SiteFooter />
