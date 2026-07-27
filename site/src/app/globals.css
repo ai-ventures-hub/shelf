@@ -410,93 +410,26 @@ a:hover {
   font-weight: var(--av-weight-semibold);
 }
 
-/* Waitlist form (component markup untouched; styled via context) */
-.waitlist-form .waitlist-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.waitlist-row {
-  display: flex;
-  gap: var(--av-space-3);
-  flex-wrap: wrap;
-}
-
-.waitlist-input {
-  flex: 1 1 13rem;
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: var(--av-control-h);
-  padding: 0 14px;
-  border: 1px solid var(--av-border-default);
-  border-radius: var(--av-radius-md);
-  background: var(--av-bg-well);
-  color: var(--av-text-primary);
-  font: inherit;
-  font-size: var(--av-text-sm);
-}
-
-.waitlist-input::placeholder {
-  color: var(--av-text-tertiary);
-}
-
-.waitlist-submit {
-  height: var(--av-control-h);
-  padding: 0 20px;
+  padding: 0 22px;
   border: 0;
   border-radius: var(--av-radius-md);
   background: var(--av-accent);
   color: var(--av-text-on-accent);
-  font: inherit;
   font-size: var(--av-text-sm);
   font-weight: var(--av-weight-semibold);
-  cursor: pointer;
   white-space: nowrap;
-}
-
-.waitlist-submit {
   transition: background-color var(--av-dur-fast) var(--av-ease-out);
 }
 
-.waitlist-submit:hover:not(:disabled) {
+.btn-primary:hover {
   background: var(--av-accent-hover);
-}
-
-.waitlist-submit:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-
-.waitlist-hint {
-  margin-top: var(--av-space-3);
-  font-size: var(--av-text-xs);
-  color: var(--av-text-tertiary);
-}
-
-/* The hero microline replaces the hint there. */
-.hero .waitlist-hint {
-  display: none;
-}
-
-.waitlist-status {
-  margin-top: var(--av-space-3);
-  font-size: var(--av-text-sm);
-  line-height: 1.4;
-  animation: rise-in var(--av-dur-base) var(--av-ease-out) both;
-}
-
-.waitlist-status[data-tone='success'] {
-  color: var(--av-success);
-}
-
-.waitlist-status[data-tone='warning'] {
-  color: var(--av-warning);
-}
-
-.waitlist-status[data-tone='danger'] {
-  color: var(--av-danger);
+  color: var(--av-text-on-accent);
+  text-decoration: none;
 }
 
 /* ==========================================================================
@@ -604,6 +537,29 @@ a:hover {
   background: var(--av-bg-hover);
 }
 
+.header-nav .header-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 16px;
+  border-radius: var(--av-radius-md);
+  background: var(--av-accent);
+  color: var(--av-text-on-accent);
+  font-weight: var(--av-weight-semibold);
+  transition: background-color var(--av-dur-fast) var(--av-ease-out);
+}
+
+.header-nav .header-download:hover {
+  background: var(--av-accent-hover);
+  color: var(--av-text-on-accent);
+  text-decoration: none;
+}
+
+.header-download-free {
+  font-weight: var(--av-weight-regular);
+  opacity: 0.75;
+}
+
 /* —— 01 · Hero command deck —— */
 .hero {
   display: grid;
@@ -659,10 +615,6 @@ a:hover {
   gap: var(--av-space-3);
   flex-wrap: wrap;
   width: 100%;
-}
-
-.hero-cta .waitlist-form {
-  flex: 0 1 400px;
 }
 
 .hero-fine {
@@ -1598,6 +1550,156 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   text-align: center;
 }
 
+/* —— Download page —— */
+.download-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--av-space-16) var(--page-pad-x) var(--av-space-12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--av-space-10);
+}
+
+.download-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--av-space-4);
+  text-align: center;
+}
+
+.download-head h1 {
+  font-family: var(--av-font-display);
+  font-size: clamp(2rem, 4.4vw, 3.2rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--av-text-primary);
+}
+
+.download-head p {
+  color: var(--av-text-secondary);
+}
+
+.download-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--av-space-5);
+  width: 100%;
+}
+
+.download-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--av-space-2);
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-lg);
+  background: var(--av-bg-panel);
+  padding: 22px 24px 0;
+  overflow: hidden;
+}
+
+.download-step-n {
+  font-size: var(--av-text-eyebrow);
+  font-weight: var(--av-weight-bold);
+  letter-spacing: var(--av-tracking-caps);
+  text-transform: uppercase;
+  color: var(--av-accent-text);
+}
+
+.download-step h2 {
+  font-family: var(--av-font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--av-text-primary);
+}
+
+.download-step-body {
+  color: var(--av-text-secondary);
+  font-size: var(--av-text-sm);
+  line-height: 1.55;
+}
+
+.download-visual {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--av-space-4);
+  min-height: 96px;
+  margin-left: -24px;
+  margin-right: -24px;
+  padding: 18px 24px;
+  background: var(--av-bg-well);
+  border-top: 1px solid var(--av-border-subtle);
+  color: var(--av-text-secondary);
+}
+
+.brand-tile--sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.download-dmg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-md);
+  background: var(--av-bg-panel);
+  font-family: var(--av-font-mono);
+  font-size: 12.5px;
+  color: var(--av-text-primary);
+}
+
+.download-folder {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--av-text-xs);
+  color: var(--av-text-secondary);
+}
+
+.download-folder svg {
+  color: var(--av-accent);
+}
+
+.download-spotlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  padding: 10px 16px;
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-md);
+  background: var(--av-bg-panel);
+  color: var(--av-text-primary);
+  font-size: var(--av-text-sm);
+}
+
+.download-spotlight svg {
+  color: var(--av-text-tertiary);
+}
+
+.download-fine {
+  font-size: var(--av-text-xs);
+  color: var(--av-text-tertiary);
+  text-align: center;
+  max-width: 52ch;
+}
+
+.download-alt {
+  font-size: var(--av-text-sm);
+  color: var(--av-text-secondary);
+  text-align: center;
+}
+
 /* —— 07 · Final CTA receipt —— */
 .section--final {
   background: var(--av-bg-canvas-wash), var(--av-bg-canvas);
@@ -1670,9 +1772,16 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   text-wrap: balance;
 }
 
-.final-copy .waitlist-form {
-  width: 100%;
-  max-width: 440px;
+.final-cta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--av-space-4);
+  flex-wrap: wrap;
+}
+
+.final-cta-note {
+  font-size: var(--av-text-xs);
+  color: var(--av-text-tertiary);
 }
 
 .final-links {
@@ -1731,7 +1840,8 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     order: 1;
   }
 
-  .honest-grid {
+  .honest-grid,
+  .download-steps {
     grid-template-columns: 1fr;
   }
 
@@ -1768,25 +1878,19 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     gap: var(--av-space-4);
   }
 
-  .header-nav a[href='#capabilities'],
-  .header-nav a[href='#agents'],
-  .header-nav a[href='#app'] {
+  .header-nav a[href='/#capabilities'],
+  .header-nav a[href='/#agents'],
+  .header-nav a[href='/#app'],
+  .header-nav .header-github {
     display: none;
   }
 
-  .waitlist-row {
-    flex-direction: column;
+  .header-download-free {
+    display: none;
   }
 
-  .waitlist-input,
-  .waitlist-submit {
+  .btn-primary {
     width: 100%;
-  }
-
-  .hero-cta .waitlist-form,
-  .final-copy .waitlist-form {
-    flex-basis: 100%;
-    max-width: none;
   }
 
   .btn-ghost {

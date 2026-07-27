@@ -1,8 +1,8 @@
+import Link from 'next/link'
 import { GitHubMark } from '@/components/GitHubMark'
-import { WaitlistForm } from '@/components/WaitlistForm'
 import { RECEIPT_FACTS, RECEIPT_FILES } from '@/lib/landing-content'
 
-/** Beat 07 — local-first facts as a manifest, the waitlist CTA beside it. */
+/** Beat 07 — local-first facts as a manifest, the download CTA beside it. */
 export function FinalCta() {
   return (
     <section id="access" className="section section--final" aria-labelledby="access-heading">
@@ -32,10 +32,15 @@ export function FinalCta() {
             Stop losing the tools you build.
           </h2>
           <p className="section-lead">
-            macOS Community is invite-only while we finish the public soft launch.
-            Request access, take the tour, or read the source.
+            macOS Community is free — grab the DMG, drag it in, and shelve your
+            first tool in a minute.
           </p>
-          <WaitlistForm inputId="waitlist-email-final" className="waitlist-form" />
+          <div className="final-cta-row">
+            <Link className="btn-primary" href="/download">
+              Download — It’s free
+            </Link>
+            <span className="final-cta-note">Apple Silicon · no account required</span>
+          </div>
           <p className="final-links">
             <a href="#demo">Take the interactive tour →</a>
             <a

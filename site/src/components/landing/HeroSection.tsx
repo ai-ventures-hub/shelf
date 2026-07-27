@@ -1,4 +1,4 @@
-import { WaitlistForm } from '@/components/WaitlistForm'
+import Link from 'next/link'
 import { HeroDemo } from './HeroDemo'
 
 /** Beat 01 — command deck: editorial left, live agent↔Shelf demo right. */
@@ -20,13 +20,15 @@ export function HeroSection() {
           capability catalog your agents can query honestly. No cloud. No account.
         </p>
         <div className="hero-cta">
-          <WaitlistForm inputId="waitlist-email-hero" className="waitlist-form" />
+          <Link className="btn-primary" href="/download">
+            Download — It’s free
+          </Link>
           <a className="btn-ghost" href="#demo">
             See how it works
           </a>
         </div>
         <p className="hero-fine">
-          Invite-only soft launch · MIT-licensed · your data stays on your Mac
+          Free · macOS (Apple Silicon) · MIT-licensed · your data stays on your Mac
         </p>
       </div>
       <HeroDemo />
