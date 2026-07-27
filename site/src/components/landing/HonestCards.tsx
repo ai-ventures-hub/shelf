@@ -6,7 +6,7 @@ export function HonestCards() {
   return (
     <section id="launch" className="section" aria-labelledby="launch-heading">
       <div className="section-inner">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <p className="eyebrow">Launch without the ritual</p>
           <h2 id="launch-heading">Every tool tells the truth twice.</h2>
           <p className="section-lead">
@@ -16,8 +16,14 @@ export function HonestCards() {
           </p>
         </div>
         <ul className="honest-grid">
-          {HONEST_CARDS.map((card) => (
-            <li key={card.id} className="honest-card" data-edge={card.edge}>
+          {HONEST_CARDS.map((card, i) => (
+            <li
+              key={card.id}
+              className="honest-card"
+              data-edge={card.edge}
+              data-reveal
+              style={{ '--reveal-order': i + 1 } as React.CSSProperties}
+            >
               <div className="honest-card-top">
                 <span className="honest-card-id">
                   <ToolTile toolId={card.id} size={19} />

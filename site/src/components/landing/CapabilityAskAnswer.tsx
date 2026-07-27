@@ -3,7 +3,7 @@ export function CapabilityAskAnswer() {
   return (
     <section id="capabilities" className="section" aria-labelledby="capabilities-heading">
       <div className="section-inner">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <p className="eyebrow">Capability Intelligence</p>
           <h2 id="capabilities-heading">Agents ask. Shelf answers — or records the gap.</h2>
           <p className="section-lead">
@@ -13,7 +13,7 @@ export function CapabilityAskAnswer() {
           </p>
         </div>
         <div className="cap-grid">
-          <div className="cap-col">
+          <div className="cap-col" data-reveal style={{ '--reveal-order': 1 } as React.CSSProperties}>
             <p className="cap-ask">What can batch-optimize images?</p>
             <div className="cap-receipt" data-kind="match">
               <div className="cap-receipt-head">
@@ -38,7 +38,7 @@ export function CapabilityAskAnswer() {
               </dl>
             </div>
           </div>
-          <div className="cap-col">
+          <div className="cap-col" data-reveal style={{ '--reveal-order': 2 } as React.CSSProperties}>
             <p className="cap-ask">Can anything fill PDF forms?</p>
             <div className="cap-receipt" data-kind="gap">
               <div className="cap-receipt-head">

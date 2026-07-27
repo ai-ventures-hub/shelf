@@ -6,7 +6,7 @@ export function SmartImportScan() {
   return (
     <section id="import" className="section" aria-labelledby="import-heading">
       <div className="section-inner import-grid">
-        <div className="import-copy">
+        <div className="import-copy" data-reveal>
           <div className="section-head">
             <p className="eyebrow">From folder to Shelf</p>
             <h2 id="import-heading">Point at the folder. Shelf remembers the ritual.</h2>
@@ -32,7 +32,11 @@ export function SmartImportScan() {
             ))}
           </ol>
         </div>
-        <div className="import-sheet">
+        <div
+          className="import-sheet"
+          data-reveal
+          style={{ '--reveal-order': 1 } as React.CSSProperties}
+        >
           <div className="import-sheet-head">
             <span className="import-sheet-path">
               <FolderOpen size={14} aria-hidden />

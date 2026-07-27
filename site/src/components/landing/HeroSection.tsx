@@ -8,8 +8,12 @@ export function HeroSection() {
       <div className="hero-copy">
         <p className="eyebrow">Local tool library · macOS</p>
         <h1 id="hero-heading" className="hero-title">
-          You build the tools.
-          <br className="hero-break" /> Shelf keeps them.
+          You <span className="hw-build">build</span> the{' '}
+          <span className="hw-tools">tools</span>.
+          <br />
+          <span className="hw-shelf">Shelf</span>
+          <br />
+          keeps them.
         </h1>
         <p className="hero-support">
           One local library for every script, server, and one-off you ship — and a

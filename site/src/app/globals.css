@@ -122,7 +122,11 @@
   --av-dur-fast: 140ms;
   --av-dur-base: 200ms;
   --av-dur-slow: 320ms;
+  --av-dur-reveal: 600ms; /* entrances + scroll reveals */
   --av-ease-out: cubic-bezier(0.2, 0.8, 0.25, 1);
+  --av-ease-arrive: cubic-bezier(0.22, 1, 0.36, 1); /* long-tail decel for reveals */
+  --av-rise: 16px; /* entrance travel */
+  --av-lift: 4px; /* hover lift */
 
   --av-z-sticky: 10;
 
@@ -307,6 +311,12 @@ a:hover {
   white-space: nowrap;
 }
 
+.btn-ghost {
+  transition:
+    background-color var(--av-dur-fast) var(--av-ease-out),
+    border-color var(--av-dur-fast) var(--av-ease-out);
+}
+
 .btn-ghost:hover {
   background: var(--av-bg-hover);
   color: var(--av-text-primary);
@@ -446,6 +456,10 @@ a:hover {
   white-space: nowrap;
 }
 
+.waitlist-submit {
+  transition: background-color var(--av-dur-fast) var(--av-ease-out);
+}
+
 .waitlist-submit:hover:not(:disabled) {
   background: var(--av-accent-hover);
 }
@@ -470,6 +484,7 @@ a:hover {
   margin-top: var(--av-space-3);
   font-size: var(--av-text-sm);
   line-height: 1.4;
+  animation: rise-in var(--av-dur-base) var(--av-ease-out) both;
 }
 
 .waitlist-status[data-tone='success'] {
@@ -490,17 +505,24 @@ a:hover {
 
 /* —— Header —— */
 .site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--av-space-4);
-  padding: 18px var(--page-pad-x);
   border-bottom: 1px solid var(--av-border-subtle);
   position: sticky;
   top: 0;
   z-index: var(--av-z-sticky);
   background: rgb(9 13 22 / 88%);
   backdrop-filter: blur(10px);
+}
+
+/* Mirrors .hero's box (same max-width incl. padding) so the brand and nav
+   sit flush with the hero content edges. */
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--av-space-4);
+  max-width: calc(var(--av-content-max) + 2 * 72px);
+  margin: 0 auto;
+  padding: 18px var(--page-pad-x);
 }
 
 .header-brand {
@@ -554,6 +576,7 @@ a:hover {
 
 .header-nav a {
   color: var(--av-text-secondary);
+  transition: color var(--av-dur-fast) var(--av-ease-out);
 }
 
 .header-nav a:hover {
@@ -569,6 +592,12 @@ a:hover {
   border: 1px solid var(--av-border-default);
   border-radius: var(--av-radius-md);
   color: var(--av-text-primary);
+}
+
+.header-nav .header-github {
+  transition:
+    background-color var(--av-dur-fast) var(--av-ease-out),
+    border-color var(--av-dur-fast) var(--av-ease-out);
 }
 
 .header-nav .header-github:hover {
@@ -601,6 +630,19 @@ a:hover {
   letter-spacing: var(--av-tracking-display);
   color: var(--av-text-primary);
   text-wrap: balance;
+}
+
+.hero-title .hw-build {
+  color: var(--av-success);
+}
+
+.hero-title .hw-tools {
+  color: var(--av-warning);
+}
+
+.hero-title .hw-shelf {
+  color: var(--av-accent);
+  text-transform: uppercase;
 }
 
 .hero-support {
@@ -715,6 +757,71 @@ a:hover {
 @keyframes demo-caret-blink {
   to {
     visibility: hidden;
+  }
+}
+
+/* ==========================================================================
+   Motion — entrance choreography + scroll reveals (see MOTION.md rules:
+   transform/opacity only, tokens only, once-only reveals, reduced-motion
+   must never leave content hidden).
+   ========================================================================== */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--av-rise));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hero load choreography — the signature moment. CSS-only: runs without JS,
+   `both` fill means content always lands visible. Total ≤ ~640ms. */
+.hero-copy > * {
+  animation: rise-in var(--av-dur-reveal) var(--av-ease-arrive) both;
+}
+
+.hero-copy > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.hero-copy > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.hero-copy > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+.hero-copy > *:nth-child(5) {
+  animation-delay: 220ms;
+}
+
+.hero-demo {
+  animation: rise-in var(--av-dur-reveal) var(--av-ease-arrive) both;
+  animation-delay: 240ms;
+}
+
+/* Scroll reveals — hidden state only exists once the observer has mounted
+   (html[data-reveal-ready]), so content is never stuck invisible if JS
+   fails. Fire once; stagger via --reveal-order. */
+html[data-reveal-ready] [data-reveal] {
+  transition:
+    opacity var(--av-dur-reveal) var(--av-ease-arrive),
+    transform var(--av-dur-reveal) var(--av-ease-arrive);
+  transition-delay: calc(var(--reveal-order, 0) * 70ms);
+}
+
+html[data-reveal-ready] [data-reveal]:not(.is-visible) {
+  opacity: 0;
+  transform: translateY(var(--av-rise));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 
@@ -860,6 +967,14 @@ a:hover {
 
 .ledger-rows {
   list-style: none;
+}
+
+.ledger-row {
+  transition: background-color var(--av-dur-fast) var(--av-ease-out);
+}
+
+.ledger-row:hover {
+  background: var(--av-bg-hover);
 }
 
 .ledger-row[data-shelved='true'] {
@@ -1067,6 +1182,14 @@ a:hover {
   border-radius: var(--av-radius-lg);
   background: var(--av-bg-panel);
   padding: 20px 22px;
+  transition:
+    transform var(--av-dur-fast) var(--av-ease-out),
+    box-shadow var(--av-dur-fast) var(--av-ease-out);
+}
+
+.honest-card:hover {
+  transform: translateY(calc(-1 * var(--av-lift)));
+  box-shadow: var(--av-shadow-2);
 }
 
 .honest-card[data-edge='success'] {
@@ -1575,10 +1698,6 @@ a:hover {
 
   .header-nav a[href='#capabilities'],
   .header-nav a[href='#agents'] {
-    display: none;
-  }
-
-  .hero-break {
     display: none;
   }
 

@@ -7,7 +7,7 @@ export function FinalCta() {
   return (
     <section id="access" className="section section--final" aria-labelledby="access-heading">
       <div className="section-inner final-grid">
-        <div className="receipt">
+        <div className="receipt" data-reveal style={{ '--reveal-order': 1 } as React.CSSProperties}>
           <p className="receipt-title">Everything Shelf knows lives here</p>
           <p className="receipt-path">~/Library/Application Support/Shelf/</p>
           <ul className="receipt-list receipt-list--files">
@@ -26,7 +26,7 @@ export function FinalCta() {
             ))}
           </ul>
         </div>
-        <div className="final-copy">
+        <div className="final-copy" data-reveal>
           <p className="eyebrow">Soft launch</p>
           <h2 id="access-heading" className="final-title">
             Stop losing the tools you build.

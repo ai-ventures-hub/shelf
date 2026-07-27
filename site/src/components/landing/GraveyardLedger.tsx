@@ -5,7 +5,7 @@ export function GraveyardLedger() {
   return (
     <section id="graveyard" className="section" aria-labelledby="graveyard-heading">
       <div className="section-inner">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <p className="eyebrow">The tool graveyard</p>
           <h2 id="graveyard-heading">Where did your tools go?</h2>
           <p className="section-lead">
@@ -13,7 +13,7 @@ export function GraveyardLedger() {
             answer is a column of gray.
           </p>
         </div>
-        <div className="ledger">
+        <div className="ledger" data-reveal style={{ '--reveal-order': 1 } as React.CSSProperties}>
           <div className="ledger-head" aria-hidden>
             <span>Tool</span>
             <span>Last seen</span>

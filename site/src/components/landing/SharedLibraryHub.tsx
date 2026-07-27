@@ -5,7 +5,7 @@ export function SharedLibraryHub() {
   return (
     <section id="agents" className="section" aria-labelledby="agents-heading">
       <div className="section-inner">
-        <div className="section-head section-head--center">
+        <div className="section-head section-head--center" data-reveal>
           <p className="eyebrow">One library, shared over MCP</p>
           <h2 id="agents-heading">One library. Every agent. No second registry.</h2>
           <p className="section-lead">
@@ -15,7 +15,7 @@ export function SharedLibraryHub() {
             servers.
           </p>
         </div>
-        <div className="hub">
+        <div className="hub" data-reveal style={{ '--reveal-order': 1 } as React.CSSProperties}>
           <div className="hub-node">
             <span className="hub-node-label">You</span>
             <strong>Shelf for macOS</strong>
