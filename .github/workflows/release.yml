@@ -1,0 +1,51 @@
+name: Release
+
+# Tag push (v*) → build, package, sign + notarize (when credentials exist),
+# publish DMG + zip to the GitHub Release. Without signing secrets,
+# electron-builder skips signing/notarization with a warning and publishes
+# unsigned artifacts — the workflow still succeeds end to end.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      HAS_SIGNING_CERT: ${{ secrets.MAC_CSC_LINK != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Assert tag matches package.json version
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json $pkg" >&2
+            exit 1
+          fi
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Package, sign, notarize, publish
+        run: npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Gatekeeper verification (signed builds only)
+        if: env.HAS_SIGNING_CERT == 'true'
+        run: |
+          app="release/mac-arm64/Shelf.app"
+          codesign --verify --deep --strict "$app"
+          spctl -a -t exec -vv "$app"
+          xcrun stapler validate "$app"

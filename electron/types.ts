@@ -9,6 +9,8 @@ export type {
   LogLine,
   LibraryFile,
   UiPrefs,
+  OnboardingSubmission,
+  OnboardingSubmissionInput,
   AppearanceMode,
   ViewMode,
   SortMode,

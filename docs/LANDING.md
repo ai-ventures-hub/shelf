@@ -45,15 +45,18 @@ Unchanged from vision: optional pre-generated tour + captions; curated Q&A. Add 
 
 Only after engagement data. Ground answers in PRODUCT.md + README; never invent child-MCP invocation.
 
-## Soft-launch CTA (still locked)
+## CTA (Download-primary — signed public builds)
 
 | Priority | Action |
 |---|---|
-| Primary | Request access (waitlist) |
+| Primary | Download — It's free (`/download`, signed + notarized DMG from GitHub Releases) |
 | Secondary | See how it works (`#demo`) |
 | Tertiary | View on GitHub |
 
-Swap primary to Download when signed/invite builds are public.
+The former waitlist gate is retired; email capture moved into the app's
+one-time first-launch survey (optional, skippable — see PRODUCT.md
+"Distribution & privacy"). `/download` auto-starts
+`releases/latest/download/Shelf-arm64.dmg` and shows the three install steps.
 
 ## Must-not claims on the site
 

@@ -192,6 +192,34 @@ export interface UiPrefs {
     x?: number
     y?: number
   }
+  /** App version at which first-launch onboarding was completed or skipped. */
+  onboardingCompletedVersion?: string
+  /** Submission captured while offline; main flushes it on next launch. */
+  pendingOnboardingSubmission?: OnboardingSubmission
+}
+
+/** Renderer-side onboarding payload (main stamps version/platform/time). */
+export interface OnboardingSubmissionInput {
+  name?: string
+  email?: string
+  answers: {
+    firstShelve?: string
+    persona?: string
+    heardFrom?: string
+    agents: string[]
+  }
+  /** True when the contact screen was skipped or left empty. */
+  skippedContact: boolean
+}
+
+/**
+ * The one-time first-launch survey POSTed to shelfmcp.com/api/onboarding —
+ * the only user-data network call the app makes. See docs/PRODUCT.md.
+ */
+export interface OnboardingSubmission extends OnboardingSubmissionInput {
+  appVersion: string
+  platform: string
+  submittedAt: string
 }
 
 export const DEFAULT_UI_PREFS: UiPrefs = {

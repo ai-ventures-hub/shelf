@@ -1,5 +1,9 @@
 # Shelf Community 0.4.0 — Invite kit
 
+> **Retired (0.5.0):** the private invite flow is superseded by the public
+> signed download at shelfmcp.com/download (see `LANDING.md` and
+> `PRODUCT.md` → Distribution & privacy). Kept for historical reference.
+
 Private invite notes for early testers. Product stays free **Community** (no account, no paywall). Profiles remain a later add-on.
 
 ## What you’re getting

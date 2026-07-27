@@ -12,6 +12,7 @@ import type {
   CursorMcpStatus,
   DesignMdResult,
   LogLine,
+  OnboardingSubmissionInput,
   ProjectImportSuggestion,
   ReceiptOutcome,
   RunReceipt,
@@ -52,6 +53,10 @@ const api = {
     ipcRenderer.invoke('prefs:update', patch),
   getShortcutStatus: (): Promise<ShortcutStatus> =>
     ipcRenderer.invoke('desktop:shortcutStatus'),
+  submitOnboarding: (
+    input: OnboardingSubmissionInput,
+  ): Promise<{ appVersion: string }> =>
+    ipcRenderer.invoke('onboarding:submit', input),
 
   getDesignMd: (opts: {
     id?: string

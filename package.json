@@ -33,6 +33,8 @@
     "smoke:all": "node scripts/smoke-all.mjs",
     "icon": "python3 scripts/generate-icon.py",
     "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",
+    "dist:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac --publish never",
+    "dmg:background": "python3 scripts/generate-dmg-background.py",
     "install:desktop": "npm run package:mac && node scripts/install-desktop.mjs"
   },
   "dependencies": {
@@ -86,11 +88,21 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        "dir"
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
       ],
-      "identity": null,
-      "hardenedRuntime": false,
+      "artifactName": "${productName}-${arch}.${ext}",
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true,
       "extendInfo": {
         "CFBundleDisplayName": "Shelf",
         "NSHighResolutionCapable": true,
@@ -101,6 +113,33 @@
           }
         ]
       }
+    },
+    "dmg": {
+      "background": "build/dmg-background.tiff",
+      "window": {
+        "width": 660,
+        "height": 400
+      },
+      "iconSize": 110,
+      "contents": [
+        {
+          "x": 180,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 480,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ai-ventures-hub",
+      "repo": "shelf",
+      "releaseType": "release"
     },
     "protocols": [
       {

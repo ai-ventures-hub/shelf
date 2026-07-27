@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { OnboardingGate } from './components/onboarding/OnboardingFlow'
 import { StudioShell } from './components/StudioShell'
 import { LibraryProvider } from './hooks/useLibrary'
 import { PrefsProvider } from './hooks/usePrefs'
@@ -14,7 +15,8 @@ export default function App() {
   return (
     <PrefsProvider>
       <LibraryProvider>
-        <StudioShell>
+        <OnboardingGate>
+          <StudioShell>
           <Routes>
             <Route path="/" element={<LibraryPage mode="all" />} />
             <Route path="/favorites" element={<LibraryPage mode="favorites" />} />
@@ -30,7 +32,8 @@ export default function App() {
             <Route path="/tools/:id/edit" element={<ToolFormPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </StudioShell>
+          </StudioShell>
+        </OnboardingGate>
       </LibraryProvider>
     </PrefsProvider>
   )

@@ -1,0 +1,195 @@
+/* First-launch onboarding — full-screen gate above every overlay (max 90). */
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 15% -10%, var(--surface-glow), transparent 30rem),
+    var(--surface);
+}
+
+.onboarding-card {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 36px 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: linear-gradient(165deg, var(--panel-raised), var(--panel));
+  box-shadow: 0 30px 90px rgb(0 0 0 / 28%);
+}
+
+.onboarding-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-mark);
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #9aafff, #526fdd);
+  color: var(--on-brand);
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.onboarding-step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.onboarding-progress {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 680;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--subtle);
+  text-align: center;
+}
+
+.onboarding-step h2 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  text-align: center;
+  outline: none;
+}
+
+.onboarding-sub {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+
+.onboarding-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.onboarding-field span {
+  font-size: 0.78rem;
+  font-weight: 680;
+  color: var(--muted);
+}
+
+.onboarding-field input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--input);
+  color: var(--ink);
+}
+
+.onboarding-field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.onboarding-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
+.onboarding-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-option {
+  display: block;
+  cursor: pointer;
+}
+
+.onboarding-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.onboarding-option span {
+  display: block;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--input);
+  font-size: 0.92rem;
+  font-weight: 620;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.onboarding-option:hover span {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+}
+
+.onboarding-option input:checked + span {
+  border-color: color-mix(in srgb, var(--brand) 60%, var(--line));
+  background: color-mix(in srgb, var(--brand) 14%, var(--input));
+  color: var(--brand-strong);
+}
+
+.onboarding-option input:focus-visible + span {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.onboarding-back {
+  margin-right: auto;
+}
+
+.onboarding-back,
+.onboarding-skip {
+  min-height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+}
+
+.onboarding-back:hover,
+.onboarding-skip:hover {
+  color: var(--ink);
+}
+
+.onboarding-continue {
+  min-height: 42px;
+  padding: 0 22px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--brand);
+  color: var(--on-brand);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.onboarding-continue:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.onboarding-continue:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

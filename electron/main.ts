@@ -41,12 +41,14 @@ import {
 } from './desktop-integration'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { registerMcpConnectIpc } from './mcp-connect-ipc'
+import { flushPendingOnboarding, submitOnboarding } from './onboarding-relay'
 import { ProcessManager } from './process-manager'
 import * as system from './system-bridge'
 import type {
   AgentAccessKind,
   CapabilityGapStatus,
   Collection,
+  OnboardingSubmissionInput,
   Tool,
   UiPrefs,
 } from './types'
@@ -389,6 +391,10 @@ function registerIpc(): void {
   })
   ipcMain.handle('desktop:shortcutStatus', () => getShortcutStatus())
 
+  ipcMain.handle('onboarding:submit', (_e, input: OnboardingSubmissionInput) =>
+    submitOnboarding(prefs, input),
+  )
+
   ipcMain.handle(
     'designMd:get',
     (_e, opts: { id?: string; projectPath?: string }) => {
@@ -541,6 +547,8 @@ if (gotLock) {
     // Window exists so the renderer can receive the boot conflict status.
     publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: !shortcutStatus.ok })
     void flushPendingShelfUrls(getDesktopHost())
+    // Retry a first-launch survey that was captured offline (silent, best-effort).
+    flushPendingOnboarding(prefs)
 
     // Cold-start argv may include a shelf:// link (Windows/Linux; mac uses open-url).
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))

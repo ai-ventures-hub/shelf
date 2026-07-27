@@ -85,6 +85,11 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
 
 1. Signed macOS distribution / auto-update
 
+## Distribution & privacy
+
+- Signed + notarized DMG (Apple Silicon) from public GitHub Releases; shelfmcp.com/download links `releases/latest`.
+- First launch shows a one-time, fully skippable survey (optional name/email + four questions). Completing it sends **one** POST to shelfmcp.com/api/onboarding containing the chosen answers, optional contact info, app version, and platform. That is the only user-data network call Shelf makes — nothing else ever leaves the Mac, and "no account required" remains true (skipping contact still sends the anonymous answers).
+
 ## Security posture
 
 User-authored commands only; no root; secrets masked in logs; folder pickers over blanket Full Disk Access; not App Store sandboxed (arbitrary child processes).

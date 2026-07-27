@@ -98,6 +98,22 @@ export interface UiPrefs {
     x?: number
     y?: number
   }
+  /** App version at which first-launch onboarding was completed or skipped. */
+  onboardingCompletedVersion?: string
+}
+
+/** Renderer-side onboarding payload (main stamps version/platform/time). */
+export interface OnboardingSubmissionInput {
+  name?: string
+  email?: string
+  answers: {
+    firstShelve?: string
+    persona?: string
+    heardFrom?: string
+    agents: string[]
+  }
+  /** True when the contact screen was skipped or left empty. */
+  skippedContact: boolean
 }
 
 /** Result of registering the macOS global show/hide hotkey. */
@@ -258,6 +274,7 @@ export interface ShelfApi {
     patch: Partial<UiPrefs>,
   ) => Promise<{ prefs: UiPrefs; shortcutStatus: ShortcutStatus }>
   getShortcutStatus: () => Promise<ShortcutStatus>
+  submitOnboarding: (input: OnboardingSubmissionInput) => Promise<{ appVersion: string }>
   getDesignMd: (opts: { id?: string; projectPath?: string }) => Promise<DesignMdResult>
   checkToolReadiness: (id: string) => Promise<ToolReadiness>
   listCapabilityGaps: (opts?: {
