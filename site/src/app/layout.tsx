@@ -1,21 +1,36 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { Archivo, Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+
+/* Variable fonts — no `weight` option so the AV token scale (620/720/850)
+   renders true instead of snapping to static weights. */
+const archivo = Archivo({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-archivo',
+})
 
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
+  variable: '--font-inter',
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-jetbrains-mono',
 })
 
 export const metadata: Metadata = {
-  title: 'Shelf — Local tools your agents can find',
+  title: 'Shelf — You build the tools. Shelf keeps them.',
   description:
-    'A personal command center for the tools you build. Launch locally, share one library with your agents, and discover capabilities with honest readiness. macOS Community soft launch.',
+    'One local library for every script, server, and one-off you ship — and a capability catalog your agents can query honestly. No cloud. No account.',
   metadataBase: new URL('https://shelfmcp.com'),
   openGraph: {
-    title: 'Shelf — Local tools your agents can find',
+    title: 'Shelf — You build the tools. Shelf keeps them.',
     description:
-      'Organize and launch local tools—and let agents discover the right capability, or record an honest gap.',
+      'One local library for every script, server, and one-off you ship — and a capability catalog your agents can query honestly. No cloud. No account.',
     url: 'https://shelfmcp.com',
     siteName: 'Shelf',
     type: 'website',
@@ -25,14 +40,22 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: '#090d16',
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+    >
+      <body>{children}</body>
     </html>
   )
 }

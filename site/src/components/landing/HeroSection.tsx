@@ -1,38 +1,31 @@
-import { ShelfMark } from '@/components/ShelfMark'
 import { WaitlistForm } from '@/components/WaitlistForm'
-import { DualDemo } from './DualDemo'
+import { HeroDemo } from './HeroDemo'
 
-/** Brand-first hero + waitlist + interactive dual-surface demo. */
+/** Beat 01 — command deck: editorial left, live agent↔Shelf demo right. */
 export function HeroSection() {
   return (
-    <section className="hero hero--vision" aria-labelledby="hero-heading">
-      <div className="hero-intro">
-        <div className="hero-brand">
-          <ShelfMark />
-          <p className="hero-eyebrow">Shelf</p>
-        </div>
+    <section className="hero" aria-labelledby="hero-heading">
+      <div className="hero-copy">
+        <p className="eyebrow">Local tool library · macOS</p>
         <h1 id="hero-heading" className="hero-title">
-          A personal command center for the tools you build.
+          You build the tools.
+          <br className="hero-break" /> Shelf keeps them.
         </h1>
         <p className="hero-support">
-          One home for every local tool—and a capability catalog so your agents
-          find the right one, honestly.
+          One local library for every script, server, and one-off you ship — and a
+          capability catalog your agents can query honestly. No cloud. No account.
         </p>
-        <div className="hero-cta-row">
-          <a className="btn-quiet" href="#demo">
+        <div className="hero-cta">
+          <WaitlistForm inputId="waitlist-email-hero" className="waitlist-form" />
+          <a className="btn-ghost" href="#demo">
             See how it works
           </a>
-          <a
-            className="btn-quiet"
-            href="https://github.com/ai-ventures-hub/shelf"
-            rel="noopener noreferrer"
-          >
-            View on GitHub
-          </a>
         </div>
-        <WaitlistForm inputId="waitlist-email-hero" />
+        <p className="hero-fine">
+          Invite-only soft launch · MIT-licensed · your data stays on your Mac
+        </p>
       </div>
-      <DualDemo />
+      <HeroDemo />
     </section>
   )
 }

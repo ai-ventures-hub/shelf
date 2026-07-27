@@ -28,5 +28,5 @@ CLI tip: `vercel login` must be the AI Ventures account (`carlos-projects-882b0b
 
 - Product name: **Shelf** (not “Shelf MCP”)
 - Domain: shelfmcp.com
-- Design language: Suds System Studio (`DESIGN.md` tokens)
-- Vision Phase 1: dual-surface Agent + Shelf demo + narrative sections (interactive prompts / voice in later phases)
+- Design language: AI Ventures (`--av-*` tokens — Archivo / Inter / JetBrains Mono, indigo on slate, dark-only)
+- Landing redesign: seven beats from the Claude Design canvas (command-deck hero with live agent↔Shelf demo, graveyard ledger, smart-import scan, honest cards, capability ask & answer, shared-library hub, receipt CTA). Reference bundle in `landing-page-redesign-options/` (untracked).

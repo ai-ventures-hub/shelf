@@ -1,16 +1,26 @@
+import { CapabilityAskAnswer } from '@/components/landing/CapabilityAskAnswer'
+import { FinalCta } from '@/components/landing/FinalCta'
+import { GraveyardLedger } from '@/components/landing/GraveyardLedger'
 import { HeroSection } from '@/components/landing/HeroSection'
-import { NarrativeSections } from '@/components/landing/NarrativeSections'
+import { HonestCards } from '@/components/landing/HonestCards'
+import { SharedLibraryHub } from '@/components/landing/SharedLibraryHub'
 import { SiteFooter } from '@/components/landing/SiteFooter'
 import { SiteHeader } from '@/components/landing/SiteHeader'
+import { SmartImportScan } from '@/components/landing/SmartImportScan'
 
-/** Vision Phase 2 — interactive Capability Intelligence demo + narrative. */
+/** Landing redesign — seven beats on the AI Ventures design language. */
 export default function HomePage() {
   return (
     <>
       <SiteHeader />
-      <main id="top" className="site-main site-main--vision">
+      <main id="top">
         <HeroSection />
-        <NarrativeSections />
+        <GraveyardLedger />
+        <SmartImportScan />
+        <HonestCards />
+        <CapabilityAskAnswer />
+        <SharedLibraryHub />
+        <FinalCta />
       </main>
       <SiteFooter />
     </>
