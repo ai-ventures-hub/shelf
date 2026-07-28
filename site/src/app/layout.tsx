@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Archivo, Inter, JetBrains_Mono } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 /* Variable fonts — no `weight` option so the AV token scale (620/720/850)
@@ -58,7 +59,10 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   )
 }
