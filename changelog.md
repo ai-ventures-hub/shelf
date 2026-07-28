@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-07-27
 
+- First public download release: builds are signed with a Developer ID Application certificate, notarized by Apple, and stapled — Gatekeeper-clean installs from a plain browser download.
 - First-launch onboarding: one-time, fully skippable survey (optional name/email + four questions) gating the first run; answers POST once to shelfmcp.com/api/onboarding via the main process and queue offline for silent retry. The app's only user-data network call (PRODUCT.md → Distribution & privacy).
-- Distribution: DMG + zip targets with a drag-to-Applications background, hardened runtime + entitlements, notarization wired (env-credential driven, silently skipped until certs exist), version-free artifact names for a stable `releases/latest` URL, and a tag-triggered GitHub release workflow.
+- Distribution: DMG + zip targets with a drag-to-Applications background, hardened runtime + entitlements, notarization wired (env-credential driven, degrades to unsigned when creds are absent), version-free artifact names for a stable `releases/latest` URL, and a tag-triggered GitHub release workflow.
 - Marketing site: `/api/onboarding` endpoint (Neon `onboarding_responses`); Download-primary CTA + `/download` page replace the waitlist (deploys once the repo is public).
 - Invite-ready pack for Community 0.4.0: `docs/INVITE.md` (Gatekeeper install, Connect agents, example prompts, soft-launch checklist + draft GH release notes).
 - Annotated the maintainer’s real library tools with capabilities + agentAccess so `shelf_find_capability` returns useful matches (library data only; backup under Application Support).
