@@ -8,16 +8,14 @@ export function SiteHeader() {
     <header className="site-header">
       <div className="site-header-inner">
         <Link className="header-brand" href="/">
-          <span className="brand-tile">
-            <ShelfMark className="brand-mark" />
-          </span>
+          <ShelfMark className="brand-mark" />
           <span className="brand-name">Shelf</span>
         </Link>
         <nav className="header-nav" aria-label="Page">
           <Link href="/#demo">Demo</Link>
+          <Link href="/#app">App</Link>
           <Link href="/#capabilities">Capabilities</Link>
           <Link href="/#agents">Agents</Link>
-          <Link href="/#app">App</Link>
           <a
             className="header-github"
             href="https://github.com/ai-ventures-hub/shelf"

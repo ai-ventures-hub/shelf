@@ -29,24 +29,33 @@ export default async function Image() {
           fontFamily: 'Archivo',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        {/* Primary lockup — icon 1H (76), gap 0.42H (32), wordmark 0.78H (59). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
           <div
             style={{
               width: 76,
               height: 76,
-              borderRadius: 20,
+              borderRadius: 17,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundImage: 'linear-gradient(145deg, #9badff, #5a76f0)',
+              backgroundImage: 'linear-gradient(145deg, #9aafff, #526fdd)',
             }}
           >
-            <svg viewBox="0 0 100 100" width="48" height="48">
+            <svg viewBox="0 0 100 100" width="76" height="76">
               <path fill="#081021" d="M20 18h60v18H40v14H20V18z" />
               <path fill="#081021" d="M20 82h60V50H58v14H20V82z" />
             </svg>
           </div>
-          <div style={{ display: 'flex', fontSize: 44, fontWeight: 800, color: '#f7f8fc' }}>
+          <div
+            style={{
+              display: 'flex',
+              fontSize: 59,
+              fontWeight: 800,
+              letterSpacing: '-1.8px',
+              color: '#f7f8fc',
+            }}
+          >
             Shelf
           </div>
         </div>

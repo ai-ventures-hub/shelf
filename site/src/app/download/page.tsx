@@ -38,9 +38,7 @@ function StepVisual({ kind }: { kind: string }) {
     return (
       <div className="download-visual">
         <span className="download-dmg-chip">
-          <span className="brand-tile brand-tile--sm" aria-hidden>
-            <ShelfMark className="brand-mark" />
-          </span>
+          <ShelfMark className="brand-mark brand-mark--sm" />
           Shelf-arm64.dmg
         </span>
       </div>
@@ -49,9 +47,7 @@ function StepVisual({ kind }: { kind: string }) {
   if (kind === 'drag') {
     return (
       <div className="download-visual" aria-hidden>
-        <span className="brand-tile" aria-hidden>
-          <ShelfMark className="brand-mark" />
-        </span>
+        <ShelfMark className="brand-mark" />
         <ArrowRight size={20} />
         <span className="download-folder">
           <FolderOpen size={22} />
@@ -103,6 +99,11 @@ export default function DownloadPage() {
         <p className="download-alt">
           Prefer an archive? <a href={DOWNLOAD_ZIP_URL}>Download the .zip</a> · or
           browse <a href={RELEASES_URL} rel="noopener noreferrer">all releases</a>.
+        </p>
+        <p className="download-alt">
+          Stuck on a step?{' '}
+          <a href="mailto:support@shelfmcp.com">support@shelfmcp.com</a> — a human
+          reads it.
         </p>
       </main>
       <SiteFooter />
