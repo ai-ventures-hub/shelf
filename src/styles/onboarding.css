@@ -24,16 +24,31 @@
   box-shadow: 0 30px 90px rgb(0 0 0 / 28%);
 }
 
+/* Official mark — the SVG is the sealed unit; size + sanctioned glow only. */
 .onboarding-mark {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-mark);
-  display: grid;
-  place-items: center;
-  background: linear-gradient(145deg, #9aafff, #526fdd);
-  color: var(--on-brand);
-  font-size: 21px;
-  font-weight: 800;
+  border-radius: 22%;
+  display: block;
+  box-shadow: 0 14px 36px rgb(82 111 221 / 34%);
+}
+
+/* Trust signal under the mark — the product's promise before any question. */
+.onboarding-trust {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -6px 0 0;
+  font-size: 0.74rem;
+  font-weight: 620;
+  letter-spacing: 0.02em;
+  color: var(--subtle);
+}
+
+.onboarding-trust-lock {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .onboarding-step {
@@ -44,13 +59,23 @@
 }
 
 .onboarding-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   margin: 0;
-  font-size: 0.72rem;
-  font-weight: 680;
-  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  font-weight: 620;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--subtle);
   text-align: center;
+}
+
+.onboarding-progress-label {
+  font-size: 0.74rem;
+  font-weight: 720;
+  letter-spacing: 0.1em;
+  color: var(--brand);
 }
 
 .onboarding-step h2 {

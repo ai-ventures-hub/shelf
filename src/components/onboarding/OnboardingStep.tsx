@@ -55,6 +55,7 @@ export function OnboardingStep({
   return (
     <form className="onboarding-step" onSubmit={submit}>
       <p className="onboarding-progress" aria-live="polite">
+        <span className="onboarding-progress-label">{step.label}</span>
         Step {stepNumber} of {totalSteps}
       </p>
       <h2 ref={headingRef} tabIndex={-1}>
@@ -86,7 +87,7 @@ export function OnboardingStep({
           Skip
         </button>
         <button type="submit" className="onboarding-continue" disabled={selected.length === 0}>
-          {isLast ? 'Finish' : 'Continue'}
+          {isLast ? 'Get Started' : 'Continue'}
         </button>
       </div>
     </form>

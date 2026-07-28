@@ -9,6 +9,8 @@ export interface ChoiceStep {
   id: string
   kind: 'single' | 'multi'
   answerKey: ChoiceAnswerKey
+  /** Short human header shown above the step counter ("About you"). */
+  label: string
   title: string
   options: string[]
   /** Multi-select option that clears (and is cleared by) the others. */
@@ -20,7 +22,8 @@ export const CHOICE_STEPS: ChoiceStep[] = [
     id: 'first-shelve',
     kind: 'single',
     answerKey: 'firstShelve',
-    title: 'What will you shelve first?',
+    label: 'Your workflow',
+    title: 'How do you plan to use Shelf?',
     options: [
       'A dev server or web app',
       'A CLI script',
@@ -33,35 +36,45 @@ export const CHOICE_STEPS: ChoiceStep[] = [
     id: 'persona',
     kind: 'single',
     answerKey: 'persona',
-    title: 'What best describes you?',
+    label: 'About you',
+    title: 'Which best describes you?',
     options: [
-      'AI-assisted builder',
-      'Indie developer or consultant',
-      'Automation specialist',
-      'Designer-developer hybrid',
-      'Something else',
+      'AI-powered builder',
+      'Indie developer / consultant',
+      'Automation engineer',
+      'Designer–developer',
+      'Other',
     ],
   },
   {
     id: 'agents',
     kind: 'multi',
     answerKey: 'agents',
-    title: 'Which agents do you use?',
-    options: ['Claude Desktop', 'Claude Code', 'Cursor', 'Codex', 'Another agent', 'None yet'],
-    noneOption: 'None yet',
+    label: 'Your agents',
+    title: 'Which AI agents do you use?',
+    options: [
+      'Claude Desktop',
+      'Claude Code',
+      'Cursor',
+      'Codex',
+      'Other AI agent',
+      'I’m just getting started',
+    ],
+    noneOption: 'I’m just getting started',
   },
   {
     id: 'heard-from',
     kind: 'single',
     answerKey: 'heardFrom',
+    label: 'One last question',
     title: 'How did you hear about Shelf?',
     options: [
-      'X / Twitter',
+      'X (Twitter)',
       'GitHub',
-      'A friend or colleague',
-      'Search',
+      'Friend or colleague',
+      'Web search',
       'Blog or newsletter',
-      'Somewhere else',
+      'Other',
     ],
   },
 ]

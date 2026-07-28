@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1 — 2026-07-28
+
+- In-app brand: the official Shelf mark (Brand Standard v1.0) replaces the
+  prototype marks in the sidebar and onboarding — one shared component,
+  gradient tile + ink glyph with the sanctioned glow.
+- Onboarding copy overhaul: conversational questions with human step headers
+  ("About you · Step 3 of 5"), refreshed answer options (AI-powered builder,
+  "I'm just getting started", X (Twitter), Web search), consistent buttons
+  ending in **Get Started**, "Your name" / "Email address" labels, and a
+  lock-icon trust line — "Local-first · No account required · Privacy
+  respected" — under the mark.
+
 ## 0.5.0 — 2026-07-27
 
 - First public download release: builds are signed with a Developer ID Application certificate, notarized by Apple, and stapled — Gatekeeper-clean installs from a plain browser download.

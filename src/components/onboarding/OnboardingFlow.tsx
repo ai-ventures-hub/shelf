@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { usePrefs } from '../../hooks/usePrefs'
 import type { OnboardingSubmissionInput } from '../../types'
+import { ShelfMark } from '../ShelfMark'
 import { OnboardingStep } from './OnboardingStep'
 import { CHOICE_STEPS, TOTAL_STEPS, type ChoiceAnswerKey } from './steps'
 
@@ -84,24 +85,40 @@ export function OnboardingFlow() {
   return (
     <div className="onboarding" role="dialog" aria-modal="true" aria-label="Welcome to Shelf">
       <div className="onboarding-card">
-        <div className="onboarding-mark" aria-hidden>
-          S
-        </div>
+        <ShelfMark className="onboarding-mark" />
+        <p className="onboarding-trust">
+          <svg
+            className="onboarding-trust-lock"
+            viewBox="0 0 16 16"
+            aria-hidden
+            focusable="false"
+          >
+            <rect x="3" y="7" width="10" height="7" rx="1.6" fill="currentColor" />
+            <path
+              d="M5.2 7V4.8a2.8 2.8 0 1 1 5.6 0V7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+            />
+          </svg>
+          Local-first · No account required · Privacy respected
+        </p>
         {stepIndex === 0 ? (
           <form className="onboarding-step" onSubmit={submitContact}>
             <p className="onboarding-progress" aria-live="polite">
+              <span className="onboarding-progress-label">Welcome</span>
               Step 1 of {TOTAL_STEPS}
             </p>
             <h2 ref={headingRef} tabIndex={-1}>
               Welcome to Shelf
             </h2>
             <p className="onboarding-sub">
-              A few quick questions and your shelf is yours. No account is created —
-              answers are sent once to shelfmcp.com and nothing else ever leaves your
-              Mac.
+              Answer a few quick questions to personalize your experience. No account
+              required. Only these responses are sent once to shelfmcp.com — everything
+              else stays on your Mac.
             </p>
             <label className="onboarding-field">
-              <span>Name</span>
+              <span>Your name</span>
               <input
                 type="text"
                 value={name}
@@ -111,7 +128,7 @@ export function OnboardingFlow() {
               />
             </label>
             <label className="onboarding-field">
-              <span>Email</span>
+              <span>Email address</span>
               <input
                 type="email"
                 value={email}

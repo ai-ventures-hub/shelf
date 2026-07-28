@@ -99,22 +99,15 @@
   padding:.35rem .25rem .85rem;
 }
 
+/* Official mark (Brand Standard v1.0) — the SVG is the sealed unit; this
+   only sizes it and adds the sanctioned dark-surface glow. */
 .brand-mark {
   width:38px;
   height:38px;
-  border-radius:11px;
-  display:grid;
-  place-items:center;
-  color:#0a0a0f;
-  background:#b0abe8;
-  box-shadow:0 10px 28px #7882dc47;
-  overflow:hidden;
-}
-
-.brand-mark-svg {
-  width:62%;
-  height:62%;
+  border-radius:22%;
   display:block;
+  flex-shrink:0;
+  box-shadow:0 14px 36px rgb(82 111 221 / 34%);
 }
 
 .brand-copy {
