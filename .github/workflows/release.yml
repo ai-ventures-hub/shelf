@@ -4,6 +4,9 @@ name: Release
 # publish DMG + zip to the GitHub Release. Without signing secrets,
 # electron-builder skips signing/notarization with a warning and publishes
 # unsigned artifacts — the workflow still succeeds end to end.
+# Publishing uses `gh release` rather than electron-builder's publisher:
+# its parallel upload tasks race to create the release and die on 422
+# already_exists when releaseType is "release" (drafts break releases/latest).
 on:
   push:
     tags: ['v*']
@@ -33,10 +36,9 @@ jobs:
           fi
       - run: npm run typecheck
       - run: npm run build
-      - name: Package, sign, notarize, publish
-        run: npx electron-builder --mac --publish always
+      - name: Package, sign, notarize
+        run: npx electron-builder --mac --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -49,3 +51,16 @@ jobs:
           codesign --verify --deep --strict "$app"
           spctl -a -t exec -vv "$app"
           xcrun stapler validate "$app"
+      - name: Publish artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Shelf $GITHUB_REF_NAME" \
+              --notes "See [changelog.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/changelog.md) for details."
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            release/Shelf-arm64.dmg \
+            release/Shelf-arm64.zip \
+            release/Shelf-arm64.dmg.blockmap \
+            release/Shelf-arm64.zip.blockmap \
+            release/latest-mac.yml
