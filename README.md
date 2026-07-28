@@ -1,8 +1,10 @@
+<img src="docs/brand/shelf-readme-banner.png" alt="Shelf — You build the tools. Shelf keeps them." width="100%" />
+
 # Shelf
 
 Personal command center for the tools you build.
 
-Shelf is a macOS Electron prototype that stores a visual library of local tools — scripts, web apps, and utilities — and launches them with remembered commands, live status, and logs.
+Shelf is a macOS app that keeps a visual library of local tools — scripts, web apps, and utilities — and launches them with remembered commands, live status, and logs.
 
 ## Requirements
 

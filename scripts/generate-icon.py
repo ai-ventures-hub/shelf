@@ -1,132 +1,98 @@
 #!/usr/bin/env python3
-"""Generate Shelf Dock/app icon and macOS menu-bar Template images."""
+"""Generate Shelf Dock/app icon and macOS menu-bar Template images.
+
+Brand Standard v1.0: the mark is the ink bracket glyph on the 145° indigo
+gradient tile (22% corner radius). The app icon draws that tile on the
+macOS Big Sur icon grid (824pt artwork centered on a 1024pt canvas) — no
+glow in any icon export. Tray templates are the bare glyph in black for
+macOS Template tinting.
+
+Requires Pillow. Outputs are committed so CI never needs this script.
+"""
 
 from __future__ import annotations
 
-import struct
-import zlib
 from pathlib import Path
 
-# Match the Dock mark: solid periwinkle field, near-black geometric S.
-BG = (176, 171, 232)  # #b0abe8
-FG = (10, 10, 15)
+from PIL import Image, ImageDraw
+
+ROOT = Path(__file__).resolve().parents[1] / "build"
+
+MARK_GRAD_A = (154, 175, 255)  # #9aafff
+MARK_GRAD_B = (82, 111, 221)  # #526fdd
+MARK_INK = (8, 16, 33)  # #081021
+
+# Official glyph — favicon geometry in a 0..100 tile space.
+# M20 18h60v18H40v14H20V18z / M20 82h60V50H58v14H20V82z
+GLYPH_POLYGONS = (
+    ((20, 18), (80, 18), (80, 36), (40, 36), (40, 50), (20, 50)),
+    ((20, 82), (80, 82), (80, 50), (58, 50), (58, 64), (20, 64)),
+)
 
 
-def chunk(tag: bytes, data: bytes) -> bytes:
-    return (
-        struct.pack(">I", len(data))
-        + tag
-        + data
-        + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+def render_mark_tile(side: int, oversample: int = 4) -> Image.Image:
+    """The sealed mark: gradient tile, 22% radius, ink glyph. RGBA."""
+    s_px = side * oversample
+    tile = Image.new("RGB", (s_px, s_px))
+    px = tile.load()
+    # Linear gradient along the 145° axis ≈ favicon's (10,10)→(90,90) run.
+    for j in range(s_px):
+        for i in range(s_px):
+            k = min(1.0, max(0.0, (i + j) / (2 * s_px * 0.8) - 0.125))
+            px[i, j] = tuple(
+                int(a + (b - a) * k) for a, b in zip(MARK_GRAD_A, MARK_GRAD_B)
+            )
+    draw = ImageDraw.Draw(tile)
+    unit = s_px / 100.0
+    for poly in GLYPH_POLYGONS:
+        draw.polygon([(x * unit, y * unit) for x, y in poly], fill=MARK_INK)
+
+    mask = Image.new("L", (s_px, s_px), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, s_px - 1, s_px - 1), radius=int(s_px * 0.22), fill=255
     )
-
-
-def in_rounded_square(nx: float, ny: float, radius: float = 0.22) -> bool:
-    """Unit-square rounded rect mask (icon squircle approximation)."""
-    x = abs(nx - 0.5) * 2
-    y = abs(ny - 0.5) * 2
-    # Inside core square
-    if x <= 1 - radius and y <= 1 - radius:
-        return True
-    if x > 1 - radius and y > 1 - radius:
-        cx = x - (1 - radius)
-        cy = y - (1 - radius)
-        return cx * cx + cy * cy <= radius * radius
-    return x <= 1 and y <= 1
-
-
-def in_s_mark(nx: float, ny: float) -> bool:
-    """
-    Two offset L-blocks forming an S, with a clear center gap.
-    Coordinates in 0..1 within the icon.
-    """
-    # Content inset so the mark floats inside the squircle
-    left, right = 0.28, 0.72
-    top, bottom = 0.24, 0.76
-    mid_gap_top, mid_gap_bot = 0.46, 0.54
-    thick = 0.12
-    stem = 0.16
-
-    # Top ⌐ block
-    in_top_bar = left <= nx <= right and top <= ny <= top + thick
-    in_top_stem = left <= nx <= left + stem and top <= ny <= mid_gap_top
-    # Bottom L block
-    in_bot_bar = left <= nx <= right and bottom - thick <= ny <= bottom
-    in_bot_stem = right - stem <= nx <= right and mid_gap_bot <= ny <= bottom
-
-    return in_top_bar or in_top_stem or in_bot_bar or in_bot_stem
-
-
-def write_png_rgba(path: Path, size: int, pixel_at) -> None:
-    """Write an 8-bit RGBA PNG using pixel_at(nx, ny) -> (r,g,b,a)."""
-    rows: list[bytes] = []
-    for y in range(size):
-        row = bytearray()
-        row.append(0)
-        ny = (y + 0.5) / size
-        for x in range(size):
-            nx = (x + 0.5) / size
-            row.extend(pixel_at(nx, ny))
-        rows.append(bytes(row))
-
-    raw = b"".join(rows)
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
-    png = (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", ihdr)
-        + chunk(b"IDAT", zlib.compress(raw, 9))
-        + chunk(b"IEND", b"")
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(png)
-    print(f"Wrote {path} ({len(png)} bytes)")
+    out = Image.new("RGBA", (s_px, s_px), (0, 0, 0, 0))
+    out.paste(tile, (0, 0), mask)
+    return out.resize((side, side), Image.LANCZOS)
 
 
 def write_app_icon(path: Path, size: int = 1024) -> None:
-    def pixel(nx: float, ny: float) -> tuple[int, int, int, int]:
-        if not in_rounded_square(nx, ny):
-            return (0, 0, 0, 0)
-        if in_s_mark(nx, ny):
-            return (*FG, 255)
-        return (*BG, 255)
-
-    write_png_rgba(path, size, pixel)
+    """Official mark on the macOS icon grid: artwork is 824/1024 centered."""
+    art_side = round(size * 824 / 1024)
+    inset = (size - art_side) // 2
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.paste(render_mark_tile(art_side), (inset, inset))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(path)
+    print(f"Wrote {path}")
 
 
 def write_tray_template(path: Path, size: int) -> None:
-    """
-    Black-on-transparent S for macOS Template images.
-    Colorful Dock icons become muddy when force-templated at 18px.
-    """
+    """Black-on-transparent official glyph for macOS Template tinting."""
+    oversample = 8
+    s_px = size * oversample
+    img = Image.new("RGBA", (s_px, s_px), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    # Slightly reduced inset so the glyph holds weight at menu-bar sizes.
+    unit = s_px / 100.0
 
-    def pixel(nx: float, ny: float) -> tuple[int, int, int, int]:
-        # Slightly thicker strokes at menu-bar sizes so the mark stays legible.
-        if in_s_mark_tray(nx, ny):
-            return (0, 0, 0, 255)
-        return (0, 0, 0, 0)
+    def stretch(v: float) -> float:
+        # Map the glyph's 18..82 content box out to 10..90.
+        return (v - 18) * (80 / 64) + 10
 
-    write_png_rgba(path, size, pixel)
-
-
-def in_s_mark_tray(nx: float, ny: float) -> bool:
-    """S mark tuned for ~16–44px menu bar (thicker stems, less inset)."""
-    left, right = 0.22, 0.78
-    top, bottom = 0.18, 0.82
-    mid_gap_top, mid_gap_bot = 0.45, 0.55
-    thick = 0.16
-    stem = 0.22
-
-    in_top_bar = left <= nx <= right and top <= ny <= top + thick
-    in_top_stem = left <= nx <= left + stem and top <= ny <= mid_gap_top
-    in_bot_bar = left <= nx <= right and bottom - thick <= ny <= bottom
-    in_bot_stem = right - stem <= nx <= right and mid_gap_bot <= ny <= bottom
-
-    return in_top_bar or in_top_stem or in_bot_bar or in_bot_stem
+    for poly in GLYPH_POLYGONS:
+        draw.polygon(
+            [(stretch(x) * unit, stretch(y) * unit) for x, y in poly],
+            fill=(0, 0, 0, 255),
+        )
+    img = img.resize((size, size), Image.LANCZOS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+    print(f"Wrote {path}")
 
 
 if __name__ == "__main__":
-    root = Path(__file__).resolve().parents[1] / "build"
-    write_app_icon(root / "icon.png")
+    write_app_icon(ROOT / "icon.png")
     # Template suffix + @2x lets Electron/macOS pick the crisp asset.
-    write_tray_template(root / "TrayIconTemplate.png", 22)
-    write_tray_template(root / "TrayIconTemplate@2x.png", 44)
+    write_tray_template(ROOT / "TrayIconTemplate.png", 22)
+    write_tray_template(ROOT / "TrayIconTemplate@2x.png", 44)
