@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2 — 2026-07-28
+
+- Auto-update: Shelf now checks the public GitHub releases feed in the
+  background (on launch and every 4 hours), downloads updates silently
+  (differential via blockmaps), and shows a restart banner when one is
+  ready. Dismissing is safe — the update installs on the next quit.
+  Running tools are stopped cleanly before the update relaunch.
+
 ## 0.5.1 — 2026-07-28
 
 - In-app brand: the official Shelf mark (Brand Standard v1.0) replaces the

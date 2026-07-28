@@ -6,6 +6,7 @@ import { usePrefs } from '../hooks/usePrefs'
 import { NamePromptDialog } from './NamePromptDialog'
 import { QuickOpen } from './QuickOpen'
 import { ShelfMark } from './ShelfMark'
+import { UpdateBanner } from './UpdateBanner'
 
 /** Compact SVG marks used when the sidebar is collapsed to an icon rail. */
 function NavIcon({ name }: { name: string }) {
@@ -172,6 +173,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}>
+      <UpdateBanner />
       <aside className="sidebar" aria-label="Shelf navigation">
         <div className="brand-row">
           {!collapsed ? <ShelfMark /> : null}

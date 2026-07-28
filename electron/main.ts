@@ -11,6 +11,7 @@ import {
 import path from 'node:path'
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { resolveDesignMd } from '../shared/design-md'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
@@ -505,6 +506,17 @@ function registerIpc(): void {
     registerShelfProtocolClient()
     return true
   })
+  ipcMain.handle('app:installUpdate', async () => {
+    // Bypass the before-quit interception: stop tools here, then hand the
+    // quit to Squirrel so the downloaded update installs and relaunches.
+    isQuitting = true
+    try {
+      await processes.stopAll()
+    } catch {
+      // Updating matters more than a clean tool shutdown at this point.
+    }
+    installDownloadedUpdate()
+  })
   registerMcpConnectIpc(resolveMcpServerPath)
 }
 
@@ -549,6 +561,8 @@ if (gotLock) {
     void flushPendingShelfUrls(getDesktopHost())
     // Retry a first-launch survey that was captured offline (silent, best-effort).
     flushPendingOnboarding(prefs)
+    // Background update checks (packaged builds only).
+    initAutoUpdate(sendToRenderer)
 
     // Cold-start argv may include a shelf:// link (Windows/Linux; mac uses open-url).
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))

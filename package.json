@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Personal command center for the tools you build",
   "main": "dist-electron/electron/main.js",
@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.26.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -90,11 +91,15 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         }
       ],
       "artifactName": "${productName}-${arch}.${ext}",
@@ -109,7 +114,9 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "org.cjm.shelf",
-            "CFBundleURLSchemes": ["shelf"]
+            "CFBundleURLSchemes": [
+              "shelf"
+            ]
           }
         ]
       }
@@ -144,7 +151,9 @@
     "protocols": [
       {
         "name": "Shelf",
-        "schemes": ["shelf"]
+        "schemes": [
+          "shelf"
+        ]
       }
     ],
     "asar": true

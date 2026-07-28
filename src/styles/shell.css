@@ -99,6 +99,63 @@
   padding:.35rem .25rem .85rem;
 }
 
+/* Update-ready banner — floats above the shell, never blocks work. */
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 18px;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, var(--panel-raised));
+  box-shadow: 0 18px 50px rgb(0 0 0 / 40%);
+  font-size: 0.85rem;
+}
+
+.update-banner-text {
+  color: var(--ink);
+  font-weight: 620;
+}
+
+.update-banner-restart {
+  min-height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.update-banner-restart:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.update-banner-restart:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.update-banner-dismiss {
+  min-height: 28px;
+  min-width: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+}
+
+.update-banner-dismiss:hover {
+  color: var(--ink);
+}
+
 /* Official mark (Brand Standard v1.0) — the SVG is the sealed unit; this
    only sizes it and adds the sanctioned dark-surface glow. */
 .brand-mark {

@@ -335,6 +335,8 @@ export interface ShelfApi {
   onFocusSearch: (cb: () => void) => () => void
   onQuickOpen: (cb: () => void) => () => void
   onShortcutStatus: (cb: (status: ShortcutStatus) => void) => () => void
+  onUpdateReady: (cb: (info: { version: string }) => void) => () => void
+  installUpdate: () => Promise<void>
 }
 
 declare global {

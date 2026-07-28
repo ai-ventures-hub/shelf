@@ -175,6 +175,14 @@ const api = {
     ipcRenderer.on('app:shortcut-status', listener)
     return () => ipcRenderer.removeListener('app:shortcut-status', listener)
   },
+  /** A downloaded update is ready — renderer shows the restart banner. */
+  onUpdateReady: (cb: (info: { version: string }) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, info: { version: string }) => cb(info)
+    ipcRenderer.on('app:update-ready', listener)
+    return () => ipcRenderer.removeListener('app:update-ready', listener)
+  },
+  /** Stop tools, quit, install the downloaded update, and relaunch. */
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('app:installUpdate'),
 }
 
 contextBridge.exposeInMainWorld('shelf', api)
