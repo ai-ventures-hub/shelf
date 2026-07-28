@@ -3,8 +3,8 @@
   <path fill="#081021" d="M20 18h60v18H40v14H20V18zM20 82h60V50H58v14H20V82z"/>
   <defs>
     <linearGradient id="g" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#9badff"/>
-      <stop offset="1" stop-color="#5a76f0"/>
+      <stop stop-color="#9aafff"/>
+      <stop offset="1" stop-color="#526fdd"/>
     </linearGradient>
   </defs>
 </svg>

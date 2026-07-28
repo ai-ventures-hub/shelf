@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { GitHubMark } from '@/components/GitHubMark'
 import { ShelfMark } from '@/components/ShelfMark'
 
@@ -6,17 +7,15 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <a className="header-brand" href="#top">
-          <span className="brand-tile">
-            <ShelfMark className="brand-mark" />
-          </span>
+        <Link className="header-brand" href="/">
+          <ShelfMark className="brand-mark" />
           <span className="brand-name">Shelf</span>
-        </a>
+        </Link>
         <nav className="header-nav" aria-label="Page">
-          <a href="#demo">Demo</a>
-          <a href="#capabilities">Capabilities</a>
-          <a href="#agents">Agents</a>
-          <a href="#app">App</a>
+          <Link href="/#demo">Demo</Link>
+          <Link href="/#app">App</Link>
+          <Link href="/#capabilities">Capabilities</Link>
+          <Link href="/#agents">Agents</Link>
           <a
             className="header-github"
             href="https://github.com/ai-ventures-hub/shelf"
@@ -25,6 +24,9 @@ export function SiteHeader() {
             <GitHubMark />
             GitHub
           </a>
+          <Link className="header-download" href="/download">
+            Download <span className="header-download-free">— It’s free</span>
+          </Link>
         </nav>
       </div>
     </header>
