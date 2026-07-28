@@ -3,7 +3,7 @@
   "productName": "Shelf",
   "version": "0.5.2",
   "private": true,
-  "description": "Personal command center for the tools you build",
+  "description": "Local tool library for macOS \u2014 launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",
   "author": "Carlos Montalvo",
   "scripts": {
@@ -62,7 +62,7 @@
   "build": {
     "appId": "org.cjm.shelf",
     "productName": "Shelf",
-    "copyright": "Copyright © Carlos Montalvo",
+    "copyright": "Copyright \u00a9 Carlos Montalvo",
     "directories": {
       "output": "release",
       "buildResources": "build"
