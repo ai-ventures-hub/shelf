@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import net from 'node:net'
 import { promisify } from 'node:util'
+import { invalidateProcessSnapshot, verifyOccupantsOwnedBy } from './process-ownership'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,9 +28,9 @@ export interface FreePortResult {
 }
 
 /**
- * Returns the first LISTEN pid on a TCP port, or null when free.
+ * Returns every LISTEN pid on a TCP port (deduped), or [] when free.
  */
-export async function findPortOccupant(port: number): Promise<number | null> {
+export async function findPortOccupants(port: number): Promise<number[]> {
   try {
     const { stdout } = await execFileAsync('lsof', [
       '-nP',
@@ -37,11 +38,22 @@ export async function findPortOccupant(port: number): Promise<number | null> {
       '-sTCP:LISTEN',
       '-t',
     ])
-    const pid = parseInt(stdout.trim().split('\n')[0] || '', 10)
-    return Number.isFinite(pid) ? pid : null
+    const pids = stdout
+      .trim()
+      .split('\n')
+      .map((line) => parseInt(line, 10))
+      .filter((pid) => Number.isFinite(pid))
+    return Array.from(new Set(pids))
   } catch {
-    return null
+    return []
   }
+}
+
+/**
+ * Returns the first LISTEN pid on a TCP port, or null when free.
+ */
+export async function findPortOccupant(port: number): Promise<number | null> {
+  return (await findPortOccupants(port))[0] ?? null
 }
 
 /** Resolve the OS process group for ownership checks across Shelf processes. */
@@ -82,27 +94,30 @@ export async function killPortOccupant(
   opts: { graceMs?: number; expectedPgid?: number } = {},
 ): Promise<{ pid: number | null; freed: boolean; refused?: boolean }> {
   const graceMs = opts.graceMs ?? 4_000
-  const pid = await findPortOccupant(port)
+  const pids = await findPortOccupants(port)
+  const pid = pids[0]
   if (!pid) return { pid: null, freed: true }
 
-  if (opts.expectedPgid && !(await processBelongsToGroup(pid, opts.expectedPgid))) {
+  if (opts.expectedPgid && !(await verifyOccupantsOwnedBy(pids, opts.expectedPgid))) {
     return { pid, freed: false, refused: true }
   }
 
   signalPid(opts.expectedPgid || pid, 'SIGTERM')
   await sleep(graceMs)
 
-  let still = await findPortOccupant(port)
-  if (still) {
-    if (opts.expectedPgid && !(await processBelongsToGroup(still, opts.expectedPgid))) {
+  invalidateProcessSnapshot()
+  let still = await findPortOccupants(port)
+  if (still.length > 0) {
+    if (opts.expectedPgid && !(await verifyOccupantsOwnedBy(still, opts.expectedPgid))) {
       // The Shelf-owned process released the port and another process claimed it.
       return { pid, freed: true }
     }
-    signalPid(opts.expectedPgid || still, 'SIGKILL')
+    signalPid(opts.expectedPgid || still[0], 'SIGKILL')
     await sleep(400)
-    still = await findPortOccupant(port)
+    invalidateProcessSnapshot()
+    still = await findPortOccupants(port)
   }
-  return { pid, freed: still === null }
+  return { pid, freed: still.length === 0 }
 }
 
 /** Prefer killing the process group when the listen pid is a group leader. */

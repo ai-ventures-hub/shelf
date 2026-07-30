@@ -73,6 +73,43 @@ export async function terminateProcess(managed: TerminableProcess): Promise<void
   }
 }
 
+/**
+ * SIGTERM -> grace -> SIGKILL a process group (or bare pid) this manager did
+ * not spawn — used to stop receipt-adopted tools that have no configured port.
+ */
+export async function terminatePidGroup(pid: number): Promise<void> {
+  const alive = () => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code === 'EPERM'
+    }
+  }
+  const signalGroup = (signal: NodeJS.Signals) => {
+    try {
+      process.kill(-pid, signal)
+    } catch {
+      // Not a group leader — fall through to the single pid.
+    }
+    try {
+      process.kill(pid, signal)
+    } catch {
+      // already exited
+    }
+  }
+  if (!alive()) return
+  signalGroup('SIGTERM')
+  const deadline = Date.now() + STOP_KILL_GRACE_MS
+  while (Date.now() < deadline && alive()) {
+    await new Promise((resolve) => setTimeout(resolve, 150))
+  }
+  if (alive()) {
+    signalGroup('SIGKILL')
+    await new Promise((resolve) => setTimeout(resolve, 400))
+  }
+}
+
 export function waitForExit(child: ChildProcess, ms: number): Promise<void> {
   return new Promise((resolve) => {
     if (child.exitCode !== null) {

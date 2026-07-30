@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 — 2026-07-29
+
+- Agent clarity: every readiness surface now states that launching via
+  `shelf_launch_tool` is always available. `manual_only` is rewritten to mean
+  "no child interface declared", never "cannot launch"; responses gain
+  `launchable`, `shelfActions`, `childInterface`, `interaction`, and a
+  sanitized `access` list (kind/transport/entrypoint). The deprecated
+  `suggestedAction: manual_use` is no longer emitted.
+- Smart Import + `shelf_inspect_project` detect MCP interfaces a project
+  provides (Node `@modelcontextprotocol/sdk`/`fastmcp`, Python `mcp` servers,
+  project-local mcp.json configs) and prefill `agentAccess` so agents know how
+  to connect to the tool after launching it. Shelf still never connects to or
+  invokes child servers itself.
+- Cross-process adoption hardening: ownership verification now walks process
+  ancestry (bounded, all listeners must verify), fixing "port already in use"
+  when a tool launched by your agent's MCP server has a deeper process tree
+  (npm/vite workers, zsh job control). Portless tools are adopted via live
+  run receipts instead of spawning duplicates; port-drift falls back to
+  ancestry-verified adoption and heals the receipt; external stops finalize
+  the other process's receipt.
+- Quitting the Shelf GUI (or restarting for an update) no longer stops tools
+  launched by your agent's MCP server — they stay running under the agent's
+  ownership.
+- Note: restart your MCP clients (Claude/Cursor/Codex) after updating so they
+  load the new Shelf server bundle.
+
 ## 0.5.2 — 2026-07-28
 
 - Auto-update: Shelf now checks the public GitHub releases feed in the

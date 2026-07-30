@@ -2,24 +2,25 @@ import type { ChildProcess } from 'node:child_process'
 import type { LibraryStore } from './library-store'
 import {
   findFreePort,
-  findPortOccupant,
+  findPortOccupants,
   killPortOccupant,
-  processBelongsToGroup,
   urlForPort,
   withForcedPort,
 } from './ports'
-import { reconcileExternalTool } from './process-reconcile'
+import { verifyOccupantsOwnedBy } from './process-ownership'
+import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
 import {
   PORT_TIMEOUT_MS,
   runOnce,
   sanitizeEnv,
   spawnLoginShell,
+  terminatePidGroup,
   terminateProcess,
   waitForPort,
 } from './process-lifecycle'
 import { ProcessRuntimeSupport } from './process-runtime-support'
 import type { ReceiptStore } from './receipt-store'
-import type { LogLine, ToolRuntimeState } from './types'
+import type { LogLine, RunReceipt, ToolRuntimeState } from './types'
 
 interface ManagedProcess {
   child: ChildProcess
@@ -148,25 +149,40 @@ export class ProcessManager {
     const onPortConflict = options.onPortConflict || 'fail'
     let reassignedFrom: number | undefined
 
+    if (!tool.port) {
+      // Portless tool already launched by another Shelf process (MCP/GUI):
+      // adopt via its live receipt instead of spawning a duplicate.
+      const external = this.findActiveReceipt(toolId)
+      if (external?.pid) {
+        this.runtime.appendLog(
+          toolId,
+          'system',
+          `Adopted Shelf process for this tool (pid ${external.pid}, launched by another Shelf process).`,
+        )
+        return this.runtime.setState(toolId, {
+          toolId,
+          status: 'running',
+          pid: external.pid,
+          message: `Running · pid ${external.pid} (external)`,
+        })
+      }
+    }
+
     if (tool.port) {
-      const occupant = await findPortOccupant(tool.port)
-      if (occupant) {
+      const occupants = await findPortOccupants(tool.port)
+      if (occupants.length > 0) {
         if (onPortConflict !== 'reassign') {
-          const externalPgid = await this.trustedExternalPgid(
-            toolId,
-            tool.port,
-            occupant,
-          )
-          if (externalPgid) {
+          const owner = await this.trustedExternalOwner(toolId, tool.port, occupants)
+          if (owner) {
             this.runtime.appendLog(
               toolId,
               'system',
-              `Adopted Shelf process on port ${tool.port} (process group ${externalPgid}).`,
+              `Adopted Shelf process on port ${tool.port} (owner pid ${owner.ownerPid}).`,
             )
             return this.runtime.setState(toolId, {
               toolId,
               status: 'running',
-              pid: externalPgid,
+              pid: owner.ownerPid,
               message: `Running · port ${tool.port} (external)`,
             })
           }
@@ -450,21 +466,27 @@ export class ProcessManager {
   async stop(toolId: string, reason?: string): Promise<ToolRuntimeState> {
     const tool = this.store.get(toolId)
     const managed = this.processes.get(toolId)
-    const receiptId = managed?.receiptId
+    let receiptId = managed?.receiptId
 
-    // External/MCP launch: no ChildProcess here, but the configured port is live.
-    let externalPid: number | null = null
-    let externalPgid: number | null = null
+    // External launch (MCP / other Shelf process): no ChildProcess here.
+    let externalOwner: ExternalOwner | null = null
+    let externalReceipt: RunReceipt | undefined
     let untrustedOccupant: number | null = null
     if (!managed && tool?.port) {
-      externalPid = await findPortOccupant(tool.port)
-      if (externalPid) {
-        externalPgid = await this.trustedExternalPgid(toolId, tool.port, externalPid)
-        if (!externalPgid) {
-          untrustedOccupant = externalPid
-          externalPid = null
+      const occupants = await findPortOccupants(tool.port)
+      if (occupants.length > 0) {
+        externalOwner = await this.trustedExternalOwner(toolId, tool.port, occupants)
+        if (externalOwner) {
+          receiptId = externalOwner.receiptId
+        } else {
+          untrustedOccupant = occupants[0]
         }
       }
+    } else if (!managed && tool && !tool.port) {
+      // Portless external: the live receipt is both the proof and the target.
+      externalReceipt = this.findActiveReceipt(toolId)
+      if (externalReceipt?.pid) receiptId = externalReceipt.id
+      else externalReceipt = undefined
     }
 
     if (!managed && !tool?.stopCommand && untrustedOccupant && tool?.port) {
@@ -475,7 +497,7 @@ export class ProcessManager {
       })
     }
 
-    if (!managed && !tool?.stopCommand && !externalPid) {
+    if (!managed && !tool?.stopCommand && !externalOwner && !externalReceipt) {
       return this.runtime.setState(toolId, {
         toolId,
         status: 'stopped',
@@ -487,7 +509,7 @@ export class ProcessManager {
       toolId,
       status: 'stopped',
       message: reason || 'Stopping…',
-      pid: managed?.child.pid || externalPgid || undefined,
+      pid: managed?.child.pid || externalOwner?.ownerPid || externalReceipt?.pid || undefined,
     })
 
     try {
@@ -499,29 +521,40 @@ export class ProcessManager {
       if (managed) {
         await terminateProcess(managed)
         this.processes.delete(toolId)
-      } else if (externalPid && tool?.port) {
+      } else if (externalOwner && tool?.port) {
         this.runtime.appendLog(
           toolId,
           'system',
-          `Stopping external process on port ${tool.port} (pid ${externalPid})…`,
+          `Stopping external process on port ${tool.port} (owner pid ${externalOwner.ownerPid})…`,
         )
         const result = await killPortOccupant(tool.port, {
-          expectedPgid: externalPgid || undefined,
+          expectedPgid: externalOwner.ownerPid,
         })
         if (result.refused) {
           throw new Error('Port ownership changed; Shelf left the new process running.')
         }
         if (!result.freed) {
           throw new Error(
-            `Port ${tool.port} still in use after stop (pid ${result.pid ?? externalPid}).`,
+            `Port ${tool.port} still in use after stop (pid ${result.pid ?? externalOwner.ownerPid}).`,
           )
         }
+      } else if (externalReceipt?.pid) {
+        this.runtime.appendLog(
+          toolId,
+          'system',
+          `Stopping external process (pid ${externalReceipt.pid}, launched by another Shelf process)…`,
+        )
+        await terminatePidGroup(externalReceipt.pid)
       }
 
+      const externalPid = externalOwner?.ownerPid || externalReceipt?.pid
       const message = reason || (externalPid ? 'Stopped (external)' : 'Stopped')
       // Timeouts / forced stops count as failed runs; intentional stops as stopped.
       const outcome =
         reason && /timed out|quit|failed/i.test(reason) ? 'failed' : 'stopped'
+      // For external stops, receiptId is the OTHER manager's receipt — the
+      // store is shared, so finalizing here keeps launch history truthful
+      // instead of leaving an open receipt for closeOrphans to mark interrupted.
       this.runtime.endReceipt(receiptId, {
         outcome,
         message,
@@ -555,7 +588,20 @@ export class ProcessManager {
     return this.start(toolId)
   }
 
-  async stopAll(reason = 'Shelf is quitting.'): Promise<void> {
+  /**
+   * scope 'local' stops only processes THIS manager spawned — quitting the
+   * GUI must not kill tools an agent's MCP server launched (and vice versa).
+   * scope 'all' additionally stops adopted externals (smokes/cleanup).
+   */
+  async stopAll(
+    reason = 'Shelf is quitting.',
+    opts: { scope?: 'local' | 'all' } = {},
+  ): Promise<void> {
+    const scope = opts.scope || 'all'
+    if (scope === 'local') {
+      await Promise.all([...this.processes.keys()].map((id) => this.stop(id, reason)))
+      return
+    }
     await this.reconcileExternals()
     const ids = new Set<string>([
       ...this.processes.keys(),
@@ -577,19 +623,57 @@ export class ProcessManager {
       store: this.store,
       runtime: this.runtime,
       isLocallyManaged: (id) => this.processes.has(id),
-      trustedExternalPgid: (id, port, occupantPid) =>
-        this.trustedExternalPgid(id, port, occupantPid),
+      trustedExternalOwner: (id, port, occupants) =>
+        this.trustedExternalOwner(id, port, occupants),
+      findActiveReceipt: (id) => this.findActiveReceipt(id),
     })
   }
 
-  private async trustedExternalPgid(
+  /** Newest open receipt with a live pid for this tool, from any Shelf process. */
+  private findActiveReceipt(toolId: string, port?: number): RunReceipt | undefined {
+    try {
+      return (
+        this.options.receipts?.findActiveProcess(toolId, port) ??
+        // Port drift (edited config, log-sniffed port) must not break ownership:
+        // ancestry against the receipt pid is the real proof, not port equality.
+        this.options.receipts?.findActiveProcess(toolId)
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.runtime.appendLog(toolId, 'system', `Receipt lookup failed: ${message}`)
+      return undefined
+    }
+  }
+
+  /**
+   * Resolve a trusted owner for an externally-launched tool, or null. Trust =
+   * an open Shelf receipt with a live pid whose process tree contains EVERY
+   * current listener on the port (pgid match or bounded ancestry walk).
+   */
+  private async trustedExternalOwner(
     toolId: string,
     port: number,
-    occupantPid: number,
-  ): Promise<number | null> {
-    const receipt = this.options.receipts?.findActiveProcess(toolId, port)
-    if (!receipt?.pid) return null
-    return (await processBelongsToGroup(occupantPid, receipt.pid)) ? receipt.pid : null
+    occupants: number[],
+  ): Promise<ExternalOwner | null> {
+    try {
+      const receipt = this.findActiveReceipt(toolId, port)
+      if (!receipt?.pid) return null
+      const owned = await verifyOccupantsOwnedBy(occupants, receipt.pid)
+      if (!owned) return null
+      if (receipt.port !== port) {
+        this.runtime.appendLog(
+          toolId,
+          'system',
+          `Adopting via receipt with port ${receipt.port ?? 'unset'} (tool now configured for ${port}).`,
+        )
+        this.runtime.markReceiptRunning(receipt.id, { port })
+      }
+      return { ownerPid: receipt.pid, receiptId: receipt.id, receiptPort: receipt.port }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.runtime.appendLog(toolId, 'system', `Ownership check failed: ${message}`)
+      return null
+    }
   }
 
   private async openReadyUrl(toolId: string, url: string): Promise<void> {

@@ -22,9 +22,16 @@ export interface AgentAccess {
 }
 
 export interface ToolReadiness {
+  /** Describes the tool's OWN agent interface — never whether Shelf can launch it. */
   state: CapabilityReadinessState
   summary: string
   reasons: string[]
+  /** True unless the project folder is missing or the launch command is empty. */
+  launchable: boolean
+  /** Shelf MCP tools that work for this tool regardless of readiness state. */
+  shelfActions: string[]
+  /** What `state` is about: the tool's declared child interface. */
+  childInterface: 'none' | 'declared' | 'incomplete' | 'needs_setup'
 }
 
 export interface Tool {
@@ -253,6 +260,8 @@ export interface ProjectImportSuggestion {
   tags: string[]
   designMd: { found: boolean; path?: string }
   notesHint?: string
+  /** Detected agent interfaces the project provides (already normalized). */
+  agentAccess: AgentAccess[]
   confidence: 'high' | 'medium' | 'low'
   signals: string[]
 }

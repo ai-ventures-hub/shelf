@@ -43,6 +43,7 @@ async function main() {
   await run('receipt export', 'node', ['scripts/smoke-receipt-export.mjs'])
   await run('shelf url', 'node', ['scripts/smoke-shelf-url.mjs'])
   await run('adopt-by-port', 'node', ['scripts/smoke-adopt.mjs'])
+  await run('adopt deep/cross-process', 'node', ['scripts/smoke-adopt-deep.mjs'])
   await run('electron smoke', 'npx', ['electron', 'scripts/smoke-electron.cjs'])
   await run('mcp build', 'npm', ['run', 'mcp:build'])
   await run('claude connect', 'node', ['scripts/smoke-claude-connect.mjs'])

@@ -88,7 +88,13 @@ try {
     createdAt: now,
     updatedAt: now,
   })
-  assert.equal(deriveToolReadiness(manual).state, 'manual_only')
+  const manualReadiness = deriveToolReadiness(manual)
+  assert.equal(manualReadiness.state, 'manual_only')
+  // manual_only must never read as "cannot launch" to an agent.
+  assert.equal(manualReadiness.launchable, true)
+  assert.ok(manualReadiness.shelfActions.includes('shelf_launch_tool'))
+  assert.match(manualReadiness.summary, /shelf_launch_tool/)
+  assert.equal(manualReadiness.childInterface, 'none')
 
   const unavailable = library.save({
     ...manual,
@@ -98,11 +104,22 @@ try {
     createdAt: now,
     updatedAt: now,
   })
-  assert.equal(deriveToolReadiness(unavailable).state, 'unavailable')
+  const unavailableReadiness = deriveToolReadiness(unavailable)
+  assert.equal(unavailableReadiness.state, 'unavailable')
+  assert.equal(unavailableReadiness.launchable, false)
 
   const exact = findCapabilityMatches(library.list(), 'batch optimize images')
   assert.equal(exact[0].toolId, ready.id)
   assert.match(exact[0].reasons.join(' '), /Exact capability/)
+  assert.equal(exact[0].suggestedAction, 'launch')
+  assert.equal(exact[0].interaction, 'agent_direct')
+  assert.ok(Array.isArray(exact[0].access) && exact[0].access.length > 0)
+
+  const manualMatch = findCapabilityMatches(library.list(), 'view image contact sheets')
+  assert.equal(manualMatch[0].toolId, manual.id)
+  // Deprecated 'manual_use' is never emitted; GUI nuance moves to `interaction`.
+  assert.equal(manualMatch[0].suggestedAction, 'launch')
+  assert.equal(manualMatch[0].interaction, 'human_ui')
   const natural = findCapabilityMatches(library.list(), 'I need to convert images to WebP')
   assert.equal(natural[0].toolId, ready.id)
   const filtered = findCapabilityMatches(library.list(), 'inspect image metadata', {

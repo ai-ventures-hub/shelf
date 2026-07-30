@@ -297,7 +297,7 @@ server.registerTool(
   'shelf_launch_tool',
   {
     description:
-      'Launch a Shelf tool by id and wait for running/error status. Use onPortConflict=reassign to pick a free port when the configured one is busy.',
+      'Launch a Shelf tool by id and wait for running/error status. Works for every registered tool regardless of readiness state or agentAccess — manual_only tools launch exactly the same way. Use onPortConflict=reassign to pick a free port when the configured one is busy.',
     inputSchema: {
       id: z.string().describe('Tool id'),
       onPortConflict: z
@@ -393,7 +393,7 @@ server.registerTool(
   'shelf_inspect_project',
   {
     description:
-      'Smart-import scan of an absolute project folder. Suggests name, launchCommand, port/url, tags, and DESIGN.md presence without writing the library. Prefer this before shelf_upsert_tool when registering a new folder.',
+      'Smart-import scan of an absolute project folder. Suggests name, launchCommand, port/url, tags, and DESIGN.md presence without writing the library — and detects MCP/CLI agent interfaces the project provides, returned as agentAccess ready to pass to shelf_upsert_tool. Prefer this before shelf_upsert_tool when registering a new folder.',
     inputSchema: {
       projectPath: z.string().min(1).describe('Absolute project folder path'),
     },

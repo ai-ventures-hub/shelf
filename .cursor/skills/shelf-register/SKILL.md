@@ -40,12 +40,12 @@ built, register it so the user can launch it later without remembering commands.
    - **port** / **url** when it is a local web app (must match the launch flags)
    - **tags**: small set (e.g. `Image Tools`, `Client Projects`)
    - **capabilities**: short task phrases an agent can match (e.g. `batch optimize images`, `convert images to WebP`)
-   - **agentAccess**: declare only real CLI, MCP, or HTTP API interfaces; mark `setupRequired` honestly. Never include credentials. Omit this field for GUI-only tools.
+   - **agentAccess**: declare only real CLI, MCP, or HTTP API interfaces the tool itself exposes; mark `setupRequired` honestly. Never include credentials. `shelf_inspect_project` suggests detected interfaces in its `agentAccess` response field — verify before saving. Omitting it is fine for GUI-only tools and limits NOTHING: `shelf_launch_tool` / `shelf_stop_tool` work for every registered tool. A `manual_only` readiness means "no child interface declared", never "cannot launch".
    - **notes**: inputs, common errors, last known working setup
 5. Show the draft to the user and get confirmation before writing.
 6. Call MCP `shelf_upsert_tool` with the confirmed fields.
    - Read `warnings` / `suggestedPort` in the response. If present, re-upsert on the suggested port (or pass `autoFixPort: true`) — do not treat a busy-port upsert as fully healthy.
-7. Optionally call `shelf_launch_tool`. Prefer `shelf_stop_tool` when finished so the GUI is not left with an orphaned listener. If you need a second instance while the port is busy, use `onPortConflict: "reassign"` (Shelf picks a free port, rewrites launch/url, and persists). Default launch adopts an already-listening port instead of erroring.
+7. Optionally call `shelf_launch_tool` — it works regardless of readiness state or `agentAccess`. Prefer `shelf_stop_tool` when finished so the GUI is not left with an orphaned listener. If you need a second instance while the port is busy, use `onPortConflict: "reassign"` (Shelf picks a free port, rewrites launch/url, and persists). Default launch adopts an already-listening port instead of erroring.
 8. Verify with `shelf_get_logs` / `shelf_get_status`.
 9. Tell the user the tool id and how to find it in the Shelf GUI library.
 
@@ -56,6 +56,7 @@ built, register it so the user can launch it later without remembering commands.
 - Do **not** delete unrelated Shelf tools.
 - Prefer updating an existing tool by the same name over creating duplicates.
 - Mask/never echo secret values from MCP responses beyond what the server already sanitizes.
+- Shelf never connects to or invokes a tool's declared MCP/CLI/HTTP endpoint; it records the endpoint so agents can connect themselves.
 - Do **not** register two tools on the same port. Prefer `shelf_find_free_port` and heed upsert warnings.
 - Prefer pinned ports in `launchCommand` (`--port` / `-p`) over relying on framework auto-increment (Next/Vite hopping to 3001+ desyncs Shelf readiness).
 

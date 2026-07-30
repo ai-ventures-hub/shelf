@@ -6,9 +6,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { resolveDesignMd } from './design-md'
 import { findFreePort, isPortFree, urlForPort, withForcedPort } from './ports'
+import { detectAgentAccess } from './project-import-mcp'
 import type { LaunchAlternative, ProjectImportSuggestion } from './types'
 
 export type { LaunchAlternative, ProjectImportSuggestion }
+
+interface PackageJsonLike {
+  name?: string
+  description?: string
+  bin?: string | Record<string, string>
+  scripts?: Record<string, string>
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+}
 
 const SCRIPT_PRIORITY = [
   'dev',
@@ -32,6 +42,7 @@ export async function inspectProject(
     launchAlternatives: [],
     tags: [],
     designMd: { found: false },
+    agentAccess: [],
     confidence: 'low',
     signals: [],
   }
@@ -59,15 +70,10 @@ export async function inspectProject(
   }
 
   // —— Node / JS ——
+  let pkg: PackageJsonLike | null = null
   const pkgPath = path.join(resolved, 'package.json')
   if (entrySet.has('package.json') && fs.existsSync(pkgPath)) {
-    const pkg = readJson(pkgPath) as {
-      name?: string
-      description?: string
-      scripts?: Record<string, string>
-      dependencies?: Record<string, string>
-      devDependencies?: Record<string, string>
-    } | null
+    pkg = readJson(pkgPath) as PackageJsonLike | null
 
     if (pkg) {
       signals.push('Found package.json')
@@ -178,6 +184,13 @@ export async function inspectProject(
     tags.add('Node')
   }
 
+  // —— Agent interfaces the project provides (MCP etc.) ——
+  const detected = detectAgentAccess(resolved, entrySet, pkg, {
+    packageManager: detectPackageManager(entrySet),
+    venvPython: hasPy ? resolveVenvPython(resolved, entrySet) : undefined,
+  })
+  signals.push(...detected.signals)
+
   // —— Port from env files ——
   const envPort = readPortFromEnvFiles(resolved, entrySet)
   if (envPort) {
@@ -253,6 +266,7 @@ export async function inspectProject(
     tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
     designMd: { found: design.found, path: design.path },
     notesHint,
+    agentAccess: detected.access,
     confidence,
     signals,
   }

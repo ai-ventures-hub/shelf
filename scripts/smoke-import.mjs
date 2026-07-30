@@ -84,6 +84,73 @@ const sampleResult = await inspectProject(sample)
 assert.match(sampleResult.launchCommand || '', /npm run start/)
 assert.equal(sampleResult.portPreferred, 8765)
 assert.ok(sampleResult.port === 8765 || sampleResult.portPreferred === 8765)
+// A plain server project must not claim an MCP interface.
+assert.deepEqual(sampleResult.agentAccess, [])
 console.log('OK: sample-tool', sampleResult.launchCommand, `port ${sampleResult.port}`)
+
+// —— MCP server detection: Node project with sdk dep + built entry ——
+await withTempDir(
+  'shelf-import-mcp-node-',
+  {
+    'package.json': JSON.stringify(
+      {
+        name: 'demo-mcp-tool',
+        scripts: { start: 'node server.js' },
+        dependencies: { '@modelcontextprotocol/sdk': '^1.0.0' },
+      },
+      null,
+      2,
+    ),
+    'server.js': 'console.log("web")\n',
+    'mcp/server.js': 'console.log("mcp")\n',
+  },
+  async (dir) => {
+    const result = await inspectProject(dir)
+    assert.equal(result.agentAccess.length, 1)
+    const [access] = result.agentAccess
+    assert.equal(access.kind, 'mcp')
+    assert.equal(access.transport, 'stdio')
+    assert.equal(access.entrypoint, 'node mcp/server.js')
+    assert.equal(access.setupRequired, false)
+    assert.ok(access.id)
+    assert.match(result.signals.join(' '), /MCP server signal/)
+    console.log('OK: node mcp fixture', access.entrypoint)
+  },
+)
+
+// —— MCP detection: Python project with mcp dep + mcp_server.py ——
+await withTempDir(
+  'shelf-import-mcp-py-',
+  {
+    'requirements.txt': 'mcp\nflask\n',
+    'app.py': 'print("hi")\n',
+    'mcp_server.py': 'from mcp.server import Server\n',
+  },
+  async (dir) => {
+    const result = await inspectProject(dir)
+    assert.equal(result.agentAccess.length, 1)
+    assert.equal(result.agentAccess[0].kind, 'mcp')
+    assert.match(result.agentAccess[0].entrypoint, /python3? mcp_server\.py/)
+    console.log('OK: python mcp fixture', result.agentAccess[0].entrypoint)
+  },
+)
+
+// —— MCP config pointing OUTSIDE the project is consumed, not provided ——
+await withTempDir(
+  'shelf-import-mcp-consumer-',
+  {
+    'package.json': JSON.stringify({ name: 'consumer', scripts: { dev: 'vite' } }),
+    '.cursor/mcp.json': JSON.stringify({
+      mcpServers: {
+        shelf: { command: 'node', args: ['/Applications/Shelf.app/Contents/Resources/mcp/mcp/server.js'] },
+      },
+    }),
+  },
+  async (dir) => {
+    const result = await inspectProject(dir)
+    assert.deepEqual(result.agentAccess, [])
+    console.log('OK: consumed-server config ignored')
+  },
+)
 
 console.log('OK: smart import smoke passed')

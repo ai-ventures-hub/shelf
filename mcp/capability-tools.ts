@@ -4,6 +4,7 @@ import type { CapabilityGapStore } from '../shared/capability-gap-store'
 import {
   deriveToolReadiness,
   findCapabilityMatches,
+  summarizeAgentAccess,
 } from '../shared/capability-intelligence'
 import type { LibraryStore } from '../shared/library-store'
 import type { ProcessManager } from '../shared/process-manager'
@@ -28,7 +29,7 @@ export function registerCapabilityTools({
     'shelf_find_capability',
     {
       description:
-        'Find Shelf tools for a natural-language task. Returns explainable ranked matches and declared readiness without launching or configuring anything.',
+        'Find Shelf tools for a natural-language task. Returns explainable ranked matches, declared readiness, and each match\'s declared access entrypoints. Readiness describes the tool\'s own agent interface — launching via shelf_launch_tool is always available for every match.',
       inputSchema: {
         task: z.string().min(1).describe('Task or capability needed'),
         accessKind: z.enum(['cli', 'mcp', 'http-api']).optional(),
@@ -54,7 +55,7 @@ export function registerCapabilityTools({
     'shelf_check_tool_readiness',
     {
       description:
-        'Check declared agent-access readiness for one Shelf tool without contacting or starting its CLI, MCP server, or API.',
+        'Check declared agent-access readiness for one Shelf tool. Readiness describes the tool\'s OWN interface (CLI/MCP/HTTP) — it never gates launching: shelf_launch_tool works for every registered tool. Nothing is contacted or started by this check.',
       inputSchema: { id: z.string().describe('Tool id') },
     },
     async ({ id }) => {
@@ -63,6 +64,7 @@ export function registerCapabilityTools({
       return textResult({
         id,
         readiness: deriveToolReadiness(tool),
+        access: summarizeAgentAccess(tool),
         runtime: await processes.getState(id),
       })
     },

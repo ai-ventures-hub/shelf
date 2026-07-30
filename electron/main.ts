@@ -511,7 +511,8 @@ function registerIpc(): void {
     // quit to Squirrel so the downloaded update installs and relaunches.
     isQuitting = true
     try {
-      await processes.stopAll()
+      // Only our own children — agent-launched tools survive the update restart.
+      await processes.stopAll('Shelf is updating.', { scope: 'local' })
     } catch {
       // Updating matters more than a clean tool shutdown at this point.
     }
@@ -569,8 +570,16 @@ if (gotLock) {
     if (bootUrl) void handleShelfUrl(getDesktopHost(), bootUrl)
 
     // Detect tools launched via MCP (separate ProcessManager) without requiring a relaunch.
+    let reconcileInFlight = false
     externalReconcileTimer = setInterval(() => {
-      void processes.getStates().then(() => refreshTray(getDesktopHost()))
+      if (reconcileInFlight) return
+      reconcileInFlight = true
+      void processes
+        .getStates()
+        .then(() => refreshTray(getDesktopHost()))
+        .finally(() => {
+          reconcileInFlight = false
+        })
     }, 5_000)
     externalReconcileTimer.unref?.()
 
@@ -600,7 +609,9 @@ if (gotLock) {
     if (isQuitting) return
     isQuitting = true
     event.preventDefault()
-    void processes.stopAll().finally(() => {
+    // scope 'local': quitting the GUI must not kill tools an agent's MCP
+    // server launched — that server still owns and manages them.
+    void processes.stopAll('Shelf is quitting.', { scope: 'local' }).finally(() => {
       app.exit(0)
     })
   })

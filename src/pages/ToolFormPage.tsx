@@ -120,6 +120,22 @@ export function ToolFormPage() {
         if (!opts.onlyEmpty) return value
         return current?.trim() ? current : value
       }
+      // Merge detected agent interfaces (dedupe on kind/transport/entrypoint);
+      // onlyEmpty keeps any access the user already declared untouched.
+      const detectedAccess =
+        opts.onlyEmpty && prev.agentAccess.length > 0
+          ? prev.agentAccess
+          : (() => {
+              const seen = new Set(
+                prev.agentAccess.map(
+                  (a) => `${a.kind}:${a.transport || ''}:${a.entrypoint.toLowerCase()}`,
+                ),
+              )
+              const fresh = next.agentAccess.filter(
+                (a) => !seen.has(`${a.kind}:${a.transport || ''}:${a.entrypoint.toLowerCase()}`),
+              )
+              return fresh.length ? [...prev.agentAccess, ...fresh] : prev.agentAccess
+            })()
       return {
         ...prev,
         projectPath: next.projectPath || prev.projectPath,
@@ -134,8 +150,11 @@ export function ToolFormPage() {
               ? next.port
               : prev.port,
         notes: fill(prev.notes, next.notesHint),
+        agentAccess: detectedAccess,
       }
     })
+    // Surface detected access immediately — it lives in the Advanced section.
+    if (next.agentAccess.length > 0) setAdvancedOpen(true)
 
     setTagsText((prev) => {
       if (opts.onlyEmpty && prev.trim()) return prev
@@ -247,6 +266,15 @@ export function ToolFormPage() {
           </ul>
           {suggestion.designMd.found ? (
             <p className="suggest-note">DESIGN.md detected for agent/UI bridge.</p>
+          ) : null}
+          {suggestion.agentAccess.length > 0 ? (
+            <p className="suggest-note">
+              Detected agent access:{' '}
+              {suggestion.agentAccess
+                .map((a) => `${a.kind.toUpperCase()} · ${a.entrypoint}`)
+                .join(' — ')}{' '}
+              (added under Advanced)
+            </p>
           ) : null}
           {suggestion.launchAlternatives.length > 0 ? (
             <div className="suggest-alts">

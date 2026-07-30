@@ -1,10 +1,12 @@
 import fs from 'node:fs'
-import type {
-  AgentAccess,
-  AgentAccessKind,
-  CapabilityMatch,
-  Tool,
-  ToolReadiness,
+import {
+  maskSecrets,
+  type AgentAccess,
+  type AgentAccessKind,
+  type AgentAccessSummary,
+  type CapabilityMatch,
+  type Tool,
+  type ToolReadiness,
 } from './types'
 
 const STOP_WORDS = new Set([
@@ -61,10 +63,24 @@ export function normalizeAgentAccess(values: AgentAccess[] | undefined): AgentAc
   })
 }
 
+/** MCP tools that work for every registered tool, whatever its readiness. */
+const SHELF_ACTIONS = [
+  'shelf_launch_tool',
+  'shelf_stop_tool',
+  'shelf_get_status',
+  'shelf_get_logs',
+]
+
 export function deriveToolReadiness(tool: Tool): ToolReadiness {
-  if (tool.projectPath && !fs.existsSync(tool.projectPath)) {
+  const projectMissing = Boolean(tool.projectPath && !fs.existsSync(tool.projectPath))
+  const launchable = Boolean(tool.launchCommand?.trim()) && !projectMissing
+  const base = { launchable, shelfActions: SHELF_ACTIONS }
+
+  if (projectMissing) {
     return {
+      ...base,
       state: 'unavailable',
+      childInterface: tool.agentAccess.length > 0 ? 'declared' : 'none',
       summary: 'Project folder is unavailable.',
       reasons: [`Project folder not found: ${tool.projectPath}`],
     }
@@ -72,16 +88,24 @@ export function deriveToolReadiness(tool: Tool): ToolReadiness {
 
   if (tool.agentAccess.length === 0) {
     return {
+      ...base,
       state: 'manual_only',
-      summary: 'Shelf can launch this tool, but no agent interface is declared.',
-      reasons: ['No CLI, MCP, or HTTP API access method is configured.'],
+      childInterface: 'none',
+      summary:
+        'Agents can launch and stop this tool through Shelf (shelf_launch_tool / shelf_stop_tool). No child interface is declared — once running, the tool is used through its own UI rather than driven directly by agents.',
+      reasons: [
+        'Launching via shelf_launch_tool is always available for every registered tool.',
+        'No CLI, MCP, or HTTP API interface is declared for connecting to the tool itself. Add agentAccess if the tool exposes one.',
+      ],
     }
   }
 
   const invalid = tool.agentAccess.find((access) => !isAccessComplete(access))
   if (invalid) {
     return {
+      ...base,
       state: 'unavailable',
+      childInterface: 'incomplete',
       summary: `${accessLabel(invalid.kind)} access metadata is incomplete.`,
       reasons: [`${accessLabel(invalid.kind)} requires a valid entrypoint${invalid.kind === 'mcp' ? ' and transport' : ''}.`],
     }
@@ -90,19 +114,33 @@ export function deriveToolReadiness(tool: Tool): ToolReadiness {
   const ready = tool.agentAccess.filter((access) => !access.setupRequired)
   if (ready.length > 0) {
     return {
+      ...base,
       state: 'ready',
-      summary: `Declared ready through ${ready.map((access) => accessLabel(access.kind)).join(', ')}.`,
+      childInterface: 'declared',
+      summary: `Declared ready through ${ready.map((access) => accessLabel(access.kind)).join(', ')}. Connect to the tool yourself using the declared entrypoint(s); Shelf records but never invokes them.`,
       reasons: ready.map((access) => `${accessLabel(access.kind)} is declared ready.`),
     }
   }
 
   return {
+    ...base,
     state: 'needs_setup',
+    childInterface: 'needs_setup',
     summary: 'Agent access is declared but still needs setup.',
     reasons: tool.agentAccess.map(
       (access) => `${accessLabel(access.kind)} is marked setup required.`,
     ),
   }
+}
+
+/** Sanitized access list for agent-facing responses. */
+export function summarizeAgentAccess(tool: Tool): AgentAccessSummary[] {
+  return tool.agentAccess.map((access) => ({
+    kind: access.kind,
+    transport: access.transport,
+    entrypoint: maskSecrets(access.entrypoint),
+    setupRequired: access.setupRequired,
+  }))
 }
 
 export function findCapabilityMatches(
@@ -128,14 +166,16 @@ export function findCapabilityMatches(
       capabilities: tool.capabilities,
       accessKinds: Array.from(new Set(tool.agentAccess.map((access) => access.kind))),
       readiness,
+      access: summarizeAgentAccess(tool),
       score: ranked.score,
       reasons: ranked.reasons,
+      // 'manual_use' is deprecated: a manual_only tool is still launchable, so
+      // the suggested action is launch — `interaction` carries the GUI nuance.
       suggestedAction:
-        readiness.state === 'ready'
-          ? 'launch'
-          : readiness.state === 'needs_setup' || readiness.state === 'unavailable'
-            ? 'configure'
-            : 'manual_use',
+        readiness.state === 'needs_setup' || readiness.state === 'unavailable'
+          ? 'configure'
+          : 'launch',
+      interaction: readiness.state === 'manual_only' ? 'human_ui' : 'agent_direct',
     })
   }
 
