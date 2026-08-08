@@ -71,6 +71,14 @@ export class LibraryStore {
     return this.read().tools.find((t) => t.name.trim().toLowerCase() === needle)
   }
 
+  /** Match on resolved project folder — registering a folder twice must update, not duplicate. */
+  findByProjectPath(projectPath: string): Tool | undefined {
+    const needle = path.resolve(projectPath.trim())
+    return this.read().tools.find(
+      (t) => t.projectPath && path.resolve(t.projectPath) === needle,
+    )
+  }
+
   save(input: Tool): Tool {
     return withFileLockSync(this.filePath, () => {
       const data = this.read()

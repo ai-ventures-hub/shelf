@@ -16,6 +16,7 @@ const DEFAULTS: UiPrefs = {
   appearance: 'system',
   viewMode: 'grid',
   sort: 'name',
+  uiMode: 'developer',
   sidebarWidth: 250,
   sidebarCollapsed: false,
   defaultIconLucide: 'Box',
@@ -23,6 +24,7 @@ const DEFAULTS: UiPrefs = {
   defaultIconBackground: '#3b82f6',
   menuBarEnabled: true,
   closeToMenuBar: true,
+  launchAtLogin: false,
   globalShortcutEnabled: true,
   globalShortcut: 'Command+Shift+Space',
 }

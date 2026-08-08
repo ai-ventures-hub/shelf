@@ -19,8 +19,15 @@ import {
   waitForPort,
 } from './process-lifecycle'
 import { ProcessRuntimeSupport } from './process-runtime-support'
+import { classifyLaunchFailure, remedyFor } from './launch-diagnostics'
 import type { ReceiptStore } from './receipt-store'
-import type { LogLine, RunReceipt, ToolRuntimeState } from './types'
+import type {
+  LaunchErrorCode,
+  LogLine,
+  RemedyKind,
+  RunReceipt,
+  ToolRuntimeState,
+} from './types'
 
 interface ManagedProcess {
   child: ChildProcess
@@ -107,6 +114,11 @@ export class ProcessManager {
     return this.runtime.getLogs(toolId)
   }
 
+  /** Append to a tool's log buffer (e.g. streamed bootstrap/install output). */
+  appendLog(toolId: string, stream: LogLine['stream'], text: string): void {
+    this.runtime.appendLog(toolId, stream, text)
+  }
+
   async start(
     toolId: string,
     options: StartOptions = {},
@@ -123,6 +135,7 @@ export class ProcessManager {
         toolId,
         status: 'error',
         message: 'Tool not found in library.',
+        code: 'tool_not_found',
       })
     }
 
@@ -143,6 +156,8 @@ export class ProcessManager {
         toolId,
         status: 'error',
         message: 'Launch command is empty.',
+        code: 'no_launch_command',
+        remedy: remedyFor('no_launch_command'),
       })
     }
 
@@ -200,6 +215,8 @@ export class ProcessManager {
             toolId,
             status: 'error',
             message,
+            code: 'port_in_use',
+            remedy: remedyFor('port_in_use'),
           })
         }
 
@@ -292,11 +309,14 @@ export class ProcessManager {
           outcome: 'error',
           message: err.message,
         })
+        const { code } = classifyLaunchFailure(this.runtime.getLogs(toolId))
         this.runtime.setState(toolId, {
           toolId,
           status: 'error',
           startedAt,
           message: err.message,
+          code,
+          remedy: remedyFor(code),
         })
       })
 
@@ -321,12 +341,17 @@ export class ProcessManager {
           message,
           pid: child.pid,
         })
+        const failureCode = cleanExit
+          ? undefined
+          : classifyLaunchFailure(this.runtime.getLogs(toolId)).code
         this.runtime.setState(toolId, {
           toolId,
           status: cleanExit ? 'stopped' : 'error',
           startedAt,
           exitCode: code,
           message,
+          code: failureCode,
+          remedy: failureCode ? remedyFor(failureCode) : undefined,
         })
       })
 
@@ -369,7 +394,16 @@ export class ProcessManager {
             if (updated.url) await this.openReadyUrl(toolId, updated.url)
             return this.runtime.peekState(toolId)
           }
-          await this.stop(toolId, 'Port readiness timed out after 60s.')
+          // Classify the captured output first — a dead install or crash is
+          // more actionable than a generic timeout.
+          const { code: timeoutCode } = classifyLaunchFailure(
+            this.runtime.getLogs(toolId),
+            'port_timeout',
+          )
+          await this.stop(toolId, 'Port readiness timed out after 60s.', {
+            code: timeoutCode,
+            remedy: remedyFor(timeoutCode),
+          })
           return this.runtime.peekState(toolId)
         }
         const runningMessage = reassignedFrom
@@ -454,16 +488,23 @@ export class ProcessManager {
           message,
         })
       }
+      const { code } = classifyLaunchFailure(this.runtime.getLogs(toolId))
       return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         startedAt,
         message,
+        code,
+        remedy: remedyFor(code),
       })
     }
   }
 
-  async stop(toolId: string, reason?: string): Promise<ToolRuntimeState> {
+  async stop(
+    toolId: string,
+    reason?: string,
+    failure?: { code?: LaunchErrorCode; remedy?: RemedyKind },
+  ): Promise<ToolRuntimeState> {
     const tool = this.store.get(toolId)
     const managed = this.processes.get(toolId)
     let receiptId = managed?.receiptId
@@ -494,6 +535,7 @@ export class ProcessManager {
         toolId,
         status: 'error',
         message: `Refusing to stop process ${untrustedOccupant} on port ${tool.port} because Shelf did not launch it.`,
+        code: 'stop_refused_not_owner',
       })
     }
 
@@ -567,6 +609,8 @@ export class ProcessManager {
         toolId,
         status: 'stopped',
         message,
+        code: failure?.code,
+        remedy: failure?.remedy,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

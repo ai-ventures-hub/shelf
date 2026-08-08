@@ -1,8 +1,9 @@
 /**
- * Normalize Claude / Cursor / Codex status into one product-facing state machine.
+ * Normalize Claude / Claude Code / Cursor / Codex status into one
+ * product-facing state machine.
  */
 
-export type McpClientKind = 'claude' | 'cursor' | 'codex'
+export type McpClientKind = 'claude' | 'claude-code' | 'cursor' | 'codex'
 
 /** Product-facing connection states shown in the UI. */
 export type McpUiState =
@@ -163,19 +164,32 @@ export function buildClientSnapshot(
   const meta =
     kind === 'claude'
       ? { name: 'Claude Desktop', mark: 'C' }
-      : kind === 'cursor'
-        ? { name: 'Cursor', mark: 'Cu' }
-        : { name: 'OpenAI Codex', mark: 'Cx' }
+      : kind === 'claude-code'
+        ? { name: 'Claude Code', mark: 'CC' }
+        : kind === 'cursor'
+          ? { name: 'Cursor', mark: 'Cu' }
+          : { name: 'OpenAI Codex', mark: 'Cx' }
 
   const derived = deriveMcpUiState(status, opts)
   const detail =
-    kind === 'claude' && derived.state === 'connected'
-      ? 'Shelf is available in Claude.'
-      : kind === 'cursor' && derived.state === 'connected'
-        ? 'Shelf is available in Cursor.'
-        : kind === 'codex' && derived.state === 'connected'
-          ? 'Shelf is available in Codex.'
-          : derived.detail
+    derived.state === 'connected'
+      ? `Shelf is available in ${meta.name}.`
+      : derived.detail
+
+  // Claude Code is a terminal app: no app to reopen — a new session picks
+  // up the config, so the restart state is informational only.
+  if (kind === 'claude-code' && derived.state === 'restart') {
+    return {
+      kind,
+      name: meta.name,
+      mark: meta.mark,
+      configPath: status?.configPath,
+      ...derived,
+      detail: 'Start a new Claude Code session to finish.',
+      primaryLabel: null,
+      primaryKind: null,
+    }
+  }
 
   return {
     kind,

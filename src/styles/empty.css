@@ -7,7 +7,9 @@
   padding:2.5rem 1.5rem;
   border:1px dashed var(--line);
   border-radius:18px;
-  background:#1117258c;
+  /* Translucent panel wash — follows the active theme instead of the
+     hardcoded dark hex that rendered as a gray slab in light mode. */
+  background:color-mix(in srgb, var(--panel) 55%, transparent);
 }
 
 .empty-state h2 {

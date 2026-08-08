@@ -1,8 +1,10 @@
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
 import { usePrefs } from '../hooks/usePrefs'
+import { useUiMode } from '../hooks/useUiMode'
 import { NamePromptDialog } from './NamePromptDialog'
 import { QuickOpen } from './QuickOpen'
 import { ShelfMark } from './ShelfMark'
@@ -109,8 +111,10 @@ function NavCount({ collapsed, value }: { collapsed: boolean; value: number }) {
 
 export function StudioShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
-  const { tools, collections, states, saveCollection } = useLibrary()
+  const { tools, collections, states, saveCollection, refresh } = useLibrary()
   const { prefs, updatePrefs } = usePrefs()
+  const { isDeveloper } = useUiMode()
+  const mcpLabel = isDeveloper ? 'MCP Connections' : 'AI Connections'
   const { gaps: openGaps } = useCapabilityGaps({ status: 'open', limit: 200 })
   const dragRef = useRef<{
     startX: number
@@ -120,6 +124,12 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const collapsed = prefs.sidebarCollapsed
   // Electron has no window.prompt — use an in-app dialog instead.
   const [collectionPromptOpen, setCollectionPromptOpen] = useState(false)
+  // Status line while a dropped folder is being registered/launched.
+  const [dropBusy, setDropBusy] = useState<string | null>(null)
+  // Highlight the window as a drop target while files are dragged over it.
+  // Counter, not boolean: dragenter/dragleave fire per child element.
+  const dragDepth = useRef(0)
+  const [dragActive, setDragActive] = useState(false)
 
   const favorites = tools.filter((t) => t.favorite).length
   const running = Object.values(states).filter((s) => s.status === 'running').length
@@ -158,6 +168,49 @@ export function StudioShell({ children }: { children: ReactNode }) {
     window.addEventListener('mouseup', onUp)
   }
 
+  /** Drop a project folder anywhere on the window → register + launch. */
+  async function handleDroppedFolder(file: File) {
+    if (!window.shelf?.registerProject || !window.shelf.getPathForFile) return
+    const dropped = window.shelf.getPathForFile(file)
+    if (!dropped) return
+    setDropBusy('Looking at that folder…')
+    try {
+      let result = await window.shelf.registerProject(dropped)
+      if (result.outcome === 'invalid_folder') {
+        window.alert(
+          result.issues[0]?.message ||
+            "Shelf can't use that item — drop a project folder.",
+        )
+        return
+      }
+      if (result.outcome === 'needs_setup') {
+        const docker = result.issues.find((i) => i.code === 'docker_not_running')
+        const steps = result.setupNeeds.map((s) => s.label).join(', ')
+        if (docker) {
+          window.alert(
+            `${docker.message} Start it, then launch the tool from its page.`,
+          )
+        } else if (
+          steps &&
+          window.confirm(`${steps} and run? This can take a few minutes.`)
+        ) {
+          setDropBusy('Installing — watch progress in Live logs…')
+          result = await window.shelf.registerProject(dropped, { runSetup: true })
+        }
+      }
+      await refresh()
+      if (result.tool) {
+        navigate(
+          result.outcome === 'saved_needs_review'
+            ? `/tools/${result.tool.id}/edit`
+            : `/tools/${result.tool.id}`,
+        )
+      }
+    } finally {
+      setDropBusy(null)
+    }
+  }
+
   async function createCollection(name: string) {
     const now = new Date().toISOString()
     const saved = await saveCollection({
@@ -172,7 +225,29 @@ export function StudioShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}
+      onDragEnter={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        dragDepth.current += 1
+        setDragActive(true)
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setDragActive(false)
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        dragDepth.current = 0
+        setDragActive(false)
+        const file = e.dataTransfer.files[0]
+        if (!file || dropBusy) return
+        e.preventDefault()
+        void handleDroppedFolder(file)
+      }}
+    >
       <UpdateBanner />
       <aside className="sidebar" aria-label="Shelf navigation">
         <div className="brand-row">
@@ -185,12 +260,16 @@ export function StudioShell({ children }: { children: ReactNode }) {
           ) : null}
           <button
             type="button"
-            className="btn btn-quiet btn-sm sidebar-toggle"
+            className="btn btn-quiet btn-sm btn-icon sidebar-toggle"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             onClick={() => void updatePrefs({ sidebarCollapsed: !collapsed })}
           >
-            {collapsed ? '›' : '‹'}
+            {collapsed ? (
+              <ChevronRight size={15} aria-hidden />
+            ) : (
+              <ChevronLeft size={15} aria-hidden />
+            )}
           </button>
         </div>
 
@@ -237,16 +316,18 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavLabel collapsed={collapsed}>Recent</NavLabel>
             <NavCount collapsed={collapsed} value={recent} />
           </NavLink>
-          <NavLink
-            to="/gaps"
-            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title="Capability gaps"
-            aria-label="Capability gaps"
-          >
-            <NavIcon name="gaps" />
-            <NavLabel collapsed={collapsed}>Capability gaps</NavLabel>
-            <NavCount collapsed={collapsed} value={openGaps.length} />
-          </NavLink>
+          {isDeveloper ? (
+            <NavLink
+              to="/gaps"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title="Capability gaps"
+              aria-label="Capability gaps"
+            >
+              <NavIcon name="gaps" />
+              <NavLabel collapsed={collapsed}>Capability gaps</NavLabel>
+              <NavCount collapsed={collapsed} value={openGaps.length} />
+            </NavLink>
+          ) : null}
 
           {!collapsed ? <p className="nav-label">Collections</p> : <div className="nav-divider" />}
           {collections.map((c) => (
@@ -278,11 +359,11 @@ export function StudioShell({ children }: { children: ReactNode }) {
           <NavLink
             to="/mcp"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title="MCP Connections"
-            aria-label="MCP Connections"
+            title={mcpLabel}
+            aria-label={mcpLabel}
           >
             <NavIcon name="mcp" />
-            <NavLabel collapsed={collapsed}>MCP Connections</NavLabel>
+            <NavLabel collapsed={collapsed}>{mcpLabel}</NavLabel>
           </NavLink>
           <NavLink
             to="/settings"
@@ -313,6 +394,20 @@ export function StudioShell({ children }: { children: ReactNode }) {
         <div className="content-inner">{children}</div>
       </main>
 
+      {dragActive && !dropBusy ? (
+        <div className="drop-overlay" aria-hidden>
+          <div className="drop-overlay-label">
+            Drop a project folder to add it
+          </div>
+        </div>
+      ) : null}
+
+      {dropBusy ? (
+        <div className="drop-progress" role="status" aria-live="polite">
+          {dropBusy}
+        </div>
+      ) : null}
+
       {/* Global ⌘K palette — mounted once so it works from every route. */}
       <QuickOpen onRequestNewCollection={() => setCollectionPromptOpen(true)} />
 
@@ -338,7 +433,7 @@ export function AddToolButton({ compact = false }: { compact?: boolean }) {
       aria-label="Add tool"
       title="Add tool"
     >
-      {compact ? '+' : 'Add tool'}
+      {compact ? <Plus size={17} aria-hidden /> : 'Add tool'}
     </Link>
   )
 }

@@ -10,6 +10,7 @@ import { ToolCard, ToolListRow } from '../components/ToolCard'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
 import { useReceipts } from '../hooks/useReceipts'
+import { useUiMode } from '../hooks/useUiMode'
 import type { ToolStatus } from '../types'
 
 export type LibraryMode =
@@ -25,8 +26,10 @@ export function LibraryPage({
 }: {
   mode?: LibraryMode
 }) {
-  const { tools, collections, states, loading, error, startTool, stopTool } = useLibrary()
+  const { tools, collections, states, loading, error, startTool, stopTool, saveTool } =
+    useLibrary()
   const { prefs, updatePrefs } = usePrefs()
+  const { isDeveloper } = useUiMode()
   const [receiptFilter, setReceiptFilter] = useState<ReceiptOutcomeFilter>('all')
   const [receiptExporting, setReceiptExporting] = useState(false)
   const {
@@ -387,7 +390,7 @@ export function LibraryPage({
       {mode === 'recent' ? (
         <section className="panel" style={{ marginBottom: '1rem' }}>
           <div className="panel-header">
-            <h2 className="panel-title">Launch receipts</h2>
+            <h2 className="panel-title">{isDeveloper ? 'Launch receipts' : 'History'}</h2>
           </div>
           <div className="panel-body">
             <ReceiptHistory
@@ -420,11 +423,14 @@ export function LibraryPage({
             {isFirstRun ? (
               <>
                 <h2>Your shelf is empty</h2>
-                <p>Add a local project Shelf can launch, stop, and remember.</p>
+                <p>
+                  Drop a project folder anywhere in this window — Shelf figures
+                  out how to run it.
+                </p>
                 <div className="empty-state-actions">
                   <AddToolButton />
                   <Link className="btn btn-quiet" to="/mcp">
-                    Connect agents
+                    {isDeveloper ? 'Connect agents' : 'Connect AI apps'}
                   </Link>
                 </div>
                 <p className="empty-state-hint">
@@ -481,7 +487,22 @@ export function LibraryPage({
       ) : (
         <div className="tool-grid">
           {filtered.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} state={states[tool.id]} />
+            <ToolCard
+              key={tool.id}
+              tool={tool}
+              state={states[tool.id]}
+              hideChips={!isDeveloper}
+              onLaunch={() => void startTool(tool.id)}
+              onStop={() => void stopTool(tool.id)}
+              onOpenUrl={
+                tool.url
+                  ? () => void window.shelf.openUrl(tool.url!)
+                  : undefined
+              }
+              onToggleFavorite={() =>
+                void saveTool({ ...tool, favorite: !tool.favorite })
+              }
+            />
           ))}
         </div>
       )}

@@ -17,7 +17,27 @@ built, register it so the user can launch it later without remembering commands.
 - Shelf MCP server configured in the client (Shelf → **MCP Connections** → Connect Claude / Cursor / Codex)
 - Prefer absolute project paths
 
-## Workflow
+## Fast path (preferred)
+
+Call `shelf_register_project` with the absolute `projectPath` — it inspects,
+saves (idempotently: re-registering the same folder updates instead of
+duplicating), and launches in one call with `onPortConflict: "reassign"` by
+default. Read the `outcome`:
+
+- `launched` — done; report the tool id and URL.
+- `needs_setup` — dependencies missing (e.g. no `node_modules`). Ask the user,
+  then call again with `runSetup: true`; setup never runs without that flag.
+- `saved_needs_review` — detection was not confident. Fall back to the manual
+  workflow below to confirm the launch command, then `shelf_upsert_tool`.
+- `saved_launch_failed` — inspect `state.code` (e.g. `deps_missing`,
+  `port_timeout`, `bad_launch_command`) and `shelf_get_logs`, then fix.
+- Use `dryRun: true` to preview the gate without saving anything.
+
+After a successful register, still add `capabilities` and verify `agentAccess`
+via `shelf_upsert_tool` when the tool offers agent interfaces — the fast path
+does not auto-generate capability phrases.
+
+## Manual workflow (fine-grained control)
 
 1. Call `shelf_inspect_project` with the absolute `projectPath` for suggested name, launchCommand, port/url, tags, and DESIGN.md signals. Review `signals` / `confidence` before trusting the draft.
 2. **Check for a project-local DESIGN.md** (Community bridge for agents):

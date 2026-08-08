@@ -67,8 +67,9 @@ def write_app_icon(path: Path, size: int = 1024) -> None:
     print(f"Wrote {path}")
 
 
-def write_tray_template(path: Path, size: int) -> None:
-    """Black-on-transparent official glyph for macOS Template tinting."""
+def write_tray_glyph(path: Path, size: int, fill: tuple[int, int, int, int]) -> None:
+    """Glyph-on-transparent tray asset. Black = macOS Template tinting;
+    brand-colored (non-template) = the active state when tools are running."""
     oversample = 8
     s_px = size * oversample
     img = Image.new("RGBA", (s_px, s_px), (0, 0, 0, 0))
@@ -83,7 +84,7 @@ def write_tray_template(path: Path, size: int) -> None:
     for poly in GLYPH_POLYGONS:
         draw.polygon(
             [(stretch(x) * unit, stretch(y) * unit) for x, y in poly],
-            fill=(0, 0, 0, 255),
+            fill=fill,
         )
     img = img.resize((size, size), Image.LANCZOS)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,8 +92,19 @@ def write_tray_template(path: Path, size: int) -> None:
     print(f"Wrote {path}")
 
 
+def write_tray_template(path: Path, size: int) -> None:
+    write_tray_glyph(path, size, (0, 0, 0, 255))
+
+
+# Menu-bar active tint — brand indigo (--brand, dark theme).
+TRAY_ACTIVE = (120, 149, 255, 255)  # #7895ff
+
+
 if __name__ == "__main__":
     write_app_icon(ROOT / "icon.png")
     # Template suffix + @2x lets Electron/macOS pick the crisp asset.
     write_tray_template(ROOT / "TrayIconTemplate.png", 22)
     write_tray_template(ROOT / "TrayIconTemplate@2x.png", 44)
+    # Non-template brand-colored variant: shown while any tool is running.
+    write_tray_glyph(ROOT / "TrayIconActive.png", 22, TRAY_ACTIVE)
+    write_tray_glyph(ROOT / "TrayIconActive@2x.png", 44, TRAY_ACTIVE)

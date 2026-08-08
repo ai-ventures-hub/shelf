@@ -1,5 +1,6 @@
 /**
- * IPC handlers for one-click MCP client connects (Claude / Cursor / Codex).
+ * IPC handlers for one-click MCP client connects
+ * (Claude Desktop / Claude Code / Cursor / Codex).
  * Kept out of main.ts so window/bootstrap wiring stays readable.
  */
 import { ipcMain } from 'electron'
@@ -8,6 +9,11 @@ import {
   disconnectClaudeDesktop,
   getClaudeDesktopStatus,
 } from '../shared/claude-desktop'
+import {
+  connectClaudeCodeMcp,
+  disconnectClaudeCodeMcp,
+  getClaudeCodeMcpStatus,
+} from '../shared/claude-code-mcp'
 import {
   connectCodexMcp,
   disconnectCodexMcp,
@@ -18,9 +24,12 @@ import {
   disconnectCursorMcp,
   getCursorMcpStatus,
 } from '../shared/cursor-mcp'
+import { detectInstalledClients } from '../shared/mcp-client-detect'
 import * as system from './system-bridge'
 
 export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void {
+  ipcMain.handle('mcpClients:detect', () => detectInstalledClients())
+
   ipcMain.handle('claude:status', () =>
     getClaudeDesktopStatus({ serverPath: resolveMcpServerPath() }),
   )
@@ -33,6 +42,16 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   ipcMain.handle('claude:openApp', async () => {
     await system.openApp('Claude')
   })
+
+  ipcMain.handle('claudeCode:status', () =>
+    getClaudeCodeMcpStatus({ serverPath: resolveMcpServerPath() }),
+  )
+  ipcMain.handle('claudeCode:connect', () =>
+    connectClaudeCodeMcp({ serverPath: resolveMcpServerPath() }),
+  )
+  ipcMain.handle('claudeCode:disconnect', () =>
+    disconnectClaudeCodeMcp({ serverPath: resolveMcpServerPath() }),
+  )
 
   ipcMain.handle('cursor:status', () =>
     getCursorMcpStatus({ serverPath: resolveMcpServerPath() }),

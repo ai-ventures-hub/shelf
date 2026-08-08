@@ -3,12 +3,26 @@ import { ColorField } from '../components/ColorField'
 import { LucideIconPicker } from '../components/LucideIconPicker'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
-import type { AppearanceMode } from '../types'
+import { useUiMode } from '../hooks/useUiMode'
+import type { AppearanceMode, UiMode } from '../types'
 
 const APPEARANCE: { id: AppearanceMode; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow macOS light/dark appearance.' },
   { id: 'light', label: 'Light', hint: 'Always use the light Studio palette.' },
   { id: 'dark', label: 'Dark', hint: 'Always use the dark Studio palette.' },
+]
+
+const EXPERIENCE: { id: UiMode; label: string; hint: string }[] = [
+  {
+    id: 'simple',
+    label: 'Simple',
+    hint: 'Friendly labels and just the essentials. Shelf handles the technical details.',
+  },
+  {
+    id: 'developer',
+    label: 'Developer',
+    hint: 'Show MCP configuration, capability intelligence, and advanced panels.',
+  },
 ]
 
 /** Presets mirrored from shared/global-shortcut.ts for the renderer bundle. */
@@ -21,6 +35,7 @@ const SHORTCUT_PRESETS = [
 
 export function SettingsPage() {
   const { prefs, updatePrefs, resolvedTheme, shortcutStatus } = usePrefs()
+  const { mode, isDeveloper, setMode } = useUiMode()
   const { tools, collections } = useLibrary()
   // Draft so typing does not re-register the hotkey on every keystroke.
   const [shortcutDraft, setShortcutDraft] = useState(prefs.globalShortcut)
@@ -44,6 +59,33 @@ export function SettingsPage() {
           <p className="page-meta">Appearance and desktop preferences for this Mac.</p>
         </div>
       </header>
+
+      <section className="panel" style={{ marginBottom: '1rem' }}>
+        <div className="panel-header">
+          <h2 className="panel-title">Experience</h2>
+        </div>
+        <div className="panel-body stack">
+          <div className="appearance-grid" role="radiogroup" aria-label="Experience">
+            {EXPERIENCE.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={mode === opt.id}
+                className={`appearance-card${mode === opt.id ? ' is-selected' : ''}`}
+                onClick={() => void setMode(opt.id)}
+              >
+                <strong>{opt.label}</strong>
+                <span>{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+          <p className="field-hint" style={{ margin: 0 }}>
+            Switch anytime. This only changes what&apos;s shown — nothing is deleted or
+            reconfigured.
+          </p>
+        </div>
+      </section>
 
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <div className="panel-header">
@@ -178,6 +220,14 @@ export function SettingsPage() {
           <label className="checkbox-row">
             <input
               type="checkbox"
+              checked={prefs.launchAtLogin}
+              onChange={(e) => void updatePrefs({ launchAtLogin: e.target.checked })}
+            />
+            Start Shelf when you log in
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
               checked={prefs.globalShortcutEnabled}
               onChange={(e) =>
                 void updatePrefs({ globalShortcutEnabled: e.target.checked })
@@ -250,6 +300,7 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {isDeveloper ? (
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <div className="panel-header">
           <h2 className="panel-title">URL scheme</h2>
@@ -278,6 +329,7 @@ export function SettingsPage() {
           </ul>
         </div>
       </section>
+      ) : null}
 
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <div className="panel-header">
@@ -304,6 +356,7 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {isDeveloper ? (
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <div className="panel-header">
           <h2 className="panel-title">Run history</h2>
@@ -355,6 +408,7 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <section className="panel">
         <div className="panel-header">

@@ -37,6 +37,15 @@ export function useReceipts(opts: UseReceiptsOpts = {}) {
     void refresh()
   }, [refresh])
 
+  // Receipts written by the MCP server (agent launches) arrive via the
+  // main-process file watcher rather than in-window receipt events.
+  useEffect(() => {
+    if (!window.shelf?.onExternalDataChange) return
+    return window.shelf.onExternalDataChange((filename) => {
+      if (filename === 'receipts.json') void refresh()
+    })
+  }, [refresh])
+
   useEffect(() => {
     if (!window.shelf?.onReceiptUpdate) return
     return window.shelf.onReceiptUpdate((receipt) => {

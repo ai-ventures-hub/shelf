@@ -85,10 +85,12 @@ function writeAtomic(configPath: string, data: ClaudeDesktopConfigFile): void {
 function shelfEntry(
   nodeCommand: string,
   serverPath: string,
+  env?: Record<string, string>,
 ): ClaudeMcpServerEntry {
   return {
     command: nodeCommand,
     args: [serverPath],
+    ...(env ? { env } : {}),
   }
 }
 
@@ -217,7 +219,7 @@ export async function connectClaudeDesktop(opts: {
   const existed = fs.existsSync(configPath)
   const previousText = existed ? fs.readFileSync(configPath, 'utf8') : ''
   const config = existed ? readClaudeDesktopConfig(configPath) : { mcpServers: {} }
-  const nextEntry = shelfEntry(node.command, opts.serverPath)
+  const nextEntry = shelfEntry(node.command, opts.serverPath, node.env)
   const mcpServers = {
     ...(config.mcpServers || {}),
     [CLAUDE_MCP_SERVER_KEY]: nextEntry,

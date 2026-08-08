@@ -58,7 +58,16 @@ export function OnboardingFlow() {
     } catch {
       // Delivery is best-effort; never trap the user in onboarding.
     }
-    await updatePrefs({ onboardingCompletedVersion: version })
+    // Only clear vibe-coder signals opt into simple mode; ambiguous or
+    // skipped answers keep the full developer experience.
+    const simple =
+      finalAnswers.persona[0] === 'AI-powered builder' ||
+      (!finalAnswers.persona[0] &&
+        finalAnswers.agents.includes('I’m just getting started'))
+    await updatePrefs({
+      onboardingCompletedVersion: version,
+      uiMode: simple ? 'simple' : 'developer',
+    })
   }
 
   function advance(next: number, finalAnswers: Answers = answers) {

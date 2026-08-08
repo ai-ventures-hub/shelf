@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.7.0 — 2026-08-08
+
+Simple Mode + the guided experience: Shelf now serves people entering vibe
+coding, not just developers — without changing anything for developers.
+
+- **Experience toggle (Simple / Developer)**: new first panel in Settings.
+  Simple mode hides agent-integration surfaces (Capability Intelligence,
+  Capability Gaps, MCP advanced panel, URL-scheme docs) and softens labels
+  ("AI Connections", "Add a tool"). Existing users stay in Developer Mode
+  untouched; new users get a mode derived from their onboarding answers.
+  Presentation-only: the engine, data files, and MCP server behave
+  identically in both modes.
+- **Drop a folder, it runs**: drag a project folder anywhere onto the window
+  (a dashed overlay invites the drop) — Shelf inspects it, saves it,
+  installs missing packages with your consent (streamed into Live logs,
+  never silently), launches, and opens the browser. Re-dropping the same
+  folder updates instead of duplicating. Agents get the same one-shot flow
+  via the new `shelf_register_project` MCP tool (`dryRun`/`runSetup` gated).
+- **Plain-language launch failures**: failures now carry structured codes
+  (deps_missing, port_in_use, port_timeout, bad_launch_command, …) shown as
+  friendly remedy cards — "Launch on a free port", "Edit launch command",
+  and **Copy report for your AI tool** (a paste-ready, secrets-masked
+  failure report). `shelf_launch_tool` / `shelf_get_status` include the same
+  `code` for agents.
+- **Claude Code joins one-click connect** (user scope `~/.claude.json`,
+  merge-only with backup), with installed-client detection so Simple mode
+  shows only the AI apps on this Mac. Official brand marks (with dark-theme
+  variants) replace the lettermark tiles, with attribution.
+- **No more "Node needed"**: when no system Node exists, connect entries run
+  the MCP server on Shelf's own bundled runtime (`ELECTRON_RUN_AS_NODE`) —
+  zero-step connect on Macs without a dev toolchain.
+- **Live library**: the GUI watches the shared data files and refreshes the
+  moment an agent adds a tool or writes a receipt — no more relaunch to see
+  what your agent just registered. Tray reflects it too.
+- **Library cards**: inline controls (launch / stop / open in browser) with
+  semantic colors, and the favorite star is now a one-click gold toggle on
+  the card instead of a text prefix. Simple mode hides the tag/port chips
+  for a cleaner grid. GUI launches in Simple mode heal busy ports
+  automatically (developer keeps the explicit conflict).
+- **Menu bar**: favorites now launch from the tray; the tray glyph lights up
+  in brand indigo while any tool is running. New "Start Shelf when you log
+  in" setting (packaged builds).
+- **UI system pass**: one icon system (lucide) replaces text-glyph icons; a
+  square icon-button primitive with normalized line-heights ends the
+  slightly-off-center controls; Inter is self-hosted (no Google Fonts call
+  at launch — metrics are deterministic offline and the privacy posture
+  holds); light-mode fixes (empty-state slab, theme-aware tokens); AI
+  Connections page fills the content width in a responsive two-column grid;
+  a pulsing Starting pill while ports come up.
+- Note: restart your MCP clients (Claude Desktop/Claude Code/Cursor/Codex)
+  after updating so they load the new Shelf server bundle.
+
 ## 0.6.0 — 2026-07-29
 
 - Agent clarity: every readiness surface now states that launching via

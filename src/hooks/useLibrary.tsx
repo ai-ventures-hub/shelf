@@ -7,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Collection, LogLine, Tool, ToolRuntimeState } from '../types'
+import { usePrefs } from './usePrefs'
+import type {
+  Collection,
+  LogLine,
+  StartOptions,
+  Tool,
+  ToolRuntimeState,
+} from '../types'
 
 interface LibraryContextValue {
   tools: Tool[]
@@ -20,7 +27,7 @@ interface LibraryContextValue {
   deleteTool: (id: string) => Promise<void>
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
-  startTool: (id: string) => Promise<void>
+  startTool: (id: string, options?: StartOptions) => Promise<void>
   stopTool: (id: string) => Promise<void>
   restartTool: (id: string) => Promise<void>
   getLogs: (id: string) => Promise<LogLine[]>
@@ -34,6 +41,7 @@ function hasShelfApi(): boolean {
 }
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
+  const { prefs } = usePrefs()
   const [tools, setTools] = useState<Tool[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [states, setStates] = useState<Record<string, ToolRuntimeState>>({})
@@ -62,6 +70,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
   }, [])
+
+  // Agents add/edit tools through the MCP server (a separate process); the
+  // main process watches the shared store and tells us to re-read.
+  useEffect(() => {
+    if (!window.shelf?.onExternalDataChange) return
+    return window.shelf.onExternalDataChange((filename) => {
+      if (filename === 'library.json') void refresh()
+    })
+  }, [refresh])
 
   useEffect(() => {
     void refresh()
@@ -107,12 +124,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
-  const startTool = useCallback(async (id: string) => {
-    const state = await window.shelf.startTool(id)
-    setStates((prev) => ({ ...prev, [id]: state }))
-    const nextTools = await window.shelf.listTools()
-    setTools(nextTools)
-  }, [])
+  // Simple mode heals busy ports silently; Developer Mode keeps the explicit
+  // failure so power users see the conflict. Callers may override per action
+  // (e.g. the "Launch on a free port" remedy button).
+  const startTool = useCallback(
+    async (id: string, options?: StartOptions) => {
+      const state = await window.shelf.startTool(
+        id,
+        options ??
+          (prefs.uiMode === 'simple' ? { onPortConflict: 'reassign' } : undefined),
+      )
+      setStates((prev) => ({ ...prev, [id]: state }))
+      const nextTools = await window.shelf.listTools()
+      setTools(nextTools)
+    },
+    [prefs.uiMode],
+  )
 
   const stopTool = useCallback(async (id: string) => {
     const state = await window.shelf.stopTool(id)

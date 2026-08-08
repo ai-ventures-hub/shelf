@@ -18,6 +18,7 @@ import {
   withForcedPort,
 } from '../shared/ports'
 import { inspectProject } from '../shared/project-import'
+import { registerProject } from '../shared/register-project'
 import { ReceiptStore } from '../shared/receipt-store'
 import {
   sanitizeToolForOutput,
@@ -402,6 +403,55 @@ server.registerTool(
     try {
       const suggestion = await inspectProject(projectPath)
       return textResult(suggestion)
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
+  },
+)
+
+server.registerTool(
+  'shelf_register_project',
+  {
+    description:
+      'One-shot register: inspect a project folder, save it to the library (idempotent — re-registering the same folder updates instead of duplicating), optionally run detected setup (package install; requires runSetup=true consent), and launch. Collapses the inspect → upsert → launch workflow into one call with the same safety semantics. Outcomes: launched | saved | needs_setup | saved_needs_review | saved_launch_failed | invalid_folder | dry_run. Failed launches carry a structured state.code (e.g. deps_missing, port_timeout).',
+    inputSchema: {
+      projectPath: z.string().min(1).describe('Absolute project folder path'),
+      launch: z
+        .boolean()
+        .optional()
+        .describe('Launch after saving (default true)'),
+      onPortConflict: z
+        .enum(['fail', 'reassign'])
+        .optional()
+        .describe('Default reassign: pick a free port and update the entry when busy'),
+      runSetup: z
+        .boolean()
+        .optional()
+        .describe(
+          'Consent to run detected setup steps (e.g. npm install). Never runs without this.',
+        ),
+      dryRun: z
+        .boolean()
+        .optional()
+        .describe('Inspect and gate only; save nothing, launch nothing'),
+    },
+  },
+  async ({ projectPath, launch, onPortConflict, runSetup, dryRun }) => {
+    try {
+      const result = await registerProject(
+        projectPath,
+        { store, processes },
+        {
+          autoLaunch: launch ?? true,
+          onPortConflict: onPortConflict || 'reassign',
+          runSetup,
+          dryRun,
+        },
+      )
+      return textResult({
+        ...result,
+        tool: result.tool ? sanitizeToolForOutput(result.tool) : undefined,
+      })
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err))
     }

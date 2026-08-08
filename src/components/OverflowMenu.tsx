@@ -1,3 +1,4 @@
+import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 
 export interface OverflowMenuItem {
@@ -17,12 +18,16 @@ export function OverflowMenu({
   items,
   label = 'More actions',
   triggerLabel,
+  size = 'sm',
 }: {
   items: OverflowMenuItem[]
   /** Accessible name for the trigger (and visible text when unlabeled). */
   label?: string
   /** When set, show this label + chevron instead of ⋯. */
   triggerLabel?: string
+  /** Unlabeled square trigger size — match the neighboring buttons' rail
+   *  (sm = 34px next to btn-sm rows, md = 42px next to full-size buttons). */
+  size?: 'sm' | 'md'
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -49,7 +54,9 @@ export function OverflowMenu({
     <div className={`overflow-menu${labeled ? ' is-labeled' : ''}`} ref={rootRef}>
       <button
         type="button"
-        className={`btn btn-quiet${labeled ? '' : ' btn-sm'} overflow-menu-trigger`}
+        className={`btn btn-quiet${
+          labeled ? '' : size === 'md' ? ' btn-icon' : ' btn-sm btn-icon'
+        } overflow-menu-trigger`}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -75,7 +82,7 @@ export function OverflowMenu({
             </svg>
           </>
         ) : (
-          '⋯'
+          <MoreHorizontal size={size === 'md' ? 17 : 15} aria-hidden />
         )}
       </button>
       {open ? (

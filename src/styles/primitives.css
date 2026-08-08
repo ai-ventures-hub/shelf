@@ -93,6 +93,26 @@
   font-weight:720;
   cursor:pointer;
   text-decoration:none;
+  /* Buttons center their own box; body leading must not leak in. */
+  line-height:1;
+}
+
+/* SVG icons in buttons: block-level (no baseline gap), never squeezed. */
+.btn svg {
+  display:block;
+  flex-shrink:0;
+}
+
+/* Icon-only button: exact square, content dead-centered. */
+.btn-icon {
+  width:42px;
+  height:42px;
+  padding:0;
+}
+
+.btn-sm.btn-icon {
+  width:34px;
+  height:34px;
 }
 
 .btn:disabled {
@@ -129,6 +149,13 @@
   min-height:34px;
   padding:.35rem .75rem;
   font-size:.75rem;
+}
+
+/* Nav / decorative inline SVGs share the block-level rule. */
+.nav-item svg,
+.overflow-menu-trigger svg {
+  display:block;
+  flex-shrink:0;
 }
 .panel {
   border:1px solid var(--line);

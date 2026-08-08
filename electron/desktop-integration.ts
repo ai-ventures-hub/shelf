@@ -47,6 +47,7 @@ export interface DesktopIntegrationHost {
 }
 
 let tray: Tray | null = null
+let trayShowsActive = false
 let registeredShortcut: string | null = null
 /** Last registration result so Settings can show conflict state after reload. */
 let lastShortcutStatus: ShortcutStatus = {
@@ -95,6 +96,33 @@ function resolveTrayIcon(): Electron.NativeImage {
   return nativeImage.createEmpty()
 }
 
+/** Brand-colored (non-template) glyph shown while any tool is running. */
+function resolveTrayIconActive(): Electron.NativeImage | null {
+  const candidates = [
+    path.join(process.resourcesPath, 'TrayIconActive.png'),
+    path.join(app.getAppPath(), 'build', 'TrayIconActive.png'),
+    path.join(__dirname, '../../build/TrayIconActive.png'),
+  ]
+  for (const candidate of candidates) {
+    try {
+      const img = nativeImage.createFromPath(candidate)
+      if (!img.isEmpty()) return img
+    } catch {
+      // try next
+    }
+  }
+  return null
+}
+
+/** Swap the menu-bar glyph: brand-lit when tools run, template when idle. */
+function applyTrayActivity(active: boolean): void {
+  if (!tray) return
+  if (active === trayShowsActive) return
+  const img = active ? resolveTrayIconActive() : null
+  tray.setImage(img && !img.isEmpty() ? img : resolveTrayIcon())
+  trayShowsActive = active && Boolean(img)
+}
+
 export function showOrCreateWindow(host: DesktopIntegrationHost): BrowserWindow {
   let win = host.getMainWindow()
   if (!win || win.isDestroyed()) {
@@ -139,7 +167,11 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
   const runningIds = new Set(
     states.filter((s) => s.status === 'running').map((s) => s.toolId),
   )
-  const running = host.store.list().filter((t) => runningIds.has(t.id))
+  const allTools = host.store.list()
+  const running = allTools.filter((t) => runningIds.has(t.id))
+  applyTrayActivity(running.length > 0)
+  // Favorites not already running: one-click launch from anywhere.
+  const favorites = allTools.filter((t) => t.favorite && !runningIds.has(t.id))
 
   // Submenu per tool: open detail, open URL, stop — not just a flat Stop list.
   const runningItems: Electron.MenuItemConstructorOptions[] =
@@ -199,6 +231,24 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
       enabled: false,
     },
     ...runningItems,
+    // Simple mode heals busy ports on launch, matching in-app behavior.
+    ...(favorites.length > 0
+      ? ([
+          { type: 'separator' },
+          { label: 'Favorites', enabled: false },
+          ...favorites.map((tool) => ({
+            label: tool.name,
+            click: () => {
+              void host.processes
+                .start(tool.id, {
+                  onPortConflict:
+                    host.prefs.get().uiMode === 'simple' ? 'reassign' : 'fail',
+                })
+                .then(() => refreshTray(host))
+            },
+          })),
+        ] satisfies Electron.MenuItemConstructorOptions[])
+      : []),
     { type: 'separator' },
     {
       label: 'Add Tool',

@@ -49,11 +49,15 @@ function candidateNodePaths(): string[] {
   return out
 }
 
-export async function resolveNodeCommand(): Promise<{
+export interface ResolvedNodeCommand {
   command: string
   ok: boolean
   path?: string
-}> {
+  /** Extra env the MCP entry must carry (Electron-as-Node fallback). */
+  env?: Record<string, string>
+}
+
+export async function resolveNodeCommand(): Promise<ResolvedNodeCommand> {
   for (const candidate of candidateNodePaths()) {
     if (candidate && fs.existsSync(candidate)) {
       return { command: candidate, ok: true, path: candidate }
@@ -72,6 +76,18 @@ export async function resolveNodeCommand(): Promise<{
     }
   } catch {
     // fall through
+  }
+
+  // Last resort: Shelf ships its own Node runtime inside Electron. Running
+  // the app binary with ELECTRON_RUN_AS_NODE turns "install Node 20+ first"
+  // into zero-step success on Macs with no dev toolchain.
+  if (process.versions.electron && process.execPath && fs.existsSync(process.execPath)) {
+    return {
+      command: process.execPath,
+      ok: true,
+      path: process.execPath,
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    }
   }
 
   return {

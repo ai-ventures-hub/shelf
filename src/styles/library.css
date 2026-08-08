@@ -390,3 +390,73 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Card footer: chips (developer) and/or inline controls. */
+.tool-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.tool-card-footer .tool-meta {
+  min-width: 0;
+}
+
+.tool-card-controls {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+
+/* Semantic control colors: gold favorite, green go, red stop, brand open. */
+.control-favorite {
+  color: var(--subtle);
+}
+
+.control-favorite.is-active {
+  color: var(--favorite);
+}
+
+.control-launch {
+  color: var(--success);
+}
+
+.control-stop {
+  color: var(--danger);
+}
+
+.control-open {
+  color: var(--brand-strong);
+}
+
+.tool-list-name-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.row-favorite {
+  color: var(--favorite);
+  flex-shrink: 0;
+}
+
+.favorite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--favorite);
+}
+
+/* Starting: gentle pulse so port-waits read as alive, not frozen.
+   (Global reduced-motion rule in tokens.css disables this automatically.) */
+@keyframes pill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.status-pill[data-status='starting'] {
+  animation: pill-pulse 1.6s ease-in-out infinite;
+}

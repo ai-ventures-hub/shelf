@@ -31,6 +31,19 @@ export type {
   CapabilityGapsFile,
 } from '../shared/types'
 export { DEFAULT_UI_PREFS } from '../shared/types'
+export type {
+  UiMode,
+  LaunchErrorCode,
+  RemedyKind,
+} from '../shared/types'
+export type {
+  RegisterOutcome,
+  RegisterProjectOptions,
+  RegisterProjectResult,
+} from '../shared/register-project'
+export type { BootstrapResult, BootstrapStep } from '../shared/project-bootstrap'
+export type { PreflightIssue } from '../shared/launch-preflight'
+export type { StartOptions, PortConflictPolicy } from '../shared/process-manager'
 export type { ShortcutStatus } from '../shared/global-shortcut'
 export {
   DEFAULT_GLOBAL_SHORTCUT,
@@ -41,6 +54,14 @@ export type {
   ClaudeConnectResult,
 } from '../shared/claude-desktop'
 export { CLAUDE_TEST_PROMPT } from '../shared/claude-desktop'
+export type {
+  ClaudeCodeMcpStatus,
+  ClaudeCodeConnectResult,
+} from '../shared/claude-code-mcp'
+export type {
+  DetectableMcpClient,
+  McpClientDetection,
+} from '../shared/mcp-client-detect'
 export type {
   CursorMcpStatus,
   CursorConnectResult,

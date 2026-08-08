@@ -70,10 +70,15 @@ function writeAtomic(configPath: string, data: CursorMcpConfigFile): void {
   fs.renameSync(tmp, configPath)
 }
 
-function shelfEntry(nodeCommand: string, serverPath: string): CursorMcpServerEntry {
+function shelfEntry(
+  nodeCommand: string,
+  serverPath: string,
+  env?: Record<string, string>,
+): CursorMcpServerEntry {
   return {
     command: nodeCommand,
     args: [serverPath],
+    ...(env ? { env } : {}),
   }
 }
 
@@ -176,7 +181,7 @@ export async function connectCursorMcp(opts: {
   const existed = fs.existsSync(configPath)
   const previousText = existed ? fs.readFileSync(configPath, 'utf8') : ''
   const config = existed ? readCursorMcpConfig(configPath) : { mcpServers: {} }
-  const nextEntry = shelfEntry(node.command, opts.serverPath)
+  const nextEntry = shelfEntry(node.command, opts.serverPath, node.env)
   const mcpServers = {
     ...(config.mcpServers || {}),
     [CURSOR_MCP_SERVER_KEY]: nextEntry,

@@ -1,3 +1,5 @@
+import { ExternalLink, Play, Square, Star } from 'lucide-react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { Tool, ToolRuntimeState } from '../types'
 import { StatusPill } from './StatusPill'
@@ -18,13 +20,33 @@ function formatRelative(iso?: string): string {
 export function ToolCard({
   tool,
   state,
+  hideChips = false,
+  onLaunch,
+  onStop,
+  onOpenUrl,
+  onToggleFavorite,
 }: {
   tool: Tool
   state?: ToolRuntimeState
+  /** Simple mode: no port/time/tag chips — icon, name, status, controls. */
+  hideChips?: boolean
+  onLaunch?: () => void
+  onStop?: () => void
+  onOpenUrl?: () => void
+  onToggleFavorite?: () => void
 }) {
   const status = state?.status || 'stopped'
+  const live = status === 'running' || status === 'starting'
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
+  const hasControls = Boolean(onLaunch || onStop)
+
+  // The whole card is a Link; controls must not trigger navigation.
+  const control = (action?: () => void) => (e: ReactMouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    action?.()
+  }
 
   return (
     <Link
@@ -44,23 +66,84 @@ export function ToolCard({
         <StatusPill status={status} message={state?.message} />
       </div>
       <div>
-        <h3 className="tool-name">
-          {tool.favorite ? '★ ' : ''}
-          {tool.name}
-        </h3>
+        <h3 className="tool-name">{tool.name}</h3>
         <p className="tool-desc">
           {tool.description || state?.message || 'No description yet.'}
         </p>
       </div>
-      <div className="tool-meta">
-        {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
-        <span className="meta-chip">{formatRelative(tool.lastLaunchedAt)}</span>
-        {visibleTags.map((tag) => (
-          <span key={tag} className="tag-chip">
-            {tag}
-          </span>
-        ))}
-        {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
+      <div className="tool-card-footer">
+        {!hideChips ? (
+          <div className="tool-meta">
+            {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
+            <span className="meta-chip">{formatRelative(tool.lastLaunchedAt)}</span>
+            {visibleTags.map((tag) => (
+              <span key={tag} className="tag-chip">
+                {tag}
+              </span>
+            ))}
+            {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
+          </div>
+        ) : null}
+        {hasControls ? (
+          <div className="tool-card-controls">
+            {onToggleFavorite ? (
+              <button
+                type="button"
+                className={`btn btn-quiet btn-sm btn-icon control-favorite${
+                  tool.favorite ? ' is-active' : ''
+                }`}
+                title={tool.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-label={
+                  tool.favorite
+                    ? `Remove ${tool.name} from favorites`
+                    : `Add ${tool.name} to favorites`
+                }
+                aria-pressed={tool.favorite}
+                onClick={control(onToggleFavorite)}
+              >
+                <Star
+                  size={13}
+                  fill={tool.favorite ? 'currentColor' : 'none'}
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+            {live ? (
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm btn-icon control-stop"
+                title="Stop"
+                aria-label={`Stop ${tool.name}`}
+                disabled={status === 'starting'}
+                onClick={control(onStop)}
+              >
+                <Square size={13} aria-hidden />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm btn-icon control-launch"
+                title="Launch"
+                aria-label={`Launch ${tool.name}`}
+                onClick={control(onLaunch)}
+              >
+                {/* Triangles lean left; 1px nudge optically centers it. */}
+                <Play size={13} aria-hidden style={{ marginLeft: 1 }} />
+              </button>
+            )}
+            {tool.url && status === 'running' && onOpenUrl ? (
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm btn-icon control-open"
+                title="Open in browser"
+                aria-label={`Open ${tool.name} in browser`}
+                onClick={control(onOpenUrl)}
+              >
+                <ExternalLink size={13} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Link>
   )
@@ -95,8 +178,15 @@ export function ToolListRow({
             iconBackground={tool.iconBackground}
             className="tool-icon tool-icon-sm"
           />
-          <span>
-            {tool.favorite ? '★ ' : ''}
+          <span className="tool-list-name-text">
+            {tool.favorite ? (
+              <Star
+                className="row-favorite"
+                size={12}
+                fill="currentColor"
+                aria-label="Favorite"
+              />
+            ) : null}
             {tool.name}
           </span>
         </Link>

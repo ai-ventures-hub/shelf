@@ -52,11 +52,24 @@ function writeAtomicText(configPath: string, text: string): void {
   fs.renameSync(tmp, configPath)
 }
 
-function shelfBody(nodeCommand: string, serverPath: string): string[] {
-  return [
+function shelfBody(
+  nodeCommand: string,
+  serverPath: string,
+  env?: Record<string, string>,
+): string[] {
+  const lines = [
     `command = ${tomlBasicString(nodeCommand)}`,
     `args = ${tomlStringArray([serverPath])}`,
   ]
+  // Inline env table keeps it inside [mcp_servers.shelf], so
+  // removeTomlTables on update/disconnect cleans it up with the entry.
+  if (env && Object.keys(env).length > 0) {
+    const pairs = Object.entries(env)
+      .map(([k, v]) => `${k} = ${tomlBasicString(v)}`)
+      .join(', ')
+    lines.push(`env = { ${pairs} }`)
+  }
+  return lines
 }
 
 function readShelfEntry(toml: string): { command?: string; args?: string[] } | null {
@@ -163,7 +176,7 @@ export async function connectCodexMcp(opts: {
   const nextText = upsertTomlTable(
     previousText,
     CODEX_MCP_TABLE,
-    shelfBody(node.command, opts.serverPath),
+    shelfBody(node.command, opts.serverPath, node.env),
   )
 
   let backupPath: string | undefined

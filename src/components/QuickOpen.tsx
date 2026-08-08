@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
+import { useUiMode } from '../hooks/useUiMode'
 import {
   groupQuickOpenItems,
   rankQuickOpenItems,
@@ -35,6 +36,7 @@ interface QuickOpenProps {
  */
 export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
   const navigate = useNavigate()
+  const { isDeveloper } = useUiMode()
   const { tools, collections, states, startTool, stopTool } = useLibrary()
   // Recent receipts for relaunch / jump-to-tool from the palette.
   const { receipts } = useReceipts({ limit: 8 })
@@ -221,19 +223,23 @@ export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
         boost: 4,
         run: () => navigate('/recent'),
       },
-      {
-        id: 'action:capability-gaps',
-        kind: 'action',
-        title: 'Capability gaps',
-        subtitle: 'Review unmet agent needs',
-        keywords: ['missing tools', 'recommendations', 'capabilities', 'agent'],
-        boost: 4,
-        run: () => navigate('/gaps'),
-      },
+      ...(isDeveloper
+        ? [
+            {
+              id: 'action:capability-gaps',
+              kind: 'action' as const,
+              title: 'Capability gaps',
+              subtitle: 'Review unmet agent needs',
+              keywords: ['missing tools', 'recommendations', 'capabilities', 'agent'],
+              boost: 4,
+              run: () => navigate('/gaps'),
+            },
+          ]
+        : []),
       {
         id: 'action:mcp',
         kind: 'action',
-        title: 'MCP Connections',
+        title: isDeveloper ? 'MCP Connections' : 'AI Connections',
         subtitle: 'Connect Claude, Cursor, or Codex',
         keywords: ['mcp', 'agent', 'cursor', 'claude', 'codex'],
         boost: 6,
@@ -259,6 +265,7 @@ export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
     startTool,
     stopTool,
     onRequestNewCollection,
+    isDeveloper,
   ])
 
   const ranked = useMemo(

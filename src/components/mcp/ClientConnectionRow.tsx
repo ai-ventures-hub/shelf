@@ -1,3 +1,5 @@
+import { usePrefs } from '../../hooks/usePrefs'
+import { clientLogoUrl } from '../../lib/clientLogos'
 import type { McpClientSnapshot } from '../../lib/mcpConnectionStatus'
 import { OverflowMenu, type OverflowMenuItem } from '../OverflowMenu'
 
@@ -15,10 +17,12 @@ export function ClientConnectionRow({
   onPrimary,
   menuItems,
 }: ClientConnectionRowProps) {
+  const { resolvedTheme } = usePrefs()
+  const logo = clientLogoUrl(client.kind, resolvedTheme)
   return (
     <article className="mcp-client-row" data-state={client.state}>
       <div className="mcp-client-mark" aria-hidden>
-        {client.mark}
+        {logo ? <img className="mcp-client-logo" src={logo} alt="" /> : client.mark}
       </div>
       <div className="mcp-client-copy">
         <div className="mcp-client-title-row">

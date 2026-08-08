@@ -1,9 +1,9 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
-  "description": "Local tool library for macOS \u2014 launch the tools you build and share them with your AI agents over MCP",
+  "description": "Local tool library for macOS — launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",
   "author": "Carlos Montalvo",
   "scripts": {
@@ -63,7 +63,7 @@
   "build": {
     "appId": "org.cjm.shelf",
     "productName": "Shelf",
-    "copyright": "Copyright \u00a9 Carlos Montalvo",
+    "copyright": "Copyright © Carlos Montalvo",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -85,6 +85,14 @@
       {
         "from": "build/TrayIconTemplate@2x.png",
         "to": "TrayIconTemplate@2x.png"
+      },
+      {
+        "from": "build/TrayIconActive.png",
+        "to": "TrayIconActive.png"
+      },
+      {
+        "from": "build/TrayIconActive@2x.png",
+        "to": "TrayIconActive@2x.png"
       }
     ],
     "mac": {

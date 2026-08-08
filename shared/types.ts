@@ -7,6 +7,12 @@ export type ToolStatus = 'stopped' | 'starting' | 'running' | 'error'
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
 export type SortMode = 'name' | 'recent' | 'status'
+/**
+ * Presentation mode for the desktop shell. 'simple' hides agent-integration
+ * surfaces for non-developers; the engine and MCP server behave identically
+ * in both modes.
+ */
+export type UiMode = 'simple' | 'developer'
 
 export type AgentAccessKind = 'cli' | 'mcp' | 'http-api'
 export type McpTransport = 'stdio' | 'streamable-http'
@@ -104,6 +110,34 @@ export interface Collection {
   updatedAt: string
 }
 
+/**
+ * Structured launch/stop failure classes. `message` stays the human string;
+ * `code` lets the GUI and agents branch without regex-ing prose.
+ */
+export type LaunchErrorCode =
+  | 'tool_not_found'
+  | 'folder_missing'
+  | 'no_launch_command'
+  | 'deps_missing'
+  | 'runtime_missing'
+  | 'docker_not_running'
+  | 'port_in_use'
+  | 'port_reassign_failed'
+  | 'bad_launch_command'
+  | 'app_crashed'
+  | 'port_timeout'
+  | 'stop_refused_not_owner'
+
+/** What the UI can offer for a coded failure. */
+export type RemedyKind =
+  | 'install_deps'
+  | 'reassign_port'
+  | 'open_docker'
+  | 'repick_folder'
+  | 'edit_command'
+  | 'install_runtime'
+  | 'copy_ai_report'
+
 export interface ToolRuntimeState {
   toolId: string
   status: ToolStatus
@@ -111,6 +145,9 @@ export interface ToolRuntimeState {
   startedAt?: string
   message?: string
   exitCode?: number | null
+  /** Present on coded failures (and timeout stops); absent on success paths. */
+  code?: LaunchErrorCode
+  remedy?: RemedyKind
 }
 
 export interface LogLine {
@@ -192,6 +229,8 @@ export interface UiPrefs {
   appearance: AppearanceMode
   viewMode: ViewMode
   sort: SortMode
+  /** Presentation mode; existing prefs without the key resolve to 'developer'. */
+  uiMode: UiMode
   sidebarWidth: number
   sidebarCollapsed: boolean
   /** Defaults applied when creating a tool with a Lucide mark. */
@@ -202,6 +241,8 @@ export interface UiPrefs {
   menuBarEnabled: boolean
   /** Hide to menu bar instead of quitting when the window closes. */
   closeToMenuBar: boolean
+  /** Start Shelf automatically at macOS login (packaged builds only). */
+  launchAtLogin: boolean
   /** Register a global hotkey to show/hide Shelf. */
   globalShortcutEnabled: boolean
   /** Electron accelerator, e.g. Command+Shift+Space. */
@@ -246,6 +287,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   appearance: 'system',
   viewMode: 'grid',
   sort: 'name',
+  uiMode: 'developer',
   sidebarWidth: 250,
   sidebarCollapsed: false,
   defaultIconLucide: 'Box',
@@ -253,6 +295,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   defaultIconBackground: '#3b82f6',
   menuBarEnabled: true,
   closeToMenuBar: true,
+  launchAtLogin: false,
   globalShortcutEnabled: true,
   globalShortcut: DEFAULT_GLOBAL_SHORTCUT,
 }

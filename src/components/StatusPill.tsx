@@ -22,7 +22,12 @@ export function StatusPill({
   message?: string
 }) {
   return (
-    <span className="status-pill" data-tone={TONE[status]} title={message || LABEL[status]}>
+    <span
+      className="status-pill"
+      data-tone={TONE[status]}
+      data-status={status}
+      title={message || LABEL[status]}
+    >
       {LABEL[status]}
     </span>
   )

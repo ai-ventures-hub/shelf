@@ -7,6 +7,9 @@ import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
+import { useUiMode } from '../hooks/useUiMode'
+import { friendlyLaunchError } from '../lib/launchErrorCopy'
+import { Star } from 'lucide-react'
 import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
 
 function formatRelative(iso?: string): string {
@@ -26,6 +29,7 @@ function formatRelative(iso?: string): string {
 export function ToolDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isDeveloper } = useUiMode()
   const {
     tools,
     states,
@@ -43,6 +47,7 @@ export function ToolDetailPage() {
   const [logs, setLogs] = useState<LogLine[]>([])
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [reportCopied, setReportCopied] = useState(false)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
   const [readiness, setReadiness] = useState<ToolReadiness | null>(null)
   const { receipts, clear: clearReceipts } = useReceipts({
@@ -208,7 +213,11 @@ export function ToolDetailPage() {
         <div className="stack" style={{ gap: '0.45rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <StatusPill status={status} message={state?.message} />
-            {current.favorite ? <span className="tag-chip">Favorite</span> : null}
+            {current.favorite ? (
+              <span className="tag-chip favorite-chip">
+                <Star size={11} fill="currentColor" aria-hidden /> Favorite
+              </span>
+            ) : null}
             {current.tags.map((tag) => (
               <span key={tag} className="tag-chip">
                 {tag}
@@ -233,6 +242,49 @@ export function ToolDetailPage() {
       {actionError ? (
         <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
           {actionError}
+        </div>
+      ) : null}
+
+      {state?.code ? (
+        <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
+          <strong>{friendlyLaunchError(state.code)}</strong>
+          <div
+            className="action-row"
+            style={{ margin: '0.6rem 0 0', flexWrap: 'wrap' }}
+          >
+            {state.code === 'port_in_use' ? (
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm"
+                disabled={busy}
+                onClick={() =>
+                  void run(() => startTool(toolId, { onPortConflict: 'reassign' }))
+                }
+              >
+                Launch on a free port
+              </button>
+            ) : null}
+            {state.remedy === 'edit_command' ? (
+              <Link className="btn btn-quiet btn-sm" to={`/tools/${toolId}/edit`}>
+                Edit launch command
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-quiet btn-sm"
+              onClick={() => {
+                void window.shelf.getErrorReport(toolId).then((report) => {
+                  if (!report) return
+                  void navigator.clipboard.writeText(report).then(() => {
+                    setReportCopied(true)
+                    window.setTimeout(() => setReportCopied(false), 2400)
+                  })
+                })
+              }}
+            >
+              {reportCopied ? 'Copied' : 'Copy report for your AI tool'}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -275,10 +327,12 @@ export function ToolDetailPage() {
           />
         ) : null}
         <div className="detail-actions-more">
-          <OverflowMenu label="More actions" items={moreMenuItems} />
+          {/* md: this row's neighbors (Launch / Open) sit on the 42px rail. */}
+          <OverflowMenu label="More actions" items={moreMenuItems} size="md" />
         </div>
       </div>
 
+      {isDeveloper ? (
       <section className="panel capability-panel">
         <div className="panel-header">
           <h2 className="panel-title">Capability intelligence</h2>
@@ -324,6 +378,7 @@ export function ToolDetailPage() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <div className="detail-layout">
         <section className="panel">
@@ -362,6 +417,7 @@ export function ToolDetailPage() {
                 </p>
               </div>
             ) : null}
+            {isDeveloper || designMd?.found ? (
             <div>
               <div className="field-label">Design system</div>
               {designMd?.found && designMd.path ? (
@@ -393,6 +449,7 @@ export function ToolDetailPage() {
                 </p>
               )}
             </div>
+            ) : null}
             {tool.url ? (
               <div>
                 <div className="field-label">Local URL</div>
@@ -409,12 +466,12 @@ export function ToolDetailPage() {
                   {tool.notes}
                 </p>
               </div>
-            ) : (
+            ) : isDeveloper ? (
               <div className="warning-card">
                 No operating notes yet. Capture inputs, common errors, and the last known
                 working configuration when you edit this tool.
               </div>
-            )}
+            ) : null}
           </div>
         </section>
       </div>
@@ -439,7 +496,7 @@ export function ToolDetailPage() {
         <div className="panel-body">
           <ReceiptHistory
             receipts={receipts}
-            emptyLabel="No launches recorded yet. Launch this tool to create a receipt."
+            emptyLabel="No launches recorded yet. Launch this tool to start its history."
           />
         </div>
       </section>

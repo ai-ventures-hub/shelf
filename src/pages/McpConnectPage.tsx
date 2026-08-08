@@ -3,15 +3,18 @@ import { ClientConnectionRow } from '../components/mcp/ClientConnectionRow'
 import { McpAdvancedPanel } from '../components/mcp/McpAdvancedPanel'
 import type { OverflowMenuItem } from '../components/OverflowMenu'
 import { MCP_TEST_PROMPT } from '../lib/mcpClientGuides'
+import { useUiMode } from '../hooks/useUiMode'
 import {
   buildClientSnapshot,
   summarizeClients,
   type McpClientKind,
 } from '../lib/mcpConnectionStatus'
 import type {
+  ClaudeCodeMcpStatus,
   ClaudeDesktopStatus,
   CodexMcpStatus,
   CursorMcpStatus,
+  McpClientDetection,
 } from '../types'
 
 /**
@@ -19,10 +22,13 @@ import type {
  * Connection IPC unchanged; this page is presentation + progressive disclosure.
  */
 export function McpConnectPage() {
+  const { isDeveloper } = useUiMode()
   const [serverPath, setServerPath] = useState(
     '/path/to/Shelf.app/Contents/Resources/mcp/mcp/server.js',
   )
   const [claudeStatus, setClaudeStatus] = useState<ClaudeDesktopStatus | null>(null)
+  const [claudeCodeStatus, setClaudeCodeStatus] =
+    useState<ClaudeCodeMcpStatus | null>(null)
   const [cursorStatus, setCursorStatus] = useState<CursorMcpStatus | null>(null)
   const [codexStatus, setCodexStatus] = useState<CodexMcpStatus | null>(null)
   const [busy, setBusy] = useState<Partial<Record<McpClientKind, boolean>>>({})
@@ -32,32 +38,45 @@ export function McpConnectPage() {
   const [needsRestart, setNeedsRestart] = useState<Partial<Record<McpClientKind, boolean>>>(
     {},
   )
+  /** Installed-client probes; simple mode shows only what the user has. */
+  const [detections, setDetections] = useState<McpClientDetection[] | null>(null)
 
   const refreshAll = useCallback(async () => {
     if (!window.shelf?.getClaudeDesktopStatus) return
     try {
-      const [claude, cursor, codex] = await Promise.all([
+      const [claude, claudeCode, cursor, codex] = await Promise.all([
         window.shelf.getClaudeDesktopStatus(),
+        window.shelf.getClaudeCodeMcpStatus(),
         window.shelf.getCursorMcpStatus(),
         window.shelf.getCodexMcpStatus(),
       ])
       setClaudeStatus(claude)
+      setClaudeCodeStatus(claudeCode)
       setCursorStatus(cursor)
       setCodexStatus(codex)
       setErrors({})
-      // Clear soft restart once Claude is live / Cursor+Codex still match.
+      // Clear soft restart once Claude is live / other clients still match.
       setNeedsRestart((prev) => ({
         claude: claude.claudeLoaded ? false : prev.claude,
+        'claude-code': false,
         cursor: false,
         codex: false,
       }))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      setErrors({ claude: message, cursor: message, codex: message })
+      setErrors({
+        claude: message,
+        'claude-code': message,
+        cursor: message,
+        codex: message,
+      })
     }
   }, [])
 
   useEffect(() => {
+    if (window.shelf?.detectMcpClients) {
+      void window.shelf.detectMcpClients().then(setDetections)
+    }
     if (!window.shelf?.getMcpServerPath) {
       void refreshAll()
       return
@@ -89,6 +108,11 @@ export function McpConnectPage() {
         const result = await window.shelf.connectClaudeDesktop()
         setClaudeStatus(result.status)
         showFlash('claude', 'Settings updated.')
+      } else if (kind === 'claude-code') {
+        const result = await window.shelf.connectClaudeCodeMcp()
+        setClaudeCodeStatus(result.status)
+        setNeedsRestart((prev) => ({ ...prev, 'claude-code': true }))
+        showFlash('claude-code', 'Settings updated.')
       } else if (kind === 'cursor') {
         const result = await window.shelf.connectCursorMcp()
         setCursorStatus(result.status)
@@ -116,6 +140,8 @@ export function McpConnectPage() {
     try {
       if (kind === 'claude') {
         setClaudeStatus((await window.shelf.disconnectClaudeDesktop()).status)
+      } else if (kind === 'claude-code') {
+        setClaudeCodeStatus((await window.shelf.disconnectClaudeCodeMcp()).status)
       } else if (kind === 'cursor') {
         setCursorStatus((await window.shelf.disconnectCursorMcp()).status)
       } else {
@@ -136,7 +162,8 @@ export function McpConnectPage() {
   async function openApp(kind: McpClientKind) {
     if (kind === 'claude') await window.shelf.openClaudeDesktop()
     else if (kind === 'cursor') await window.shelf.openCursorApp()
-    else await window.shelf.openCodexApp()
+    else if (kind === 'codex') await window.shelf.openCodexApp()
+    // claude-code: terminal app, nothing to open.
   }
 
   async function copyPrompt() {
@@ -149,6 +176,11 @@ export function McpConnectPage() {
         busy: busy.claude,
         error: errors.claude,
       }),
+      buildClientSnapshot('claude-code', claudeCodeStatus, {
+        busy: busy['claude-code'],
+        error: errors['claude-code'],
+        needsRestart: needsRestart['claude-code'],
+      }),
       buildClientSnapshot('cursor', cursorStatus, {
         busy: busy.cursor,
         error: errors.cursor,
@@ -160,24 +192,42 @@ export function McpConnectPage() {
         needsRestart: needsRestart.codex,
       }),
     ]
-  }, [claudeStatus, cursorStatus, codexStatus, busy, errors, needsRestart])
+  }, [claudeStatus, claudeCodeStatus, cursorStatus, codexStatus, busy, errors, needsRestart])
 
-  const summary = summarizeClients(clients)
+  // Simple mode: only the AI apps actually on this Mac (all, if none detected
+  // yet — an empty connect page would be a dead end).
+  const installedKinds = useMemo(
+    () => new Set(detections?.filter((d) => d.installed).map((d) => d.kind) || []),
+    [detections],
+  )
+  const visibleClients =
+    isDeveloper || installedKinds.size === 0
+      ? clients
+      : clients.filter((c) => installedKinds.has(c.kind))
+
+  const summary = summarizeClients(visibleClients)
 
   function menuFor(kind: McpClientKind): OverflowMenuItem[] {
     const connected =
       kind === 'claude'
         ? Boolean(claudeStatus?.connected)
-        : kind === 'cursor'
-          ? Boolean(cursorStatus?.connected)
-          : Boolean(codexStatus?.connected)
+        : kind === 'claude-code'
+          ? Boolean(claudeCodeStatus?.connected)
+          : kind === 'cursor'
+            ? Boolean(cursorStatus?.connected)
+            : Boolean(codexStatus?.connected)
 
     const items: OverflowMenuItem[] = [
-      {
-        id: 'open',
-        label: kind === 'codex' ? 'Open ChatGPT' : `Open ${labelFor(kind)}`,
-        onSelect: () => void openApp(kind),
-      },
+      // Claude Code runs in the terminal — there is no app to open.
+      ...(kind === 'claude-code'
+        ? []
+        : [
+            {
+              id: 'open',
+              label: kind === 'codex' ? 'Open ChatGPT' : `Open ${labelFor(kind)}`,
+              onSelect: () => void openApp(kind),
+            },
+          ]),
       {
         id: 'prompt',
         label: 'Copy test prompt',
@@ -214,7 +264,7 @@ export function McpConnectPage() {
     <div className="mcp-page">
       <header className="page-header page-header-compact mcp-overview">
         <div className="page-header-copy">
-          <h1 className="page-title">MCP Connections</h1>
+          <h1 className="page-title">{isDeveloper ? 'MCP Connections' : 'AI Connections'}</h1>
           <p className="page-meta">Connect Shelf to your AI tools.</p>
         </div>
         <div className="mcp-overview-aside">
@@ -242,7 +292,7 @@ export function McpConnectPage() {
       <section className="mcp-clients" aria-label="Supported clients">
         <h2 className="mcp-section-label">Supported clients</h2>
         <div className="mcp-client-list">
-          {clients.map((client) => (
+          {visibleClients.map((client) => (
             <ClientConnectionRow
               key={client.kind}
               client={client}
@@ -254,20 +304,28 @@ export function McpConnectPage() {
         </div>
       </section>
 
-      <McpAdvancedPanel
-        serverPath={serverPath}
-        configPaths={{
-          claude: claudeStatus?.configPath,
-          cursor: cursorStatus?.configPath,
-          codex: codexStatus?.configPath,
-        }}
-      />
+      {isDeveloper ? (
+        <McpAdvancedPanel
+          serverPath={serverPath}
+          configPaths={{
+            claude: claudeStatus?.configPath,
+            cursor: cursorStatus?.configPath,
+            codex: codexStatus?.configPath,
+          }}
+        />
+      ) : null}
+
+      <p className="mcp-attribution">
+        Product names and logos are property of their respective owners and are
+        used for identification only.
+      </p>
     </div>
   )
 }
 
 function labelFor(kind: McpClientKind): string {
   if (kind === 'claude') return 'Claude Desktop'
+  if (kind === 'claude-code') return 'Claude Code'
   if (kind === 'cursor') return 'Cursor'
   return 'Codex'
 }

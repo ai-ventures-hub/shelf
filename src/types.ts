@@ -4,6 +4,8 @@ export type ToolStatus = 'stopped' | 'starting' | 'running' | 'error'
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
 export type SortMode = 'name' | 'recent' | 'status'
+/** Presentation mode: 'simple' hides agent-integration surfaces. */
+export type UiMode = 'simple' | 'developer'
 export type AgentAccessKind = 'cli' | 'mcp' | 'http-api'
 export type McpTransport = 'stdio' | 'streamable-http'
 export type CapabilityReadinessState =
@@ -70,6 +72,30 @@ export interface Collection {
   updatedAt: string
 }
 
+/** Structured launch/stop failure classes (mirror of shared/types.ts). */
+export type LaunchErrorCode =
+  | 'tool_not_found'
+  | 'folder_missing'
+  | 'no_launch_command'
+  | 'deps_missing'
+  | 'runtime_missing'
+  | 'docker_not_running'
+  | 'port_in_use'
+  | 'port_reassign_failed'
+  | 'bad_launch_command'
+  | 'app_crashed'
+  | 'port_timeout'
+  | 'stop_refused_not_owner'
+
+export type RemedyKind =
+  | 'install_deps'
+  | 'reassign_port'
+  | 'open_docker'
+  | 'repick_folder'
+  | 'edit_command'
+  | 'install_runtime'
+  | 'copy_ai_report'
+
 export interface ToolRuntimeState {
   toolId: string
   status: ToolStatus
@@ -77,6 +103,9 @@ export interface ToolRuntimeState {
   startedAt?: string
   message?: string
   exitCode?: number | null
+  /** Present on coded failures (and timeout stops); absent on success paths. */
+  code?: LaunchErrorCode
+  remedy?: RemedyKind
 }
 
 export interface LogLine {
@@ -90,6 +119,8 @@ export interface UiPrefs {
   appearance: AppearanceMode
   viewMode: ViewMode
   sort: SortMode
+  /** Presentation mode; existing prefs without the key resolve to 'developer'. */
+  uiMode: UiMode
   sidebarWidth: number
   sidebarCollapsed: boolean
   defaultIconLucide?: string
@@ -97,6 +128,8 @@ export interface UiPrefs {
   defaultIconBackground: string
   menuBarEnabled: boolean
   closeToMenuBar: boolean
+  /** Start Shelf automatically at macOS login (packaged builds only). */
+  launchAtLogin: boolean
   globalShortcutEnabled: boolean
   globalShortcut: string
   windowBounds?: {
@@ -147,6 +180,34 @@ export interface ClaudeDesktopStatus {
 
 export interface ClaudeConnectResult {
   status: ClaudeDesktopStatus
+  backupPath?: string
+}
+
+/** Installed-client probe result (mirror of shared/mcp-client-detect.ts). */
+export type DetectableMcpClient = 'claude' | 'claude-code' | 'cursor' | 'codex'
+
+export interface McpClientDetection {
+  kind: DetectableMcpClient
+  installed: boolean
+  evidence?: string
+}
+
+/** One-click Claude Code MCP connection status (~/.claude.json, user scope). */
+export interface ClaudeCodeMcpStatus {
+  connected: boolean
+  matches: boolean
+  configPath: string
+  configExists: boolean
+  serverPath: string
+  serverOk: boolean
+  nodeCommand: string
+  nodeOk: boolean
+  nodePath?: string
+  message: string
+}
+
+export interface ClaudeCodeConnectResult {
+  status: ClaudeCodeMcpStatus
   backupPath?: string
 }
 
@@ -266,6 +327,59 @@ export interface ProjectImportSuggestion {
   signals: string[]
 }
 
+/** One-shot registration (mirror of shared/register-project.ts). */
+export type RegisterOutcome =
+  | 'launched'
+  | 'saved'
+  | 'needs_setup'
+  | 'saved_needs_review'
+  | 'saved_launch_failed'
+  | 'invalid_folder'
+  | 'dry_run'
+
+export type PortConflictPolicy = 'fail' | 'reassign'
+
+export interface StartOptions {
+  onPortConflict?: PortConflictPolicy
+}
+
+export interface BootstrapStep {
+  command: string
+  label: string
+}
+
+export interface BootstrapResult {
+  ok: boolean
+  exitCode: number | null
+  endedBy?: 'timeout' | 'cancelled'
+}
+
+export interface PreflightIssue {
+  code: LaunchErrorCode
+  message: string
+}
+
+export interface RegisterProjectOptions {
+  autoLaunch?: boolean
+  onPortConflict?: PortConflictPolicy
+  forceReview?: boolean
+  runSetup?: boolean
+  dryRun?: boolean
+}
+
+export interface RegisterProjectResult {
+  outcome: RegisterOutcome
+  tool?: Tool
+  state?: ToolRuntimeState
+  suggestion?: ProjectImportSuggestion
+  autoRunnable: boolean
+  autoRunReason: string
+  setupNeeds: BootstrapStep[]
+  bootstrap?: { step: BootstrapStep; result: BootstrapResult }[]
+  issues: PreflightIssue[]
+  created: boolean
+}
+
 /** Preload bridge API exposed on window.shelf */
 export interface ShelfApi {
   listTools: () => Promise<Tool[]>
@@ -273,6 +387,11 @@ export interface ShelfApi {
   deleteTool: (id: string) => Promise<void>
   pickFolder: () => Promise<string | null>
   inspectProject: (projectPath: string) => Promise<ProjectImportSuggestion>
+  registerProject: (
+    projectPath: string,
+    options?: RegisterProjectOptions,
+  ) => Promise<RegisterProjectResult>
+  getPathForFile: (file: File) => string
   pickIcon: () => Promise<string | null>
   getIconDataUrl: (iconPath: string) => Promise<string | null>
   listCollections: () => Promise<Collection[]>
@@ -303,10 +422,11 @@ export interface ShelfApi {
   ) => Promise<CapabilityGap>
   deleteCapabilityGap: (id: string) => Promise<void>
   getRuntimeStates: () => Promise<ToolRuntimeState[]>
-  startTool: (id: string) => Promise<ToolRuntimeState>
+  startTool: (id: string, options?: StartOptions) => Promise<ToolRuntimeState>
   stopTool: (id: string) => Promise<ToolRuntimeState>
   restartTool: (id: string) => Promise<ToolRuntimeState>
   getLogs: (id: string) => Promise<LogLine[]>
+  getErrorReport: (id: string) => Promise<string | null>
   listReceipts: (opts?: {
     toolId?: string
     limit?: number
@@ -321,6 +441,7 @@ export interface ShelfApi {
     query?: string
   }) => Promise<{ saved: boolean; path?: string }>
   onReceiptUpdate: (cb: (receipt: RunReceipt) => void) => () => void
+  onExternalDataChange: (cb: (filename: string) => void) => () => void
   openUrl: (url: string) => Promise<void>
   openPath: (targetPath: string) => Promise<void>
   openEditor: (projectPath: string) => Promise<void>
@@ -330,6 +451,10 @@ export interface ShelfApi {
   connectClaudeDesktop: () => Promise<ClaudeConnectResult>
   disconnectClaudeDesktop: () => Promise<ClaudeConnectResult>
   openClaudeDesktop: () => Promise<void>
+  detectMcpClients: () => Promise<McpClientDetection[]>
+  getClaudeCodeMcpStatus: () => Promise<ClaudeCodeMcpStatus>
+  connectClaudeCodeMcp: () => Promise<ClaudeCodeConnectResult>
+  disconnectClaudeCodeMcp: () => Promise<ClaudeCodeConnectResult>
   getCursorMcpStatus: () => Promise<CursorMcpStatus>
   connectCursorMcp: () => Promise<CursorConnectResult>
   disconnectCursorMcp: () => Promise<CursorConnectResult>

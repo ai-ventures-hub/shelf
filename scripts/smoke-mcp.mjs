@@ -132,6 +132,49 @@ async function main() {
     }
     console.log('OK: inspect_project', inspected.launchCommand)
 
+    // One-shot register against an independent temp project (the shared
+    // fixture folder already belongs to the upserted tool above).
+    const registerProj = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-mcp-register-'))
+    fs.copyFileSync(
+      path.join(fixture, 'server.mjs'),
+      path.join(registerProj, 'server.mjs'),
+    )
+    fs.writeFileSync(
+      path.join(registerProj, 'package.json'),
+      JSON.stringify({
+        name: 'mcp-register-fixture',
+        private: true,
+        scripts: { start: 'node server.mjs' },
+      }),
+    )
+    try {
+      const dry = await callTool(client, 'shelf_register_project', {
+        projectPath: registerProj,
+        dryRun: true,
+      })
+      if (dry.outcome !== 'dry_run' || dry.autoRunnable !== true) {
+        throw new Error(`Unexpected dryRun result: ${dry.outcome}/${dry.autoRunnable}`)
+      }
+      const beforeRegister = await callTool(client, 'shelf_list_tools')
+      const registered = await callTool(client, 'shelf_register_project', {
+        projectPath: registerProj,
+      })
+      if (registered.outcome !== 'launched' || !registered.tool?.id) {
+        throw new Error(
+          `Expected launched, got ${registered.outcome}: ${registered.state?.message}`,
+        )
+      }
+      const afterRegister = await callTool(client, 'shelf_list_tools')
+      if (afterRegister.count !== beforeRegister.count + 1) {
+        throw new Error('register_project must add exactly one tool')
+      }
+      await callTool(client, 'shelf_stop_tool', { id: registered.tool.id })
+      await callTool(client, 'shelf_remove_tool', { id: registered.tool.id })
+      console.log('OK: register_project one-shot')
+    } finally {
+      fs.rmSync(registerProj, { recursive: true, force: true })
+    }
+
     const design = await callTool(client, 'shelf_get_design_md', { id: toolId })
     if (typeof design.found !== 'boolean') {
       throw new Error('shelf_get_design_md missing found flag')

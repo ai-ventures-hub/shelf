@@ -40,8 +40,6 @@
 
 .sidebar-toggle {
   margin-left:auto;
-  min-width:28px;
-  padding-inline:.4rem;
 }
 
 .is-sidebar-collapsed .sidebar {
@@ -253,4 +251,42 @@
   width:calc(100% - 2rem);
   max-width:var(--content-max);
   margin:0 auto;
+}
+
+/* Status toast while a dropped folder registers/installs/launches. */
+.drop-progress {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 60;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+/* Full-window drop target highlight while dragging files over the app. */
+.drop-overlay {
+  position: fixed;
+  inset: 10px;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--brand);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  pointer-events: none;
+}
+
+.drop-overlay-label {
+  padding: 0.8rem 1.4rem;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
 }

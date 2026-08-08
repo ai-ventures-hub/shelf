@@ -1,7 +1,13 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type {
+  RegisterProjectOptions,
+  RegisterProjectResult,
+  StartOptions,
+  ClaudeCodeConnectResult,
+  ClaudeCodeMcpStatus,
   ClaudeConnectResult,
   ClaudeDesktopStatus,
+  McpClientDetection,
   AgentAccessKind,
   CapabilityGap,
   CapabilityGapStatus,
@@ -34,6 +40,14 @@ const api = {
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('tools:pickFolder'),
   inspectProject: (projectPath: string): Promise<ProjectImportSuggestion> =>
     ipcRenderer.invoke('tools:inspectProject', projectPath),
+  /** One-shot register: inspect → save → (consented) setup → launch. */
+  registerProject: (
+    projectPath: string,
+    options?: RegisterProjectOptions,
+  ): Promise<RegisterProjectResult> =>
+    ipcRenderer.invoke('tools:registerProject', projectPath, options),
+  /** Absolute path for a dropped File (drag-and-drop folder support). */
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   pickIcon: (): Promise<string | null> => ipcRenderer.invoke('tools:pickIcon'),
   /** Read a local icon file and return a data URL safe for <img src>. */
   getIconDataUrl: (iconPath: string): Promise<string | null> =>
@@ -86,13 +100,16 @@ const api = {
 
   getRuntimeStates: (): Promise<ToolRuntimeState[]> =>
     ipcRenderer.invoke('process:states'),
-  startTool: (id: string): Promise<ToolRuntimeState> =>
-    ipcRenderer.invoke('process:start', id),
+  startTool: (id: string, options?: StartOptions): Promise<ToolRuntimeState> =>
+    ipcRenderer.invoke('process:start', id, options),
   stopTool: (id: string): Promise<ToolRuntimeState> =>
     ipcRenderer.invoke('process:stop', id),
   restartTool: (id: string): Promise<ToolRuntimeState> =>
     ipcRenderer.invoke('process:restart', id),
   getLogs: (id: string): Promise<LogLine[]> => ipcRenderer.invoke('process:logs', id),
+  /** Paste-ready failure report (secrets already masked). */
+  getErrorReport: (id: string): Promise<string | null> =>
+    ipcRenderer.invoke('process:errorReport', id),
   listReceipts: (opts?: {
     toolId?: string
     limit?: number
@@ -108,6 +125,12 @@ const api = {
     query?: string
   }): Promise<{ saved: boolean; path?: string }> =>
     ipcRenderer.invoke('receipts:export', opts),
+  /** A process outside this window (MCP server) changed a shared data file. */
+  onExternalDataChange: (cb: (filename: string) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, filename: string) => cb(filename)
+    ipcRenderer.on('data:external-change', listener)
+    return () => ipcRenderer.removeListener('data:external-change', listener)
+  },
   onReceiptUpdate: (cb: (receipt: RunReceipt) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, receipt: RunReceipt) => cb(receipt)
     ipcRenderer.on('receipts:update', listener)
@@ -128,6 +151,14 @@ const api = {
   disconnectClaudeDesktop: (): Promise<ClaudeConnectResult> =>
     ipcRenderer.invoke('claude:disconnect'),
   openClaudeDesktop: (): Promise<void> => ipcRenderer.invoke('claude:openApp'),
+  detectMcpClients: (): Promise<McpClientDetection[]> =>
+    ipcRenderer.invoke('mcpClients:detect'),
+  getClaudeCodeMcpStatus: (): Promise<ClaudeCodeMcpStatus> =>
+    ipcRenderer.invoke('claudeCode:status'),
+  connectClaudeCodeMcp: (): Promise<ClaudeCodeConnectResult> =>
+    ipcRenderer.invoke('claudeCode:connect'),
+  disconnectClaudeCodeMcp: (): Promise<ClaudeCodeConnectResult> =>
+    ipcRenderer.invoke('claudeCode:disconnect'),
   getCursorMcpStatus: (): Promise<CursorMcpStatus> =>
     ipcRenderer.invoke('cursor:status'),
   connectCursorMcp: (): Promise<CursorConnectResult> =>

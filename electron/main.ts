@@ -17,7 +17,12 @@ import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
+import { buildErrorReport } from '../shared/launch-diagnostics'
 import { inspectProject } from '../shared/project-import'
+import {
+  registerProject,
+  type RegisterProjectOptions,
+} from '../shared/register-project'
 import {
   receiptsToCsv,
   receiptsToJson,
@@ -43,7 +48,7 @@ import {
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { registerMcpConnectIpc } from './mcp-connect-ipc'
 import { flushPendingOnboarding, submitOnboarding } from './onboarding-relay'
-import { ProcessManager } from './process-manager'
+import { ProcessManager, type StartOptions } from './process-manager'
 import * as system from './system-bridge'
 import type {
   AgentAccessKind,
@@ -65,6 +70,18 @@ let isQuitting = false
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
 let externalReconcileTimer: ReturnType<typeof setInterval> | null = null
+let dataRootWatcher: fs.FSWatcher | null = null
+
+/** Register/unregister the packaged app as a macOS login item. Dev runs
+ *  would register the bare Electron binary, so they are a no-op. */
+function applyLaunchAtLogin(enabled: boolean): void {
+  if (!app.isPackaged) return
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  } catch (err) {
+    console.error('Login item update failed:', err)
+  }
+}
 
 // Stable data directory before any userData reads (avoids empty library after relaunch).
 pinShelfUserDataPath()
@@ -388,6 +405,7 @@ function registerIpc(): void {
       // Settings listens for live status; avoid a second OS notification on every tweak.
       publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: false })
     }
+    if ('launchAtLogin' in patch) applyLaunchAtLogin(next.launchAtLogin)
     return { prefs: next, shortcutStatus }
   })
   ipcMain.handle('desktop:shortcutStatus', () => getShortcutStatus())
@@ -415,6 +433,28 @@ function registerIpc(): void {
   // Smart import: suggest launch/port/tags from a chosen project folder.
   ipcMain.handle('tools:inspectProject', (_e, projectPath: string) =>
     inspectProject(projectPath),
+  )
+
+  // One-shot register: inspect → save → (consented) setup → launch.
+  // Consent flow is two calls: first without runSetup (may return
+  // needs_setup), then again with runSetup: true after the user agrees.
+  ipcMain.handle(
+    'tools:registerProject',
+    (_e, projectPath: string, options?: RegisterProjectOptions) => {
+      const uiPrefs = prefs.get()
+      return registerProject(
+        projectPath,
+        { store, processes },
+        {
+          ...options,
+          toolDefaults: {
+            iconLucide: uiPrefs.defaultIconLucide,
+            iconColor: uiPrefs.defaultIconColor,
+            iconBackground: uiPrefs.defaultIconBackground,
+          },
+        },
+      )
+    },
   )
 
   ipcMain.handle('tools:pickIcon', async () => {
@@ -449,10 +489,19 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('process:states', () => processes.getStates())
-  ipcMain.handle('process:start', (_e, id: string) => processes.start(id))
+  ipcMain.handle('process:start', (_e, id: string, options?: StartOptions) =>
+    processes.start(id, options),
+  )
   ipcMain.handle('process:stop', (_e, id: string) => processes.stop(id))
   ipcMain.handle('process:restart', (_e, id: string) => processes.restart(id))
   ipcMain.handle('process:logs', (_e, id: string) => processes.getLogs(id))
+  // Paste-ready failure report for "Copy report for your AI tool".
+  ipcMain.handle('process:errorReport', async (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) return null
+    const state = await processes.getState(id)
+    return buildErrorReport(tool, state, processes.getLogs(id))
+  })
 
   ipcMain.handle('receipts:list', (_e, opts?: ReceiptFilterOpts) =>
     receipts.list(opts || {}),
@@ -562,6 +611,8 @@ if (gotLock) {
     void flushPendingShelfUrls(getDesktopHost())
     // Retry a first-launch survey that was captured offline (silent, best-effort).
     flushPendingOnboarding(prefs)
+    // Keep the OS login item in sync with the pref (covers prefs.json edits).
+    applyLaunchAtLogin(prefs.get().launchAtLogin)
     // Background update checks (packaged builds only).
     initAutoUpdate(sendToRenderer)
 
@@ -583,6 +634,30 @@ if (gotLock) {
     }, 5_000)
     externalReconcileTimer.unref?.()
 
+    // External writers (the MCP server in an agent session) update the shared
+    // JSON stores directly; watch the data root so the GUI reflects new tools
+    // and receipts without a manual refresh or relaunch. Atomic tmp+rename
+    // writes surface as rename events on the directory. Best-effort: if the
+    // watcher fails, the app still works — just without live pickup.
+    const watchedFiles = new Set(['library.json', 'receipts.json', 'capability-gaps.json'])
+    const changeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
+    try {
+      dataRootWatcher = fs.watch(store.getRoot(), (_event, filename) => {
+        if (!filename || !watchedFiles.has(filename)) return
+        clearTimeout(changeDebounce.get(filename))
+        changeDebounce.set(
+          filename,
+          setTimeout(() => {
+            changeDebounce.delete(filename)
+            sendToRenderer('data:external-change', filename)
+            if (filename === 'library.json') refreshTray(getDesktopHost())
+          }, 400),
+        )
+      })
+    } catch (err) {
+      console.error('Data root watcher unavailable:', err)
+    }
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
       else showOrCreateWindow(getDesktopHost())
@@ -600,6 +675,10 @@ if (gotLock) {
     if (externalReconcileTimer) {
       clearInterval(externalReconcileTimer)
       externalReconcileTimer = null
+    }
+    if (dataRootWatcher) {
+      dataRootWatcher.close()
+      dataRootWatcher = null
     }
     destroyTray()
     globalShortcut.unregisterAll()

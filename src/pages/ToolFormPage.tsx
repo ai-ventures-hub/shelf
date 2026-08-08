@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
+import { useUiMode } from '../hooks/useUiMode'
 import {
   TOOL_FORM_ADVANCED_KEY,
   emptyTool,
@@ -18,6 +19,7 @@ export function ToolFormPage() {
   const [searchParams] = useSearchParams()
   const { tools, saveTool } = useLibrary()
   const { prefs } = usePrefs()
+  const { isDeveloper } = useUiMode()
   const existing = tools.find((t) => t.id === id)
 
   const prefilledCapabilities = existing
@@ -154,7 +156,8 @@ export function ToolFormPage() {
       }
     })
     // Surface detected access immediately — it lives in the Advanced section.
-    if (next.agentAccess.length > 0) setAdvancedOpen(true)
+    // Simple mode still saves the detection but keeps the form calm.
+    if (isDeveloper && next.agentAccess.length > 0) setAdvancedOpen(true)
 
     setTagsText((prev) => {
       if (opts.onlyEmpty && prev.trim()) return prev
@@ -224,7 +227,7 @@ export function ToolFormPage() {
       <header className="page-header">
         <div className="page-header-copy">
           <p className="eyebrow">{isEdit ? 'Edit tool' : 'Add tool'}</p>
-          <h1 className="page-title">{isEdit ? 'Update configuration' : 'Register a tool'}</h1>
+          <h1 className="page-title">{isEdit ? 'Update configuration' : 'Add a tool'}</h1>
           <p className="page-lede">
             {isEdit
               ? 'Adjust launch settings, then save.'
@@ -247,9 +250,11 @@ export function ToolFormPage() {
           <div className="suggest-card-head">
             <div>
               <strong>Smart import</strong>
-              <span className={`suggest-confidence is-${suggestion.confidence}`}>
-                {suggestion.confidence} confidence
-              </span>
+              {isDeveloper ? (
+                <span className={`suggest-confidence is-${suggestion.confidence}`}>
+                  {suggestion.confidence} confidence
+                </span>
+              ) : null}
             </div>
             <button
               type="button"
@@ -259,21 +264,36 @@ export function ToolFormPage() {
               Dismiss
             </button>
           </div>
-          <ul className="suggest-signals">
-            {suggestion.signals.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-          {suggestion.designMd.found ? (
+          {isDeveloper ? (
+            <ul className="suggest-signals">
+              {suggestion.signals.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="suggest-note">
+              Shelf looked at this folder and filled in the setup for you.
+            </p>
+          )}
+          {isDeveloper && suggestion.designMd.found ? (
             <p className="suggest-note">DESIGN.md detected for agent/UI bridge.</p>
           ) : null}
           {suggestion.agentAccess.length > 0 ? (
             <p className="suggest-note">
-              Detected agent access:{' '}
-              {suggestion.agentAccess
-                .map((a) => `${a.kind.toUpperCase()} · ${a.entrypoint}`)
-                .join(' — ')}{' '}
-              (added under Advanced)
+              {isDeveloper ? (
+                <>
+                  Detected agent access:{' '}
+                  {suggestion.agentAccess
+                    .map((a) => `${a.kind.toUpperCase()} · ${a.entrypoint}`)
+                    .join(' — ')}{' '}
+                  (added under Advanced)
+                </>
+              ) : (
+                <>
+                  This project can also plug into AI apps — Shelf saved those details
+                  under Advanced.
+                </>
+              )}
             </p>
           ) : null}
           {suggestion.launchAlternatives.length > 0 ? (
@@ -403,7 +423,7 @@ export function ToolFormPage() {
                 required
               />
               <p className="field-hint">
-                Runs from the project folder in a login zsh shell. No interactive prompts or sudo.
+                Runs from the project folder — the same command you&apos;d type in Terminal.
               </p>
             </div>
 
@@ -438,7 +458,7 @@ export function ToolFormPage() {
                 placeholder="5173"
               />
               <p className="field-hint">
-                When set, status stays Starting until the port accepts connections.
+                Shelf waits for this port to respond before showing the tool as Running.
               </p>
             </div>
 

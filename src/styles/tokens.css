@@ -23,6 +23,8 @@
   --success: #48d597;
   --warning: #f3bc62;
   --danger: #f0787d;
+  /* Favorite gold — shares the warning family hue for palette harmony. */
+  --favorite: #f3bc62;
 
   --sidebar-bg: rgb(9 13 22 / 86%);
   --sidebar-width: 250px;
@@ -53,6 +55,7 @@
   --success: #1f9d63;
   --warning: #c98512;
   --danger: #d04850;
+  --favorite: #c98512;
 
   --sidebar-bg: rgb(255 255 255 / 92%);
   --surface-glow: rgb(79 110 242 / 12%);
