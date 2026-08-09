@@ -12,6 +12,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
+import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
@@ -394,6 +395,12 @@ function registerIpc(): void {
   ipcMain.handle('collections:delete', (_e, id: string) => {
     store.deleteCollection(id)
   })
+  ipcMain.handle('collections:start', (_e, id: string, options?: StartOptions) =>
+    startCollection(id, { store, processes }, options),
+  )
+  ipcMain.handle('collections:stop', (_e, id: string) =>
+    stopCollection(id, { store, processes }),
+  )
 
   ipcMain.handle('prefs:get', () => prefs.get())
   ipcMain.handle('prefs:update', (_e, patch: Partial<UiPrefs>) => {
@@ -592,6 +599,7 @@ if (gotLock) {
     capabilityGaps = new CapabilityGapStore()
     processes = new ProcessManager(store, {
       receipts,
+      defaultOrigin: () => ({ kind: 'gui' }),
       onReadyUrl: (url) => system.openUrl(url),
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)

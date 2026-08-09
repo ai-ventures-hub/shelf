@@ -5,12 +5,13 @@
 import type { LibraryStore } from './library-store'
 import { findPortOccupants } from './ports'
 import type { ProcessRuntimeSupport } from './process-runtime-support'
-import type { RunReceipt } from './types'
+import type { LaunchOrigin, RunReceipt } from './types'
 
 export interface ExternalOwner {
   ownerPid: number
   receiptId: string
   receiptPort?: number
+  startedBy?: LaunchOrigin
 }
 
 export async function reconcileExternalTool(
@@ -45,12 +46,12 @@ export async function reconcileExternalTool(
           status: 'running',
           pid: receipt.pid,
           message: `Running · pid ${receipt.pid} (external)`,
+          port: receipt.port,
+          origin: 'external',
+          startedBy: receipt.startedBy,
         })
       }
-    } else if (
-      current.status === 'running' &&
-      (current.message || '').includes('external')
-    ) {
+    } else if (current.status === 'running' && current.origin === 'external') {
       opts.runtime.setState(toolId, {
         toolId,
         status: 'stopped',
@@ -64,7 +65,7 @@ export async function reconcileExternalTool(
   if (occupants.length > 0) {
     const owner = await opts.trustedExternalOwner(toolId, tool.port, occupants)
     if (!owner) {
-      if (current.status === 'running' && (current.message || '').includes('external')) {
+      if (current.status === 'running' && current.origin === 'external') {
         opts.runtime.setState(toolId, {
           toolId,
           status: 'stopped',
@@ -79,13 +80,16 @@ export async function reconcileExternalTool(
         status: 'running',
         pid: owner.ownerPid,
         message: `Running · port ${tool.port} (external)`,
+        port: tool.port,
+        origin: 'external',
+        startedBy: owner.startedBy,
       })
     }
     return
   }
 
   // Clear stale external-running badges when the listener is gone.
-  if (current.status === 'running' && (current.message || '').includes('external')) {
+  if (current.status === 'running' && current.origin === 'external') {
     opts.runtime.setState(toolId, {
       toolId,
       status: 'stopped',

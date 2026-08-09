@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { launchOriginLabel } from '../lib/launchOrigin'
 import type { ReceiptOutcome, RunReceipt } from '../types'
 
 function formatRelative(iso?: string): string {
@@ -154,6 +155,14 @@ export function ReceiptHistory({
                 </span>
                 <span className="receipt-duration">{formatDuration(r.durationMs)}</span>
                 {r.port ? <span className="receipt-port">:{r.port}</span> : null}
+                {r.startedBy ? (
+                  <span
+                    className="receipt-origin"
+                    title={`Started by ${launchOriginLabel(r.startedBy)}`}
+                  >
+                    {launchOriginLabel(r.startedBy)}
+                  </span>
+                ) : null}
               </div>
               <p className="receipt-message">{r.message || r.launchCommand}</p>
             </li>

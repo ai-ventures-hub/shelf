@@ -195,8 +195,36 @@
 }
 .collection-actions {
   display:flex;
+  align-items:center;
   gap:.5rem;
   margin-bottom:.75rem;
+}
+
+.collection-running-count {
+  color:var(--subtle);
+  font-size:.78rem;
+  font-variant-numeric:tabular-nums;
+  margin-right:auto;
+}
+
+.collection-stack-summary {
+  color:var(--muted);
+  font-size:.8rem;
+  margin:-.25rem 0 .75rem;
+}
+
+/* "Who started this?" provenance on live cards — solid, not dashed: it is a
+   fact about the run, not metadata about the tool. Shown in both ui modes. */
+.origin-chip {
+  border-style:solid;
+  border-color:color-mix(in srgb, var(--brand) 45%, transparent);
+  color:var(--muted);
+}
+
+.tool-list-status {
+  display:flex;
+  align-items:center;
+  gap:.4rem;
 }
 .tool-grid {
   display:grid;

@@ -33,6 +33,7 @@ function run(label, command, args) {
 
 async function main() {
   console.log(`OK: isolated smoke data root ${smokeDataRoot}`)
+  await run('bridge parity', 'node', ['scripts/smoke-bridge.mjs'])
   await run('process smoke', 'node', ['scripts/smoke-process.mjs'])
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
@@ -48,6 +49,7 @@ async function main() {
   await run('register project', 'node', ['scripts/smoke-register.mjs'])
   await run('adopt-by-port', 'node', ['scripts/smoke-adopt.mjs'])
   await run('adopt deep/cross-process', 'node', ['scripts/smoke-adopt-deep.mjs'])
+  await run('stack + provenance', 'node', ['scripts/smoke-stack.mjs'])
   await run('electron smoke', 'npx', ['electron', 'scripts/smoke-electron.cjs'])
   await run('mcp build', 'npm', ['run', 'mcp:build'])
   await run('claude connect', 'node', ['scripts/smoke-claude-connect.mjs'])

@@ -14,6 +14,7 @@ import type {
   CodexConnectResult,
   CodexMcpStatus,
   Collection,
+  CollectionActionResult,
   CursorConnectResult,
   CursorMcpStatus,
   DesignMdResult,
@@ -59,6 +60,15 @@ const api = {
     ipcRenderer.invoke('collections:save', collection),
   deleteCollection: (id: string): Promise<void> =>
     ipcRenderer.invoke('collections:delete', id),
+  /** Launch every stopped member of a collection ("Start stack"). */
+  startCollection: (
+    id: string,
+    options?: StartOptions,
+  ): Promise<CollectionActionResult> =>
+    ipcRenderer.invoke('collections:start', id, options),
+  /** Stop every running member Shelf owns ("Stop stack"). */
+  stopCollection: (id: string): Promise<CollectionActionResult> =>
+    ipcRenderer.invoke('collections:stop', id),
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (

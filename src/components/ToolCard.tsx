@@ -1,9 +1,28 @@
 import { ExternalLink, Play, Square, Star } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { launchOriginLabel } from '../lib/launchOrigin'
 import type { Tool, ToolRuntimeState } from '../types'
 import { StatusPill } from './StatusPill'
 import { ToolIcon } from './ToolIcon'
+
+/**
+ * "Who started this?" — shown in BOTH ui modes on live cards; provenance is
+ * the Simple-mode payoff, unlike the developer-only port/tag chips.
+ */
+function OriginChip({ state }: { state?: ToolRuntimeState }) {
+  const status = state?.status
+  if (status !== 'running' && status !== 'starting') return null
+  const label = launchOriginLabel(state?.startedBy, {
+    externalUnknown: state?.origin === 'external',
+  })
+  if (!label) return null
+  return (
+    <span className="meta-chip origin-chip" title={`Started by ${label}`}>
+      {label}
+    </span>
+  )
+}
 
 function formatRelative(iso?: string): string {
   if (!iso) return 'Never'
@@ -72,18 +91,21 @@ export function ToolCard({
         </p>
       </div>
       <div className="tool-card-footer">
-        {!hideChips ? (
-          <div className="tool-meta">
-            {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
-            <span className="meta-chip">{formatRelative(tool.lastLaunchedAt)}</span>
-            {visibleTags.map((tag) => (
-              <span key={tag} className="tag-chip">
-                {tag}
-              </span>
-            ))}
-            {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
-          </div>
-        ) : null}
+        <div className="tool-meta">
+          <OriginChip state={state} />
+          {!hideChips ? (
+            <>
+              {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
+              <span className="meta-chip">{formatRelative(tool.lastLaunchedAt)}</span>
+              {visibleTags.map((tag) => (
+                <span key={tag} className="tag-chip">
+                  {tag}
+                </span>
+              ))}
+              {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
+            </>
+          ) : null}
+        </div>
         {hasControls ? (
           <div className="tool-card-controls">
             {onToggleFavorite ? (
@@ -192,7 +214,10 @@ export function ToolListRow({
         </Link>
       </td>
       <td>
-        <StatusPill status={status} />
+        <div className="tool-list-status">
+          <StatusPill status={status} />
+          <OriginChip state={state} />
+        </div>
       </td>
       <td className="tabular">{tool.port ? `:${tool.port}` : '—'}</td>
       <td>

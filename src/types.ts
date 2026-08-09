@@ -96,6 +96,15 @@ export type RemedyKind =
   | 'install_runtime'
   | 'copy_ai_report'
 
+/** Who initiated a launch (mirror of shared/types.ts). */
+export type LaunchOriginKind = 'gui' | 'tray' | 'mcp'
+
+export interface LaunchOrigin {
+  kind: LaunchOriginKind
+  /** Self-reported MCP client name, e.g. "claude-code". */
+  client?: string
+}
+
 export interface ToolRuntimeState {
   toolId: string
   status: ToolStatus
@@ -106,6 +115,12 @@ export interface ToolRuntimeState {
   /** Present on coded failures (and timeout stops); absent on success paths. */
   code?: LaunchErrorCode
   remedy?: RemedyKind
+  /** Live port once known (may differ from configured port after reassign/sniff). */
+  port?: number
+  /** 'local' = this Shelf process spawned it; 'external' = adopted (e.g. MCP). */
+  origin?: 'local' | 'external'
+  /** Provenance carried from the run receipt; absent for pre-0.8 receipts. */
+  startedBy?: LaunchOrigin
 }
 
 export interface LogLine {
@@ -279,6 +294,8 @@ export interface RunReceipt {
   outcome: ReceiptOutcome
   exitCode?: number | null
   message?: string
+  /** Who initiated the launch; absent on receipts written before 0.8. */
+  startedBy?: LaunchOrigin
 }
 
 export type CapabilityGapStatus = 'open' | 'planned' | 'resolved' | 'dismissed'
@@ -341,6 +358,29 @@ export type PortConflictPolicy = 'fail' | 'reassign'
 
 export interface StartOptions {
   onPortConflict?: PortConflictPolicy
+  origin?: LaunchOrigin
+}
+
+/** Per-tool result of a collection stack action (mirror of shared/collection-launch.ts). */
+export type CollectionToolOutcome =
+  | 'started'
+  | 'already_running'
+  | 'failed'
+  | 'stopped'
+  | 'not_running'
+  | 'skipped_external'
+
+export interface CollectionToolResult {
+  toolId: string
+  name: string
+  outcome: CollectionToolOutcome
+  state?: ToolRuntimeState
+}
+
+export interface CollectionActionResult {
+  collectionId: string
+  name: string
+  results: CollectionToolResult[]
 }
 
 export interface BootstrapStep {
@@ -397,6 +437,11 @@ export interface ShelfApi {
   listCollections: () => Promise<Collection[]>
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
+  startCollection: (
+    id: string,
+    options?: StartOptions,
+  ) => Promise<CollectionActionResult>
+  stopCollection: (id: string) => Promise<CollectionActionResult>
   getPrefs: () => Promise<UiPrefs>
   updatePrefs: (
     patch: Partial<UiPrefs>,

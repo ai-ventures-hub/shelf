@@ -8,7 +8,13 @@ import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { resolveShelfDataRoot } from './paths'
 import { filterReceipts, type ReceiptFilterOpts } from './receipt-export'
-import { maskSecrets, type ReceiptOutcome, type ReceiptsFile, type RunReceipt } from './types'
+import {
+  maskSecrets,
+  type LaunchOrigin,
+  type ReceiptOutcome,
+  type ReceiptsFile,
+  type RunReceipt,
+} from './types'
 
 const MAX_RECEIPTS = 400
 
@@ -23,6 +29,7 @@ export interface BeginReceiptInput {
   pid?: number
   startedAt?: string
   message?: string
+  startedBy?: LaunchOrigin
 }
 
 export interface EndReceiptInput {
@@ -91,6 +98,7 @@ export class ReceiptStore {
         startedAt: input.startedAt || new Date().toISOString(),
         outcome: 'starting',
         message: input.message || 'Starting…',
+        startedBy: input.startedBy,
       }
       const data = this.read()
       data.receipts.unshift(receipt)
@@ -155,6 +163,7 @@ export class ReceiptStore {
         durationMs: 0,
         outcome: 'failed',
         message: input.message,
+        startedBy: input.startedBy,
       }
       const data = this.read()
       data.receipts.unshift(receipt)

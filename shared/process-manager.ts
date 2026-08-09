@@ -23,9 +23,11 @@ import { classifyLaunchFailure, remedyFor } from './launch-diagnostics'
 import type { ReceiptStore } from './receipt-store'
 import type {
   LaunchErrorCode,
+  LaunchOrigin,
   LogLine,
   RemedyKind,
   RunReceipt,
+  Tool,
   ToolRuntimeState,
 } from './types'
 
@@ -47,6 +49,8 @@ export interface StartOptions {
    * - reassign: pick a free port, rewrite launch/url, persist, then start
    */
   onPortConflict?: PortConflictPolicy
+  /** Who initiated this launch; falls back to the manager's defaultOrigin. */
+  origin?: LaunchOrigin
 }
 
 export interface ProcessManagerOptions {
@@ -56,6 +60,11 @@ export interface ProcessManagerOptions {
   onEvent?: (channel: string, payload: unknown) => void
   /** Durable launch history (shared by Electron + MCP). */
   receipts?: ReceiptStore
+  /**
+   * Launch provenance when StartOptions.origin is absent. A thunk because the
+   * MCP client identity is only known after the initialize handshake.
+   */
+  defaultOrigin?: () => LaunchOrigin | undefined
 }
 
 /**
@@ -71,6 +80,19 @@ export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>()
   private readonly options: ProcessManagerOptions
   private readonly runtime: ProcessRuntimeSupport
+  /**
+   * Coalesces concurrent start() calls per tool. The `processes.has` guard
+   * alone is not enough: several awaits (lsof, findFreePort, store.save) sit
+   * between it and registration, so two near-simultaneous launches (GUI click
+   * + MCP call, or a stack launch) could both spawn without this.
+   */
+  private readonly inFlightStarts = new Map<string, Promise<ToolRuntimeState>>()
+  /**
+   * Serializes decisions that read-modify-write library.json during launch
+   * (port reassignment, sniffed port/url persistence) so concurrent launches
+   * cannot pick the same "free" port or interleave stale tool snapshots.
+   */
+  private libraryWriteChain: Promise<unknown> = Promise.resolve()
 
   constructor(
     private readonly store: LibraryStore,
@@ -123,6 +145,22 @@ export class ProcessManager {
     toolId: string,
     options: StartOptions = {},
   ): Promise<ToolRuntimeState> {
+    const inFlight = this.inFlightStarts.get(toolId)
+    if (inFlight) return inFlight
+    const run = this.startInternal(toolId, options).finally(() => {
+      this.inFlightStarts.delete(toolId)
+    })
+    // Registered synchronously (before any await in startInternal can yield),
+    // so a second caller in the same tick already coalesces onto this run.
+    this.inFlightStarts.set(toolId, run)
+    return run
+  }
+
+  private async startInternal(
+    toolId: string,
+    options: StartOptions,
+  ): Promise<ToolRuntimeState> {
+    const origin = options.origin ?? this.options.defaultOrigin?.()
     let tool = this.store.get(toolId)
     if (!tool) {
       this.runtime.emitFailedReceipt({
@@ -130,6 +168,7 @@ export class ProcessManager {
         toolName: toolId,
         launchCommand: '',
         message: 'Tool not found in library.',
+        startedBy: origin,
       })
       return this.runtime.setState(toolId, {
         toolId,
@@ -151,6 +190,7 @@ export class ProcessManager {
         port: tool.port,
         url: tool.url,
         message: 'Launch command is empty.',
+        startedBy: origin,
       })
       return this.runtime.setState(toolId, {
         toolId,
@@ -179,62 +219,23 @@ export class ProcessManager {
           status: 'running',
           pid: external.pid,
           message: `Running · pid ${external.pid} (external)`,
+          port: external.port,
+          origin: 'external',
+          startedBy: external.startedBy,
         })
       }
     }
 
     if (tool.port) {
-      const occupants = await findPortOccupants(tool.port)
-      if (occupants.length > 0) {
-        if (onPortConflict !== 'reassign') {
-          const owner = await this.trustedExternalOwner(toolId, tool.port, occupants)
-          if (owner) {
-            this.runtime.appendLog(
-              toolId,
-              'system',
-              `Adopted Shelf process on port ${tool.port} (owner pid ${owner.ownerPid}).`,
-            )
-            return this.runtime.setState(toolId, {
-              toolId,
-              status: 'running',
-              pid: owner.ownerPid,
-              message: `Running · port ${tool.port} (external)`,
-            })
-          }
-
-          const message = `Port ${tool.port} is already in use by another process.`
-          this.runtime.emitFailedReceipt({
-            toolId,
-            toolName: tool.name,
-            launchCommand: tool.launchCommand,
-            port: tool.port,
-            url: tool.url,
-            message,
-          })
-          return this.runtime.setState(toolId, {
-            toolId,
-            status: 'error',
-            message,
-            code: 'port_in_use',
-            remedy: remedyFor('port_in_use'),
-          })
-        }
-
-        // Pick a free port and persist so GUI + future launches stay aligned.
-        const previousPort = tool.port
-        const free = await findFreePort({ preferred: previousPort, from: 3000, to: 4999 })
-        const nextPort = free.port
-        const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
-        const nextUrl = urlForPort(tool.url, nextPort)
-        tool = this.store.save({
-          ...tool,
-          port: nextPort,
-          url: nextUrl,
-          launchCommand: nextLaunch,
-          env: { ...(tool.env || {}), PORT: String(nextPort) },
-        })
-        reassignedFrom = previousPort
-      }
+      // Serialized with other launches: the "which port is free" decision and
+      // the persisted rewrite must be atomic per manager, or two concurrent
+      // stack launches can both claim the same free port.
+      const resolution = await this.enqueueLibraryWrite(() =>
+        this.resolvePortConflict(tool as Tool, onPortConflict, origin),
+      )
+      if (resolution.state) return resolution.state
+      tool = resolution.tool
+      reassignedFrom = resolution.reassignedFrom
     }
 
     this.runtime.clearLogs(toolId)
@@ -248,6 +249,9 @@ export class ProcessManager {
           ? `Port ${reassignedFrom} busy → waiting on ${tool.port}`
           : `Waiting for localhost:${tool.port}`
         : 'Process starting…',
+      port: tool.port,
+      origin: 'local',
+      startedBy: origin,
     })
 
     this.runtime.appendLog(toolId, 'system', `Launch: ${tool.launchCommand}`)
@@ -292,6 +296,7 @@ export class ProcessManager {
         message: tool.port
           ? `Waiting for localhost:${tool.port}`
           : 'Process starting…',
+        startedBy: origin,
       })
       managed.receiptId = receipt?.id
 
@@ -368,11 +373,13 @@ export class ProcessManager {
           // Framework may have hopped ports; sniff logs before giving up.
           const sniffed = this.runtime.sniffReadyUrl(toolId)
           if (sniffed) {
-            const updated = this.store.save({
-              ...tool,
-              url: sniffed.url,
-              port: sniffed.port,
-            })
+            const updated = await this.enqueueLibraryWrite(() =>
+              this.store.save({
+                ...(tool as Tool),
+                url: sniffed.url,
+                port: sniffed.port,
+              }),
+            )
             this.runtime.appendLog(
               toolId,
               'system',
@@ -390,6 +397,9 @@ export class ProcessManager {
               pid: child.pid,
               startedAt,
               message: `Running · port ${sniffed.port} (from logs)`,
+              port: sniffed.port,
+              origin: 'local',
+              startedBy: origin,
             })
             if (updated.url) await this.openReadyUrl(toolId, updated.url)
             return this.runtime.peekState(toolId)
@@ -421,6 +431,9 @@ export class ProcessManager {
           pid: child.pid,
           startedAt,
           message: runningMessage,
+          port: tool.port,
+          origin: 'local',
+          startedBy: origin,
         })
         if (tool.url) await this.openReadyUrl(toolId, tool.url)
       } else {
@@ -430,11 +443,13 @@ export class ProcessManager {
           return this.runtime.peekState(toolId)
         }
         if (sniffed) {
-          this.store.save({
-            ...tool,
-            url: sniffed.url,
-            port: sniffed.port,
-          })
+          await this.enqueueLibraryWrite(() =>
+            this.store.save({
+              ...(tool as Tool),
+              url: sniffed.url,
+              port: sniffed.port,
+            }),
+          )
           this.runtime.appendLog(
             toolId,
             'system',
@@ -458,6 +473,9 @@ export class ProcessManager {
           pid: child.pid,
           startedAt,
           message: runningMessage,
+          port: sniffed?.port || tool.port,
+          origin: 'local',
+          startedBy: origin,
         })
         const readyUrl = sniffed?.url || tool.url
         if (readyUrl) await this.openReadyUrl(toolId, readyUrl)
@@ -486,6 +504,7 @@ export class ProcessManager {
           url: tool.url,
           startedAt,
           message,
+          startedBy: origin,
         })
       }
       const { code } = classifyLaunchFailure(this.runtime.getLogs(toolId))
@@ -627,9 +646,9 @@ export class ProcessManager {
     }
   }
 
-  async restart(toolId: string): Promise<ToolRuntimeState> {
+  async restart(toolId: string, options: StartOptions = {}): Promise<ToolRuntimeState> {
     await this.stop(toolId)
-    return this.start(toolId)
+    return this.start(toolId, options)
   }
 
   /**
@@ -673,6 +692,91 @@ export class ProcessManager {
     })
   }
 
+  /** Run fn after every previously queued library-mutating launch step. */
+  private enqueueLibraryWrite<T>(fn: () => Promise<T> | T): Promise<T> {
+    const run = this.libraryWriteChain.then(fn, fn)
+    this.libraryWriteChain = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
+
+  /**
+   * Occupied-port handling for a launch: adopt a trusted Shelf owner, refuse
+   * with port_in_use, or (reassign policy) pick a free port and persist the
+   * rewritten entry. Runs inside enqueueLibraryWrite — see start().
+   */
+  private async resolvePortConflict(
+    tool: Tool,
+    onPortConflict: PortConflictPolicy,
+    origin?: LaunchOrigin,
+  ): Promise<{ tool: Tool; state?: ToolRuntimeState; reassignedFrom?: number }> {
+    const toolId = tool.id
+    const port = tool.port as number
+    const occupants = await findPortOccupants(port)
+    if (occupants.length === 0) return { tool }
+
+    if (onPortConflict !== 'reassign') {
+      const owner = await this.trustedExternalOwner(toolId, port, occupants)
+      if (owner) {
+        this.runtime.appendLog(
+          toolId,
+          'system',
+          `Adopted Shelf process on port ${port} (owner pid ${owner.ownerPid}).`,
+        )
+        return {
+          tool,
+          state: this.runtime.setState(toolId, {
+            toolId,
+            status: 'running',
+            pid: owner.ownerPid,
+            message: `Running · port ${port} (external)`,
+            port,
+            origin: 'external',
+            startedBy: owner.startedBy,
+          }),
+        }
+      }
+
+      const message = `Port ${port} is already in use by another process.`
+      this.runtime.emitFailedReceipt({
+        toolId,
+        toolName: tool.name,
+        launchCommand: tool.launchCommand,
+        port,
+        url: tool.url,
+        message,
+        startedBy: origin,
+      })
+      return {
+        tool,
+        state: this.runtime.setState(toolId, {
+          toolId,
+          status: 'error',
+          message,
+          code: 'port_in_use',
+          remedy: remedyFor('port_in_use'),
+        }),
+      }
+    }
+
+    // Pick a free port and persist so GUI + future launches stay aligned.
+    const previousPort = port
+    const free = await findFreePort({ preferred: previousPort, from: 3000, to: 4999 })
+    const nextPort = free.port
+    const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
+    const nextUrl = urlForPort(tool.url, nextPort)
+    const saved = this.store.save({
+      ...tool,
+      port: nextPort,
+      url: nextUrl,
+      launchCommand: nextLaunch,
+      env: { ...(tool.env || {}), PORT: String(nextPort) },
+    })
+    return { tool: saved, reassignedFrom: previousPort }
+  }
+
   /** Newest open receipt with a live pid for this tool, from any Shelf process. */
   private findActiveReceipt(toolId: string, port?: number): RunReceipt | undefined {
     try {
@@ -712,7 +816,12 @@ export class ProcessManager {
         )
         this.runtime.markReceiptRunning(receipt.id, { port })
       }
-      return { ownerPid: receipt.pid, receiptId: receipt.id, receiptPort: receipt.port }
+      return {
+        ownerPid: receipt.pid,
+        receiptId: receipt.id,
+        receiptPort: receipt.port,
+        startedBy: receipt.startedBy,
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.runtime.appendLog(toolId, 'system', `Ownership check failed: ${message}`)

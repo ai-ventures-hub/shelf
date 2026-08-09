@@ -138,6 +138,18 @@ export type RemedyKind =
   | 'install_runtime'
   | 'copy_ai_report'
 
+/**
+ * Who initiated a launch. 'gui'/'tray' are the human in the Shelf app;
+ * 'mcp' is an agent client, identified by the (self-reported) name from the
+ * MCP initialize handshake, e.g. "claude-code" or "cursor".
+ */
+export type LaunchOriginKind = 'gui' | 'tray' | 'mcp'
+
+export interface LaunchOrigin {
+  kind: LaunchOriginKind
+  client?: string
+}
+
 export interface ToolRuntimeState {
   toolId: string
   status: ToolStatus
@@ -148,6 +160,12 @@ export interface ToolRuntimeState {
   /** Present on coded failures (and timeout stops); absent on success paths. */
   code?: LaunchErrorCode
   remedy?: RemedyKind
+  /** Live port once known (may differ from the configured port after reassign/sniff). */
+  port?: number
+  /** 'local' = this manager spawned it; 'external' = adopted from another Shelf process. */
+  origin?: 'local' | 'external'
+  /** Provenance carried from the run receipt; absent for pre-0.8 receipts. */
+  startedBy?: LaunchOrigin
 }
 
 export interface LogLine {
@@ -183,6 +201,8 @@ export interface RunReceipt {
   outcome: ReceiptOutcome
   exitCode?: number | null
   message?: string
+  /** Who initiated the launch; absent on receipts written before 0.8. */
+  startedBy?: LaunchOrigin
 }
 
 export interface ReceiptsFile {
@@ -332,6 +352,38 @@ export interface ProjectImportSuggestion {
   agentAccess: AgentAccess[]
   confidence: 'high' | 'medium' | 'low'
   signals: string[]
+}
+
+/**
+ * Human label for a launch origin. Client names are self-reported by MCP
+ * clients, so map known ids (most specific first) and fall back to the raw
+ * name. `externalUnknown` covers adopted runs whose receipt predates startedBy.
+ */
+const MCP_CLIENT_LABELS: Array<[string, string]> = [
+  ['claude-code', 'Claude Code'],
+  ['claude-desktop', 'Claude Desktop'],
+  ['claude-ai', 'Claude'],
+  ['claude', 'Claude'],
+  ['cursor', 'Cursor'],
+  ['codex', 'Codex'],
+  ['windsurf', 'Windsurf'],
+  ['vscode', 'VS Code'],
+  ['zed', 'Zed'],
+]
+
+export function launchOriginLabel(
+  origin?: LaunchOrigin,
+  opts: { externalUnknown?: boolean } = {},
+): string | null {
+  if (!origin) return opts.externalUnknown ? 'Another agent' : null
+  if (origin.kind === 'gui' || origin.kind === 'tray') return 'You'
+  const raw = (origin.client || '').trim()
+  if (!raw) return 'Agent'
+  const key = raw.toLowerCase()
+  for (const [id, label] of MCP_CLIENT_LABELS) {
+    if (key === id || key.includes(id)) return label
+  }
+  return raw
 }
 
 /** Redact likely secrets before returning tool/log payloads to agents or UI. */

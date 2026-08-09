@@ -214,6 +214,16 @@ async function main() {
     }
     console.log('OK: receipts', receiptList.count)
 
+    // Provenance: the server must stamp receipts with the client identity it
+    // learned from the initialize handshake (Client name above).
+    const stamped = receiptList.receipts.find((r) => r.startedBy)
+    if (!stamped || stamped.startedBy.kind !== 'mcp' || stamped.startedBy.client !== 'shelf-smoke') {
+      throw new Error(
+        `Expected receipt startedBy {kind:'mcp', client:'shelf-smoke'}, got ${JSON.stringify(stamped?.startedBy)}`,
+      )
+    }
+    console.log('OK: receipt provenance', stamped.startedBy.client)
+
     await callTool(client, 'shelf_remove_tool', { id: toolId })
     const after = await callTool(client, 'shelf_list_tools')
     if (after.tools.some((t) => t.id === toolId)) {

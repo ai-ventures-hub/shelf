@@ -44,6 +44,16 @@ export type {
 export type { BootstrapResult, BootstrapStep } from '../shared/project-bootstrap'
 export type { PreflightIssue } from '../shared/launch-preflight'
 export type { StartOptions, PortConflictPolicy } from '../shared/process-manager'
+export type {
+  LaunchOrigin,
+  LaunchOriginKind,
+} from '../shared/types'
+export { launchOriginLabel } from '../shared/types'
+export type {
+  CollectionActionResult,
+  CollectionToolOutcome,
+  CollectionToolResult,
+} from '../shared/collection-launch'
 export type { ShortcutStatus } from '../shared/global-shortcut'
 export {
   DEFAULT_GLOBAL_SHORTCUT,

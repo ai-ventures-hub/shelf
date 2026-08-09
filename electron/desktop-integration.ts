@@ -18,11 +18,13 @@ import {
   DEFAULT_GLOBAL_SHORTCUT,
   type ShortcutStatus,
 } from '../shared/global-shortcut'
+import { startCollection, stopCollection } from '../shared/collection-launch'
 import type { PrefsStore } from '../shared/prefs-store'
 import { parseShelfUrl } from '../shared/shelf-url'
 import type { LibraryStore } from './library-store'
 import type { ProcessManager } from './process-manager'
-import type { UiPrefs } from './types'
+import { launchOriginLabel } from './types'
+import type { ToolRuntimeState, UiPrefs } from './types'
 
 export { parseShelfUrl } from '../shared/shelf-url'
 export {
@@ -149,14 +151,19 @@ export function toggleWindow(host: DesktopIntegrationHost): void {
   }
 }
 
-/** Prefer live port from status message when launch reassigned the configured port. */
-function portLabelForRunning(
+/** Live port from runtime state (reassign/sniff aware), plus agent provenance. */
+function trayLabelForRunning(
   tool: { port?: number; name: string },
-  message?: string,
+  state?: ToolRuntimeState,
 ): string {
-  const sniffed = message?.match(/port\s+(\d+)/i)
-  const port = sniffed?.[1] || (tool.port != null ? String(tool.port) : '')
-  return port ? `${tool.name} · :${port}` : tool.name
+  const port = state?.port ?? tool.port
+  let label = port != null ? `${tool.name} · :${port}` : tool.name
+  // Only agents get a suffix — "via You" would just be noise.
+  if (state?.startedBy?.kind === 'mcp') {
+    const who = launchOriginLabel(state.startedBy)
+    if (who) label += ` · via ${who}`
+  }
+  return label
 }
 
 async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
@@ -172,6 +179,10 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
   applyTrayActivity(running.length > 0)
   // Favorites not already running: one-click launch from anywhere.
   const favorites = allTools.filter((t) => t.favorite && !runningIds.has(t.id))
+  // Stacks: only collections that still have members.
+  const collections = host.store
+    .listCollections()
+    .filter((c) => c.toolIds.some((id) => allTools.some((t) => t.id === id)))
 
   // Submenu per tool: open detail, open URL, stop — not just a flat Stop list.
   const runningItems: Electron.MenuItemConstructorOptions[] =
@@ -179,7 +190,7 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
       ? [{ label: 'No tools running', enabled: false }]
       : running.map((tool) => {
           const state = stateById.get(tool.id)
-          const label = portLabelForRunning(tool, state?.message)
+          const label = trayLabelForRunning(tool, state)
           const url = tool.url
           return {
             label,
@@ -231,6 +242,20 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
       enabled: false,
     },
     ...runningItems,
+    ...(running.length > 0
+      ? ([
+          {
+            label: 'Stop all',
+            click: () => {
+              // scope 'all': stop everything Shelf owns, including adopted
+              // MCP-launched tools; untrusted listeners are refused per-tool.
+              void host.processes
+                .stopAll('Stopped from the Shelf menu.', { scope: 'all' })
+                .then(() => refreshTray(host))
+            },
+          },
+        ] satisfies Electron.MenuItemConstructorOptions[])
+      : []),
     // Simple mode heals busy ports on launch, matching in-app behavior.
     ...(favorites.length > 0
       ? ([
@@ -243,10 +268,60 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
                 .start(tool.id, {
                   onPortConflict:
                     host.prefs.get().uiMode === 'simple' ? 'reassign' : 'fail',
+                  origin: { kind: 'tray' },
                 })
                 .then(() => refreshTray(host))
             },
           })),
+        ] satisfies Electron.MenuItemConstructorOptions[])
+      : []),
+    ...(collections.length > 0
+      ? ([
+          { type: 'separator' },
+          { label: 'Collections', enabled: false },
+          ...collections.map((collection) => {
+            const memberIds = collection.toolIds.filter((id) =>
+              allTools.some((t) => t.id === id),
+            )
+            const runningMembers = memberIds.filter((id) => runningIds.has(id)).length
+            return {
+              label: `${collection.name} (${runningMembers}/${memberIds.length})`,
+              submenu: [
+                {
+                  label: 'Start stack',
+                  enabled: runningMembers < memberIds.length,
+                  click: () => {
+                    void startCollection(
+                      collection.id,
+                      { store: host.store, processes: host.processes },
+                      {
+                        onPortConflict:
+                          host.prefs.get().uiMode === 'simple' ? 'reassign' : 'fail',
+                        origin: { kind: 'tray' },
+                      },
+                    ).then(() => refreshTray(host))
+                  },
+                },
+                {
+                  label: 'Stop stack',
+                  enabled: runningMembers > 0,
+                  click: () => {
+                    void stopCollection(collection.id, {
+                      store: host.store,
+                      processes: host.processes,
+                    }).then(() => refreshTray(host))
+                  },
+                },
+                {
+                  label: 'Open in Shelf',
+                  click: () => {
+                    showOrCreateWindow(host)
+                    host.navigate(`/collections/${collection.id}`)
+                  },
+                },
+              ],
+            } satisfies Electron.MenuItemConstructorOptions
+          }),
         ] satisfies Electron.MenuItemConstructorOptions[])
       : []),
     { type: 'separator' },

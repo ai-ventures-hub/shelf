@@ -32,7 +32,15 @@ import { registerCapabilityTools } from './capability-tools'
 const store = new LibraryStore()
 const receipts = new ReceiptStore()
 const capabilityGaps = new CapabilityGapStore()
-const processes = new ProcessManager(store, { receipts })
+const processes = new ProcessManager(store, {
+  receipts,
+  // Thunk: the client's self-reported name (e.g. "claude-code") is only known
+  // after the MCP initialize handshake, well before any tool call arrives.
+  defaultOrigin: () => ({
+    kind: 'mcp',
+    client: server.server.getClientVersion()?.name,
+  }),
+})
 
 const server = new McpServer({
   name: 'shelf',
