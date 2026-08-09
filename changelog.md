@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.8.0 — 2026-08-09
+
+Collections become stacks, and Shelf finally answers "who started this?" —
+all on a hardened launch pipeline.
+
+- **Start stack / Stop stack**: one control on a collection launches every
+  member in order (already-running tools are skipped, never restarted) and
+  stops everything Shelf owns on the way down — with a per-tool outcome
+  summary and a live running counter. The tray gets a **Collections**
+  section with the same stack controls, plus a global **Stop all**.
+  Simple mode heals busy ports during stack launches, same as single
+  launches; Developer mode surfaces the conflict per tool.
+- **Agent provenance**: running cards now carry a chip showing who launched
+  the tool — **You**, **Claude Code**, **Cursor**, or any other MCP client
+  (identity captured from the MCP initialize handshake and stored on the
+  run receipt). Visible in both Experience modes, in the list view, in
+  Recent run history, and in tray labels ("via Claude Code"). Runs adopted
+  from pre-0.8 receipts honestly show "Another agent".
+- **Launch pipeline hardening**: concurrent launches of the same tool
+  (a GUI click racing an agent's MCP call, or a stack launch) now coalesce
+  into one process instead of double-spawning; port reassignment decisions
+  are serialized so parallel launches can't claim the same free port; and
+  external-process detection uses structured state instead of parsing
+  status-message text.
+- **Dev-only**: Chromium's HTTP cache is disabled in dev launches, so a
+  wrong server squatting the vite port can never poison future launches
+  into a blank window.
+- **New pre-ship gates**: a stack/provenance smoke (double-start
+  coalescing, adoption provenance, port-conflict fail/reassign paths) and
+  a bridge-parity smoke that fails the build if the renderer contract,
+  preload bridge, and IPC handlers ever drift apart.
+
 ## 0.7.0 — 2026-08-08
 
 Simple Mode + the guided experience: Shelf now serves people entering vibe

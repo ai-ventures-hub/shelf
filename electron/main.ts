@@ -88,6 +88,11 @@ function applyLaunchAtLogin(enabled: boolean): void {
 pinShelfUserDataPath()
 app.setName('Shelf')
 
+// Dev loads from vite over HTTP; never let Chromium cache those responses.
+// (A wrong server once squatting the vite port can otherwise poison the shared
+// userData HTTP cache and blank the window on every later launch.)
+if (isDev) app.commandLine.appendSwitch('disable-http-cache')
+
 // Single instance so shelf:// and Dock re-opens forward into this process.
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
