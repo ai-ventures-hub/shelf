@@ -12,8 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Design handoff bundle — reference material, not shipped code.
+    // Design handoff bundles — reference material, not shipped code.
     "landing-page-redesign-options/**",
+    "design_handoff_landing_v2/**",
+    "Shelf brand standard guide/**",
   ]),
 ]);
 

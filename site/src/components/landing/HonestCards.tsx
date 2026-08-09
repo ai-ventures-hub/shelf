@@ -1,20 +1,19 @@
 import { HONEST_CARDS } from '@/lib/landing-content'
-import { ToolTile } from './ToolTile'
 
-/** Beat 04 — three tool cards that tell the truth twice. */
+/** Three tool cards that tell the truth twice — process and agent access. */
 export function HonestCards() {
   return (
-    <section id="launch" className="section" aria-labelledby="launch-heading">
-      <div className="section-inner">
-        <div className="section-head" data-reveal>
-          <p className="eyebrow">Launch without the ritual</p>
-          <h2 id="launch-heading">Every tool tells the truth twice.</h2>
-          <p className="section-lead">
-            Once about its process — Starting, Running, Stopped. Once about agent
-            access — ready, needs setup, or manual only. Open the URL, watch live
-            logs, stop when done.
-          </p>
-        </div>
+    <section className="section" data-well aria-labelledby="launch-heading">
+      <div className="section-inner honest-head">
+        <p className="eyebrow">Launch without the ritual</p>
+        <h2 id="launch-heading" className="sec-h2">
+          Every tool tells the truth twice.
+        </h2>
+        <p className="sec-lead">
+          Once about its process — Starting, Running, Stopped. Once about agent
+          access — ready, needs setup, or manual only. Open the URL, watch live
+          logs, stop when done.
+        </p>
         <ul className="honest-grid">
           {HONEST_CARDS.map((card, i) => (
             <li
@@ -22,13 +21,13 @@ export function HonestCards() {
               className="honest-card"
               data-edge={card.edge}
               data-reveal
-              style={{ '--reveal-order': i + 1 } as React.CSSProperties}
+              style={{ '--reveal-order': i } as React.CSSProperties}
             >
               <div className="honest-card-top">
-                <span className="honest-card-id">
-                  <ToolTile toolId={card.id} size={19} />
-                  <strong>{card.name}</strong>
+                <span className="lt lt--md" aria-hidden>
+                  {card.letter}
                 </span>
+                <strong>{card.name}</strong>
                 <span className="pill" data-tone={card.statusTone}>
                   {card.status}
                 </span>
@@ -39,6 +38,7 @@ export function HonestCards() {
                 <span
                   className="pill"
                   data-tone={card.readinessTone}
+                  data-fill={card.readinessTone === 'neutral' ? undefined : ''}
                   title="Agent readiness — separate from process status"
                 >
                   {card.readiness}

@@ -1,8 +1,7 @@
 import Link from 'next/link'
-import { GitHubMark } from '@/components/GitHubMark'
 import { ShelfMark } from '@/components/ShelfMark'
 
-/** Command-deck header — three anchors and the tertiary GitHub CTA. */
+/** Sticky 70px header — the hero pin math depends on this height. */
 export function SiteHeader() {
   return (
     <header className="site-header">
@@ -12,19 +11,14 @@ export function SiteHeader() {
           <span className="brand-name">Shelf</span>
         </Link>
         <nav className="header-nav" aria-label="Page">
-          <Link href="/#demo">Demo</Link>
-          <Link href="/#app">App</Link>
-          <Link href="/#capabilities">Capabilities</Link>
-          <Link href="/#agents">Agents</Link>
-          <a
-            className="header-github"
-            href="https://github.com/ai-ventures-hub/shelf"
-            rel="noopener noreferrer"
-          >
-            <GitHubMark />
+          <Link href="/#how">How it works</Link>
+          <Link href="/#app">The app</Link>
+          <Link href="/#agents">Your AI tools</Link>
+          <Link href="/#dev">For developers</Link>
+          <a href="https://github.com/ai-ventures-hub/shelf" rel="noopener noreferrer">
             GitHub
           </a>
-          <Link className="header-download" href="/download">
+          <Link className="btn-primary btn--nav" href="/download">
             Download <span className="header-download-free">— It’s free</span>
           </Link>
         </nav>

@@ -1,99 +1,36 @@
 /**
  * Static narrative-section data for the landing beats.
  * Server-only: imported by server components exclusively, so none of this
- * rides into the client bundle (the demo has its own module, demo-states.ts).
+ * rides into the client bundle (interactive mocks have their own module,
+ * landing-demos.ts).
  */
 
 export type PillTone = 'accent' | 'success' | 'warning' | 'neutral' | 'danger'
 
-/** Beat 02 — the tool graveyard ledger. */
-export const LEDGER_ROWS = [
-  {
-    name: 'pdf-batch-thing',
-    seen: 'March, maybe',
-    ritual: 'npm run dev (port unknown)',
-    status: 'Unknown',
-    tone: 'neutral',
-    shelved: false,
-  },
-  {
-    name: 'client-photo-resizer v1',
-    seen: 'Rebuilt as v2 instead',
-    ritual: 'some .venv incantation',
-    status: 'Unknown',
-    tone: 'neutral',
-    shelved: false,
-  },
-  {
-    name: 'wp preview stack',
-    seen: 'Two clients ago',
-    ritual: 'docker compose up — which folder?',
-    status: 'Unknown',
-    tone: 'neutral',
-    shelved: false,
-  },
-  {
-    name: 'csv de-duper',
-    seen: 'It’s in ~/Downloads somewhere',
-    ritual: 'python cleanup.py …flags?',
-    status: 'Unknown',
-    tone: 'neutral',
-    shelved: false,
-  },
-  {
-    name: 'Image Prepper',
-    seen: 'On the shelf',
-    ritual: 'one click · npm run dev · :4173',
-    status: 'Agent-ready',
-    tone: 'success',
-    shelved: true,
-  },
-] as const satisfies readonly {
-  name: string
-  seen: string
-  ritual: string
-  status: string
-  tone: PillTone
-  shelved: boolean
-}[]
-
-/** Beat 03 — smart import steps and the suggestion sheet. */
-export const IMPORT_STEPS = [
+/** #how — the three numbered cards under the drop-demo window. */
+export const HOW_CARDS = [
   {
     n: '01',
-    title: 'Choose a project folder',
-    sub: 'Or drop it on the window',
-    raised: false,
+    title: 'Drop a folder',
+    body: 'Anything your AI tool built — a Next.js site, a Python script, a Docker stack.',
   },
   {
     n: '02',
-    title: 'Shelf scans and suggests',
-    sub: 'Scripts, ports, package manager, DESIGN.md',
-    raised: true,
+    title: 'Shelf reads the setup',
+    body: 'Launch command, packages, ports — detected, fixed when busy, remembered forever.',
   },
   {
     n: '03',
-    title: 'Accept what looks right',
-    sub: 'The tool lives in your library',
-    raised: false,
+    title: 'It runs — and stays found',
+    body: 'One click to launch, always. Your AI tools can find and use it too.',
   },
 ] as const
 
-export const IMPORT_FIELDS = [
-  { label: 'NAME', value: 'Image Prepper', mono: false, hi: false },
-  { label: 'LAUNCH', value: 'npm run dev -- --port 4173', mono: true, hi: false },
-  { label: 'PORT', value: '4173', mono: true, hi: false },
-  { label: 'TAGS', value: 'image · utility', mono: false, hi: false },
-  { label: 'CAPABILITIES', value: 'batch-optimize images', mono: false, hi: true },
-  { label: 'AGENT ACCESS', value: 'CLI · ready', mono: false, hi: true },
-  { label: 'PACKAGE', value: 'npm', mono: true, hi: false },
-  { label: 'DESIGN.MD', value: 'Detected', mono: false, hi: false },
-] as const
-
-/** Beat 04 — honest cards: process status and agent access, separately. */
+/** Honest cards — process status and agent access, separately. */
 export const HONEST_CARDS = [
   {
     id: 'image-prepper',
+    letter: 'I',
     name: 'Image Prepper',
     status: 'Running',
     statusTone: 'success',
@@ -106,6 +43,7 @@ export const HONEST_CARDS = [
   },
   {
     id: 'wp-manager',
+    letter: 'L',
     name: 'Local WordPress Manager',
     status: 'Ready',
     statusTone: 'neutral',
@@ -118,6 +56,7 @@ export const HONEST_CARDS = [
   },
   {
     id: 'doc-converter',
+    letter: 'D',
     name: 'Document Converter',
     status: 'Stopped',
     statusTone: 'neutral',
@@ -130,6 +69,7 @@ export const HONEST_CARDS = [
   },
 ] as const satisfies readonly {
   id: string
+  letter: string
   name: string
   status: string
   statusTone: PillTone
@@ -141,29 +81,26 @@ export const HONEST_CARDS = [
   action: string
 }[]
 
-/** Beat 06 — hub diagram: the shelf rows and connected clients. */
-export const HUB_SHELF_ROWS = [
-  { name: 'image-prepper', state: 'running :4173', live: true },
-  { name: 'wp-manager', state: 'ready :8080', live: false },
-  { name: 'doc-converter', state: 'manual only', live: false },
-] as const
-
-export const HUB_CLIENTS = [
-  { mono: 'C', name: 'Claude Desktop' },
-  { mono: 'Cu', name: 'Cursor' },
-  { mono: 'Cx', name: 'OpenAI Codex' },
-] as const
-
-/** Beat 07 — the local-first receipt. */
-export const RECEIPT_FILES = [
-  { name: 'library.json', note: 'your tools' },
-  { name: 'capability-gaps.json', note: 'unmet needs' },
-  { name: 'run-receipts/', note: 'what launched, when' },
-] as const
-
-export const RECEIPT_FACTS = [
-  { name: 'cloud account', note: 'none' },
-  { name: 'secrets in logs', note: 'masked' },
-  { name: 'root required', note: 'no' },
-  { name: 'license', note: 'MIT, complete without a subscription' },
-] as const
+/**
+ * #agents — the chat vignette. A bubble is a list of parts so the one
+ * highlighted phrase ("portfolio-site is running") can carry its own tone.
+ */
+export const CHAT_BUBBLES = [
+  { role: 'user', parts: [{ text: 'Launch my portfolio site' }] },
+  {
+    role: 'agent',
+    parts: [
+      { text: 'Done — ' },
+      { text: 'portfolio-site is running', tone: 'success' },
+      { text: '. Opened it in your browser.' },
+    ],
+  },
+  { role: 'user', parts: [{ text: 'What do I have that resizes images?' }] },
+  {
+    role: 'agent',
+    parts: [{ text: 'Image Prepper on your shelf does batch resizing — it’s ready to use.' }],
+  },
+] as const satisfies readonly {
+  role: 'user' | 'agent'
+  parts: readonly { text: string; tone?: 'success' }[]
+}[]

@@ -1,14 +1,13 @@
-import { AppTour } from '@/components/landing/AppTour'
-import { CapabilityAskAnswer } from '@/components/landing/CapabilityAskAnswer'
+import { AgentChat } from '@/components/landing/AgentChat'
+import { AppShowcase } from '@/components/landing/AppShowcase'
+import { DevMode } from '@/components/landing/DevMode'
 import { FinalCta } from '@/components/landing/FinalCta'
-import { GraveyardLedger } from '@/components/landing/GraveyardLedger'
-import { HeroSection } from '@/components/landing/HeroSection'
+import { HeroScrollStage } from '@/components/landing/HeroScrollStage'
 import { HonestCards } from '@/components/landing/HonestCards'
+import { HowItWorks } from '@/components/landing/HowItWorks'
 import { ScrollReveals } from '@/components/landing/ScrollReveals'
-import { SharedLibraryHub } from '@/components/landing/SharedLibraryHub'
 import { SiteFooter } from '@/components/landing/SiteFooter'
 import { SiteHeader } from '@/components/landing/SiteHeader'
-import { SmartImportScan } from '@/components/landing/SmartImportScan'
 
 /** Structured data — free macOS developer app; richer search listings. */
 const SOFTWARE_JSON_LD = {
@@ -25,7 +24,7 @@ const SOFTWARE_JSON_LD = {
     'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, and share them honestly with your AI agents over MCP. No cloud, no account.',
 }
 
-/** Landing — the animated app tour leads, the story beats follow. */
+/** Landing v2 — the scroll-scrubbed hero leads, the story beats follow. */
 export default function HomePage() {
   return (
     <>
@@ -35,13 +34,12 @@ export default function HomePage() {
       />
       <SiteHeader />
       <main id="top">
-        <HeroSection />
-        <AppTour />
-        <GraveyardLedger />
-        <SmartImportScan />
+        <HeroScrollStage />
+        <HowItWorks />
+        <AppShowcase />
         <HonestCards />
-        <CapabilityAskAnswer />
-        <SharedLibraryHub />
+        <AgentChat />
+        <DevMode />
         <FinalCta />
       </main>
       <SiteFooter />
