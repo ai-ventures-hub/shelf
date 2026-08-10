@@ -19,6 +19,9 @@ export function isDesignToken(node: DesignToken | DesignTokenGroup): node is Des
 export function flattenGroup(group: DesignTokenGroup, prefix = ''): FlatToken[] {
   const out: FlatToken[] = []
   for (const [key, node] of Object.entries(group)) {
+    // Skip nulls/primitives from hand-edited or agent-written files — the
+    // editor must render whatever the store tolerates.
+    if (!node || typeof node !== 'object' || Array.isArray(node)) continue
     const tokenPath = prefix ? `${prefix}.${key}` : key
     if (isDesignToken(node)) {
       out.push({ path: tokenPath, value: node.$value, type: node.$type })

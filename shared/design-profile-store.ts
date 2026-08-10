@@ -65,6 +65,14 @@ export class DesignProfileStore {
       try {
         const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as Partial<DesignProfilesFile>
         if (!Array.isArray(parsed.profiles)) throw new Error('missing profiles array')
+        // Normalization must be STABLE across reads: a hand-edited record
+        // with a junk id gets a synthesized one, and re-synthesizing per
+        // read would make list() ids dangle. Persist the normalized form
+        // once when it differs.
+        const normalized = parsed.profiles.map(normalizeProfile)
+        if (JSON.stringify(normalized) !== JSON.stringify(parsed.profiles)) {
+          this.write({ version: 1, profiles: normalized })
+        }
       } catch {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-')
         fs.copyFileSync(this.filePath, path.join(root, `design-profiles.corrupt-backup-${stamp}.json`))
@@ -261,9 +269,11 @@ function isTokenGroup(value: unknown): value is DesignTokenGroup {
  */
 function normalizeProfile(input: Partial<DesignProfile>): DesignProfile {
   const now = new Date().toISOString()
+  const str = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && value.trim() ? value.trim() : fallback
   return {
-    id: input.id || randomUUID(),
-    name: (input.name || 'Untitled').trim(),
+    id: str(input.id, randomUUID()),
+    name: str(input.name, 'Untitled'),
     isDefault: input.isDefault === true,
     tokens: isTokenGroup(input.tokens) ? input.tokens : {},
     modes: {
@@ -274,7 +284,7 @@ function normalizeProfile(input: Partial<DesignProfile>): DesignProfile {
     assets: Array.isArray(input.assets)
       ? input.assets.filter((asset) => Boolean(asset) && typeof asset.path === 'string')
       : [],
-    createdAt: input.createdAt || now,
-    updatedAt: input.updatedAt || now,
+    createdAt: str(input.createdAt, now),
+    updatedAt: str(input.updatedAt, now),
   }
 }

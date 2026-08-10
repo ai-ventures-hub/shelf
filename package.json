@@ -26,6 +26,7 @@
     "smoke:stack": "tsc -p tsconfig.electron.json && node scripts/smoke-stack.mjs",
     "smoke:bridge": "node scripts/smoke-bridge.mjs",
     "smoke:design": "tsc -p tsconfig.electron.json && node scripts/smoke-design.mjs",
+    "smoke:design-stress": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-design-stress.mjs",
     "seed:design": "tsc -p tsconfig.electron.json && node scripts/seed-design-profile.mjs",
     "smoke:library-safety": "tsc -p tsconfig.electron.json && node scripts/smoke-library-safety.mjs",
     "smoke:claude-connect": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-claude-connect.mjs",

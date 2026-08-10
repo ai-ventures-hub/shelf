@@ -59,6 +59,7 @@ async function main() {
   await run('codex connect', 'node', ['scripts/smoke-codex-connect.mjs'])
   await run('mcp path preference', 'node', ['scripts/smoke-mcp-path.mjs'])
   await run('mcp smoke', 'node', ['scripts/smoke-mcp.mjs'])
+  await run('design engine stress', 'node', ['scripts/smoke-design-stress.mjs'])
   console.log('\nOK: smoke:all passed')
 }
 

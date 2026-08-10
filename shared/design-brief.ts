@@ -28,6 +28,9 @@ export interface FlatToken {
 export function flattenTokens(group: DesignTokenGroup, prefix = ''): FlatToken[] {
   const out: FlatToken[] = []
   for (const [key, node] of Object.entries(group)) {
+    // Hand-edited files can hold nulls/primitives where groups belong — skip,
+    // never throw (agents read these through briefs).
+    if (!node || typeof node !== 'object' || Array.isArray(node)) continue
     const tokenPath = prefix ? `${prefix}.${key}` : key
     if (isDesignToken(node)) {
       out.push({ path: tokenPath, value: (node as DesignToken).$value, type: node.$type })
@@ -119,6 +122,20 @@ export function buildDesignBriefSections(
     title: 'Dimension (radii, layout)',
     body: renderTokenLines(profile, 'dimension'),
   })
+
+  // Profiles may carry custom top-level groups (arbitrary DTCG imports) —
+  // a "complete" brief must not silently drop them.
+  const knownPrefixes = ['color.', 'typography.', 'dimension.']
+  const otherTokens = flattenTokens(profile.tokens).filter(
+    (token) => !knownPrefixes.some((prefix) => token.path.startsWith(prefix)),
+  )
+  if (otherTokens.length > 0) {
+    sections.push({
+      id: 'other-tokens',
+      title: 'Other tokens',
+      body: otherTokens.map((token) => `- ${token.path}: ${token.value}`).join('\n'),
+    })
+  }
 
   if (profile.direction) {
     sections.push({
