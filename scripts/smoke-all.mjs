@@ -40,6 +40,7 @@ async function main() {
   await run('library safety', 'node', ['scripts/smoke-library-safety.mjs'])
   await run('prefs uiMode', 'node', ['scripts/smoke-prefs.mjs'])
   await run('capability intelligence', 'node', ['scripts/smoke-capabilities.mjs'])
+  await run('design engine', 'node', ['scripts/smoke-design.mjs'])
   await run('smart import', 'node', ['scripts/smoke-import.mjs'])
   await run('receipts', 'node', ['scripts/smoke-receipts.mjs'])
   await run('receipt export', 'node', ['scripts/smoke-receipt-export.mjs'])

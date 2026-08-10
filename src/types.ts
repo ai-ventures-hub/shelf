@@ -70,6 +70,42 @@ export interface Collection {
   name: string
   description?: string
   toolIds: string[]
+  /** Design Engine binding (mirror of shared/types.ts). */
+  designProfileId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** DTCG-format leaf token (mirror of shared/types.ts). */
+export interface DesignToken {
+  $value: string | number
+  $type?: string
+  $description?: string
+}
+
+/** DTCG nested group; leaves carry $value (mirror of shared/types.ts). */
+export interface DesignTokenGroup {
+  [key: string]: DesignToken | DesignTokenGroup
+}
+
+export type DesignAssetKind = 'logo' | 'wordmark' | 'icon' | 'other'
+
+/** Brand asset stored under the Shelf data root (mirror of shared/types.ts). */
+export interface DesignAsset {
+  kind: DesignAssetKind
+  path: string
+  mime: string
+}
+
+/** Design/brand profile from design-profiles.json (mirror of shared/types.ts). */
+export interface DesignProfile {
+  id: string
+  name: string
+  isDefault: boolean
+  tokens: DesignTokenGroup
+  modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
+  direction: string
+  assets: DesignAsset[]
   createdAt: string
   updatedAt: string
 }
@@ -450,6 +486,7 @@ export interface ShelfApi {
   listCollections: () => Promise<Collection[]>
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
+  listDesignProfiles: () => Promise<DesignProfile[]>
   startCollection: (
     id: string,
     options?: StartOptions,

@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
+import type { DesignProfileStore } from '../shared/design-profile-store'
+import { resolveProfileForGap } from '../shared/design-resolve'
 import {
   deriveToolReadiness,
   findCapabilityMatches,
@@ -17,6 +19,7 @@ interface CapabilityToolHost {
   store: LibraryStore
   processes: ProcessManager
   gaps: CapabilityGapStore
+  profiles: DesignProfileStore
 }
 
 /** Register the stable, non-invoking Capability Intelligence MCP surface. */
@@ -25,6 +28,7 @@ export function registerCapabilityTools({
   store,
   processes,
   gaps,
+  profiles,
 }: CapabilityToolHost): void {
   server.registerTool(
     'shelf_find_capability',
@@ -113,7 +117,11 @@ export function registerCapabilityTools({
       const related = gap.relatedToolIds
         .map((toolId) => store.get(toolId))
         .filter((tool): tool is Tool => Boolean(tool))
-      return textResult({ id, brief: buildGapBrief(gap, related) })
+      const brand = resolveProfileForGap(gap, store.listCollections(), profiles.list())
+      return textResult({
+        id,
+        brief: buildGapBrief(gap, related, brand.profile ? { profile: brand.profile } : undefined),
+      })
     },
   )
 

@@ -29,6 +29,12 @@ export type {
   CapabilityGap,
   CapabilityGapStatus,
   CapabilityGapsFile,
+  DesignToken,
+  DesignTokenGroup,
+  DesignAsset,
+  DesignAssetKind,
+  DesignProfile,
+  DesignProfilesFile,
 } from '../shared/types'
 export { DEFAULT_UI_PREFS } from '../shared/types'
 export type {

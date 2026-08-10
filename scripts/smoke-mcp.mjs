@@ -258,6 +258,119 @@ async function main() {
     }
     console.log('OK: collections', collections.count)
 
+    // --- Design Engine read path (v1.0 Phase 1) ---
+    // Zero-arg resolution with an empty store must error with guidance, not
+    // invent a profile.
+    let emptyRejected = false
+    try {
+      await callTool(client, 'shelf_get_design_profile')
+    } catch (err) {
+      emptyRejected = /no design profiles exist/i.test(String(err.message || err))
+    }
+    if (!emptyRejected) {
+      throw new Error('Zero-arg get with no profiles must error with guidance')
+    }
+
+    // Seed a profile through the shared store (MCP is read-only by design);
+    // the server re-reads design-profiles.json per call, so no restart needed.
+    const { DesignProfileStore } = requireCjs('../dist-electron/shared/design-profile-store.js')
+    const profileStore = new DesignProfileStore(smokeDataRoot)
+    const seededProfile = profileStore.save({
+      name: 'Smoke Brand',
+      tokens: { color: { brand: { $value: '#7895ff', $type: 'color' } } },
+      modes: { light: { color: { brand: { $value: '#4f6ef2', $type: 'color' } } } },
+      direction: 'Calm, precise, dark-first. SMOKE_DESIGN_SECRET=leakme must be masked.',
+    })
+
+    const profileList = await callTool(client, 'shelf_list_design_profiles')
+    const listedProfile = profileList.profiles?.find((p) => p.id === seededProfile.id)
+    if (
+      profileList.count !== 1 ||
+      !listedProfile?.isDefault ||
+      typeof listedProfile.summary !== 'string' ||
+      !Array.isArray(listedProfile.boundCollections)
+    ) {
+      throw new Error('shelf_list_design_profiles returned unexpected shape')
+    }
+
+    // Zero-arg call resolves the default — the acceptance-gate path.
+    const defaultProfile = await callTool(client, 'shelf_get_design_profile')
+    if (
+      defaultProfile.resolvedVia !== 'default' ||
+      defaultProfile.tokens?.color?.brand?.$value !== '#7895ff' ||
+      !defaultProfile.brief?.includes('#7895ff') ||
+      !defaultProfile.brief.includes('Calm, precise')
+    ) {
+      throw new Error('Zero-arg shelf_get_design_profile must return default tokens + brief')
+    }
+    if (
+      defaultProfile.direction.includes('leakme') ||
+      defaultProfile.brief.includes('leakme')
+    ) {
+      throw new Error('Design profile direction must be masked in MCP output')
+    }
+
+    // Collection-scoped resolution: bind via the shared LibraryStore (GUI path).
+    const { LibraryStore } = requireCjs('../dist-electron/shared/library-store.js')
+    const smokeLibrary = new LibraryStore(smokeDataRoot)
+    const designCollection = smokeLibrary.saveCollection({
+      id: '',
+      name: 'Design Smoke Collection',
+      toolIds: [toolId],
+      designProfileId: seededProfile.id,
+    })
+    const viaCollection = await callTool(client, 'shelf_get_design_profile', {
+      collectionId: designCollection.id,
+    })
+    if (viaCollection.resolvedVia !== 'collection') {
+      throw new Error(`Expected collection resolution, got ${viaCollection.resolvedVia}`)
+    }
+    const viaTool = await callTool(client, 'shelf_get_design_profile', { toolId })
+    if (viaTool.resolvedVia !== 'tool-collection' || viaTool.profile.id !== seededProfile.id) {
+      throw new Error(`Expected tool-collection resolution, got ${viaTool.resolvedVia}`)
+    }
+    let unknownProfileRejected = false
+    try {
+      await callTool(client, 'shelf_get_design_profile', { id: 'not-a-profile' })
+    } catch {
+      unknownProfileRejected = true
+    }
+    if (!unknownProfileRejected) {
+      throw new Error('Unknown explicit profile id must error, not fall back')
+    }
+    console.log('OK: design profiles (list, default, collection, tool)')
+
+    // Resource: markdown brief on hit, JSON found:false on miss.
+    const resource = await client.readResource({
+      uri: `shelf://design/profiles/${seededProfile.id}`,
+    })
+    const resourceHit = resource.contents?.[0]
+    if (
+      resourceHit?.mimeType !== 'text/markdown' ||
+      !String(resourceHit.text).includes('Smoke Brand')
+    ) {
+      throw new Error('Design profile resource must return the markdown brief')
+    }
+    const missing = await client.readResource({ uri: 'shelf://design/profiles/bogus' })
+    const missBody = JSON.parse(missing.contents?.[0]?.text || '{}')
+    if (missing.contents?.[0]?.mimeType !== 'application/json' || missBody.found !== false) {
+      throw new Error('Missing design profile resource must return JSON found:false')
+    }
+    console.log('OK: design profile resource')
+
+    // Gap briefs gain a Brand section once a profile resolves — existing
+    // content (capabilities, register-back, id) must be untouched.
+    const brandedBrief = await callTool(client, 'shelf_get_gap_brief', { id: smokeGap.id })
+    if (
+      !brandedBrief.brief.includes('### Brand (Shelf Design Engine)') ||
+      !brandedBrief.brief.includes('shelf_get_design_profile') ||
+      !brandedBrief.brief.includes(gapInput.capabilities[0]) ||
+      !brandedBrief.brief.includes('shelf_register_project')
+    ) {
+      throw new Error('Gap brief must gain a Brand section without losing existing sections')
+    }
+    console.log('OK: gap brief brand section')
+
     const launched = await callTool(client, 'shelf_launch_tool', { id: toolId })
     console.log('launch', launched.state.status, launched.state.message)
     if (launched.state.status !== 'running') {

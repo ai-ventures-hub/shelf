@@ -8,7 +8,8 @@
  * section from the Design Engine here. Insert sections; never rewrite.
  */
 import { deriveToolReadiness } from './capability-intelligence'
-import type { CapabilityGap, Tool } from './types'
+import { buildBrandSectionForGapBrief } from './design-brief'
+import type { CapabilityGap, DesignProfile, Tool } from './types'
 
 export interface GapBriefSection {
   id: string
@@ -23,6 +24,7 @@ function formatDay(iso: string): string {
 export function buildGapBriefSections(
   gap: CapabilityGap,
   relatedTools: Tool[],
+  brand?: { profile: DesignProfile },
 ): GapBriefSection[] {
   const sections: GapBriefSection[] = []
 
@@ -82,6 +84,11 @@ export function buildGapBriefSections(
     })
   }
 
+  // v1.0 Design Engine insert — before register-back so that stays the closer.
+  if (brand) {
+    sections.push(buildBrandSectionForGapBrief(brand.profile))
+  }
+
   sections.push({
     id: 'register-back',
     title: 'When built: register it back to Shelf',
@@ -113,6 +120,10 @@ export function renderGapBrief(sections: GapBriefSection[]): string {
     .join('\n\n')
 }
 
-export function buildGapBrief(gap: CapabilityGap, relatedTools: Tool[]): string {
-  return renderGapBrief(buildGapBriefSections(gap, relatedTools))
+export function buildGapBrief(
+  gap: CapabilityGap,
+  relatedTools: Tool[],
+  brand?: { profile: DesignProfile },
+): string {
+  return renderGapBrief(buildGapBriefSections(gap, relatedTools, brand))
 }

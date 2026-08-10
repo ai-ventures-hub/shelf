@@ -112,8 +112,58 @@ export interface Collection {
   name: string
   description?: string
   toolIds: string[]
+  /** Design Engine binding — additive optional, no library version bump. */
+  designProfileId?: string
   createdAt: string
   updatedAt: string
+}
+
+/** DTCG-format leaf token (W3C Design Tokens: $value/$type). */
+export interface DesignToken {
+  $value: string | number
+  $type?: string
+  $description?: string
+}
+
+/** DTCG nested group; leaves are DesignToken ($value present). */
+export interface DesignTokenGroup {
+  [key: string]: DesignToken | DesignTokenGroup
+}
+
+export function isDesignToken(node: DesignToken | DesignTokenGroup): node is DesignToken {
+  return typeof node === 'object' && node !== null && '$value' in node
+}
+
+export type DesignAssetKind = 'logo' | 'wordmark' | 'icon' | 'other'
+
+/** Brand asset copied into <dataRoot>/brand-assets/<profileId>/. */
+export interface DesignAsset {
+  kind: DesignAssetKind
+  path: string
+  mime: string
+}
+
+/**
+ * A design/brand profile (design-profiles.json — never mixed into
+ * library.json). `tokens` are the base values (Shelf's brand is dark-first);
+ * `modes` carry per-mode token overrides.
+ */
+export interface DesignProfile {
+  id: string
+  name: string
+  isDefault: boolean
+  tokens: DesignTokenGroup
+  modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
+  /** Markdown prose direction — personality, voice, do/don't rules. */
+  direction: string
+  assets: DesignAsset[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DesignProfilesFile {
+  version: 1
+  profiles: DesignProfile[]
 }
 
 /**

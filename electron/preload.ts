@@ -18,6 +18,7 @@ import type {
   CursorConnectResult,
   CursorMcpStatus,
   DesignMdResult,
+  DesignProfile,
   GapResolveSuggestion,
   LogLine,
   OnboardingSubmissionInput,
@@ -70,6 +71,9 @@ const api = {
   /** Stop every running member Shelf owns ("Stop stack"). */
   stopCollection: (id: string): Promise<CollectionActionResult> =>
     ipcRenderer.invoke('collections:stop', id),
+  /** Design Engine profiles (read-only in the GUI until the editor phase). */
+  listDesignProfiles: (): Promise<DesignProfile[]> =>
+    ipcRenderer.invoke('designProfiles:list'),
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (

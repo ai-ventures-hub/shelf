@@ -2,13 +2,13 @@
  * Collection detail reuses LibraryPage filtering, plus membership management
  * and stack actions (start/stop every member).
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Play, Square } from 'lucide-react'
 import { LibraryPage } from './LibraryPage'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
-import type { CollectionActionResult } from '../types'
+import type { CollectionActionResult, DesignProfile } from '../types'
 
 function summarizeStackResult(
   result: CollectionActionResult,
@@ -46,6 +46,22 @@ export function CollectionPage() {
   const [editing, setEditing] = useState(false)
   const [stackBusy, setStackBusy] = useState<'start' | 'stop' | null>(null)
   const [stackSummary, setStackSummary] = useState<string | null>(null)
+  const [designProfiles, setDesignProfiles] = useState<DesignProfile[]>([])
+
+  useEffect(() => {
+    // Optional context: absence of profiles (or the bridge) just hides the picker.
+    const load = () => {
+      window.shelf?.listDesignProfiles?.()
+        .then(setDesignProfiles)
+        .catch(() => setDesignProfiles([]))
+    }
+    load()
+    // External writes (seed script, agents) should surface without a remount.
+    const unsubscribe = window.shelf?.onExternalDataChange?.((filename) => {
+      if (filename === 'design-profiles.json') load()
+    })
+    return () => unsubscribe?.()
+  }, [])
 
   const members = useMemo(() => {
     if (!collection) return []
@@ -159,6 +175,32 @@ export function CollectionPage() {
             <h2 className="panel-title">Members ({members.length})</h2>
           </div>
           <div className="panel-body stack">
+            {designProfiles.length > 0 ? (
+              <label className="field">
+                <span className="field-label">Design profile</span>
+                <select
+                  className="field-input"
+                  value={collection.designProfileId || ''}
+                  onChange={(e) =>
+                    void saveCollection({
+                      ...collection,
+                      designProfileId: e.target.value || undefined,
+                    })
+                  }
+                >
+                  <option value="">Default profile</option>
+                  {designProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                      {profile.isDefault ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  Agents building for tools in this collection use this brand profile.
+                </span>
+              </label>
+            ) : null}
             {tools.map((tool) => {
               const checked = collection.toolIds.includes(tool.id)
               return (

@@ -8,6 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { resolveDesignMd } from '../shared/design-md'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
+import { DesignProfileStore } from '../shared/design-profile-store'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { LibraryStore } from '../shared/library-store'
 import { ProcessManager } from '../shared/process-manager'
@@ -28,10 +29,12 @@ import {
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { errorResult, textResult } from './result'
 import { registerCapabilityTools } from './capability-tools'
+import { registerDesignTools } from './design-tools'
 
 const store = new LibraryStore()
 const receipts = new ReceiptStore()
 const capabilityGaps = new CapabilityGapStore()
+const designProfiles = new DesignProfileStore()
 const processes = new ProcessManager(store, {
   receipts,
   // Thunk: the client's self-reported name (e.g. "claude-code") is only known
@@ -385,7 +388,14 @@ server.registerTool(
   },
 )
 
-registerCapabilityTools({ server, store, processes, gaps: capabilityGaps })
+registerCapabilityTools({
+  server,
+  store,
+  processes,
+  gaps: capabilityGaps,
+  profiles: designProfiles,
+})
+registerDesignTools({ server, store, profiles: designProfiles })
 
 server.registerTool(
   'shelf_list_collections',

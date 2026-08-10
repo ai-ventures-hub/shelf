@@ -179,6 +179,7 @@ export class LibraryStore {
         toolIds: Array.from(
           new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
         ),
+        designProfileId: input.designProfileId?.trim() || undefined,
         createdAt:
           existing >= 0
             ? data.collections[existing].createdAt
@@ -272,6 +273,7 @@ function normalizeCollection(input: Partial<Collection>): Collection {
     name: (input.name || 'Untitled').trim(),
     description: input.description?.trim() || undefined,
     toolIds: Array.isArray(input.toolIds) ? input.toolIds.filter(Boolean) : [],
+    designProfileId: input.designProfileId?.trim() || undefined,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
   }

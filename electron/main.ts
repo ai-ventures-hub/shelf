@@ -18,6 +18,8 @@ import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
+import { DesignProfileStore } from '../shared/design-profile-store'
+import { resolveProfileForGap } from '../shared/design-resolve'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
 import { buildErrorReport } from '../shared/launch-diagnostics'
@@ -69,6 +71,7 @@ let processes: ProcessManager
 let prefs: PrefsStore
 let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
+let designProfiles: DesignProfileStore
 let isQuitting = false
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
@@ -417,7 +420,8 @@ function registerIpc(): void {
     const related = gap.relatedToolIds
       .map((toolId) => store.get(toolId))
       .filter((tool): tool is Tool => Boolean(tool))
-    return buildGapBrief(gap, related)
+    const brand = resolveProfileForGap(gap, store.listCollections(), designProfiles.list())
+    return buildGapBrief(gap, related, brand.profile ? { profile: brand.profile } : undefined)
   })
   // Suggest-only resolve matching; the user confirms in the GUI. Uncapped
   // read — list()'s 200 cap would silently starve older gaps.
@@ -429,6 +433,9 @@ function registerIpc(): void {
     (_e, id: string, toolId: string) =>
       capabilityGaps.dismissSuggestion(id, toolId),
   )
+
+  // Design Engine read path (v1.0 Phase 1) — profiles are edited in a later phase.
+  ipcMain.handle('designProfiles:list', () => designProfiles.list())
 
   ipcMain.handle('collections:list', () => store.listCollections())
   ipcMain.handle('collections:save', (_e, collection: Collection) =>
@@ -639,6 +646,7 @@ if (gotLock) {
     store = new LibraryStore()
     receipts = new ReceiptStore()
     capabilityGaps = new CapabilityGapStore()
+    designProfiles = new DesignProfileStore()
     processes = new ProcessManager(store, {
       receipts,
       defaultOrigin: () => ({ kind: 'gui' }),
@@ -689,7 +697,12 @@ if (gotLock) {
     // and receipts without a manual refresh or relaunch. Atomic tmp+rename
     // writes surface as rename events on the directory. Best-effort: if the
     // watcher fails, the app still works — just without live pickup.
-    const watchedFiles = new Set(['library.json', 'receipts.json', 'capability-gaps.json'])
+    const watchedFiles = new Set([
+      'library.json',
+      'receipts.json',
+      'capability-gaps.json',
+      'design-profiles.json',
+    ])
     const changeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
     try {
       dataRootWatcher = fs.watch(store.getRoot(), (_event, filename) => {
