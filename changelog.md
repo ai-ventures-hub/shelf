@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0 — 2026-08-10
+
+The gap → build loop closes: what your agent couldn't do becomes a work
+order, and what it builds comes back as a suggestion — with you making
+the final call.
+
+- **Copy brief for your AI tool**: every capability gap generates a
+  paste-ready build brief — the task, requested capabilities, related
+  existing tools (so agents extend rather than duplicate), and
+  register-back instructions. Agents fetch the same brief directly via
+  the new `shelf_get_gap_brief` MCP tool.
+- **Tool suggestions in the Library**: when a newly registered (or
+  newly capable) tool covers something an agent recorded as missing, a
+  standalone suggestion card appears in the Library grid — uniform with
+  your tool cards but clearly a notification, linking to the Capability
+  gaps page where you resolve or dismiss. Suggestions are deterministic
+  capability matches, deduped per tool, hidden during search/filtering,
+  and never auto-resolve: resolution is always your click, and it
+  records which tool closed the need.
+- **Agents can plan, never decide**: the new
+  `shelf_update_capability_gap` lets an agent mark a gap planned and
+  attach the tool it is building — and nothing else. Resolved and
+  dismissed are user-only; a user-decided gap cannot be reopened by an
+  agent; unknown tool ids are rejected loudly instead of ignored.
+- **Suggestion correctness hardening** (from the pre-release audit):
+  tools track when their *capabilities* last changed, so launching or
+  renaming an old tool never re-qualifies it as a suggestion; corrupt
+  timestamps fail closed; gaps beyond the list cap still get briefs and
+  suggestions; resolving with a just-deleted tool errors instead of
+  losing provenance.
+
 ## 0.8.0 — 2026-08-09
 
 Collections become stacks, and Shelf finally answers "who started this?" —
