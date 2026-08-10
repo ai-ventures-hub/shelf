@@ -63,6 +63,12 @@ Separately licensed commercial add-on — **not** required for Community use. Pl
 
 Do not weaken or paywall Community capabilities to sell Profiles.
 
+**Community/commercial split decided 2026-08-09** — the Design Engine core
+(profiles, tokens, brand briefs, agent read path, collection binding) is
+free Community in v1.0; Profiles keeps the agency tier (inheritance,
+versioning, drift checks, compiled outputs). See
+[`DESIGN-ENGINE.md`](DESIGN-ENGINE.md).
+
 ## Community Phase — Capability Intelligence (v0.4.x)
 
 Free, local-first evolution from launcher to capability catalog:
@@ -80,6 +86,15 @@ access from GUI-only use.
 
 Only after real usage demonstrates demand should Shelf consider curated one-click activation for
 selected MCP tools. A universal child-MCP gateway remains out of scope.
+
+## Roadmap
+
+- **v0.9 — Gap → Build loop**: agent briefs from capability gaps, resolve
+  suggestions (never auto-resolve), agent `planned` status. See
+  [`PLAN-0.9.md`](PLAN-0.9.md).
+- **v1.0 — Design Engine**: Shelf as the local source of truth for brand/
+  design context; "build this using my branding" over MCP. See
+  [`DESIGN-ENGINE.md`](DESIGN-ENGINE.md).
 
 ## Later Community enhancements
 
