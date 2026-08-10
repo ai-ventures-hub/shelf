@@ -226,6 +226,14 @@
   align-items:center;
   gap:.4rem;
 }
+
+/* Pending resolve decision on a LIVE card — the truthful status pill keeps
+   its place, but launching a tool never hides the decision. */
+.suggestion-chip {
+  border-style:solid;
+  border-color:color-mix(in srgb, var(--brand) 45%, transparent);
+  color:var(--brand-strong);
+}
 .tool-grid {
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));

@@ -61,8 +61,11 @@ export function ToolCard({
 }) {
   const status = state?.status || 'stopped'
   const live = status === 'running' || status === 'starting'
-  // A running tool's live state outranks the suggestion accent.
-  const showSuggestion = suggested && !live
+  // Idle: the suggestion takes the pill + accent. Live: truthful status keeps
+  // the pill, but the pending decision stays visible as a meta chip —
+  // launching a tool to try it must never hide the decision.
+  const showSuggestionPill = suggested && !live
+  const showSuggestionChip = suggested && live
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
   const hasControls = Boolean(onLaunch || onStop)
@@ -79,9 +82,11 @@ export function ToolCard({
       to={`/tools/${tool.id}`}
       className="tool-card"
       data-status={status}
-      data-suggestion={showSuggestion || undefined}
+      data-suggestion={showSuggestionPill || undefined}
       aria-label={
-        showSuggestion ? `${tool.name}, tool suggestion` : `${tool.name}, ${status}`
+        showSuggestionPill
+          ? `${tool.name}, tool suggestion`
+          : `${tool.name}, ${status}`
       }
     >
       <div className="tool-card-top">
@@ -92,7 +97,7 @@ export function ToolCard({
           iconColor={tool.iconColor}
           iconBackground={tool.iconBackground}
         />
-        {showSuggestion ? (
+        {showSuggestionPill ? (
           <span
             className="status-pill"
             data-status="suggestion"
@@ -113,6 +118,14 @@ export function ToolCard({
       <div className="tool-card-footer">
         <div className="tool-meta">
           <OriginChip state={state} />
+          {showSuggestionChip ? (
+            <span
+              className="meta-chip suggestion-chip"
+              title="Covers something your AI assistant was missing — open for details"
+            >
+              Suggestion
+            </span>
+          ) : null}
           {!hideChips ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
@@ -161,7 +174,7 @@ export function ToolCard({
               >
                 <Square size={13} aria-hidden />
               </button>
-            ) : showSuggestion ? (
+            ) : showSuggestionPill ? (
               /* No preventDefault: the click falls through to the card Link,
                  landing on the detail page where the user confirms/denies. */
               <span
@@ -217,7 +230,7 @@ export function ToolListRow({
 }) {
   const status = state?.status || 'stopped'
   const canStop = status === 'running' || status === 'starting'
-  const showSuggestion = suggested && !canStop
+  const showSuggestionPill = suggested && !canStop
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
 
@@ -248,13 +261,16 @@ export function ToolListRow({
       </td>
       <td>
         <div className="tool-list-status">
-          {showSuggestion ? (
+          {showSuggestionPill ? (
             <span className="status-pill" data-status="suggestion">
               Tool suggestion
             </span>
           ) : (
             <StatusPill status={status} />
           )}
+          {suggested && canStop ? (
+            <span className="meta-chip suggestion-chip">Suggestion</span>
+          ) : null}
           <OriginChip state={state} />
         </div>
       </td>
