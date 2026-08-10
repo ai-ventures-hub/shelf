@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
+import { GapSuggestionCard } from '../components/GapSuggestionCard'
 import {
   ReceiptHistory,
   outcomesForFilter,
@@ -386,6 +387,9 @@ export function LibraryPage({
           </button>
         </div>
       ) : null}
+
+      {/* Home-only: the one gap surface Simple mode ever sees. */}
+      {mode === 'all' ? <GapSuggestionCard /> : null}
 
       {mode === 'recent' ? (
         <section className="panel" style={{ marginBottom: '1rem' }}>

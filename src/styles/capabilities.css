@@ -214,7 +214,23 @@
 
 .gap-suggestion-actions {
   display:flex;
+  align-items:center;
   gap:.5rem;
+}
+
+/* Library-home variant of the suggestion box. */
+.gap-suggestion-card {
+  margin:0 0 1rem;
+}
+
+.gap-suggestion-icon {
+  color:var(--brand-strong);
+  vertical-align:-2px;
+}
+
+.gap-suggestion-more {
+  color:var(--subtle);
+  font-size:.78rem;
 }
 
 .gap-actions {
