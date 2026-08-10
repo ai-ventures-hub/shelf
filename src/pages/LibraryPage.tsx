@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
-import { GapSuggestionCard } from '../components/GapSuggestionCard'
 import {
   ReceiptHistory,
   outcomesForFilter,
   type ReceiptOutcomeFilter,
 } from '../components/ReceiptHistory'
 import { ToolCard, ToolListRow } from '../components/ToolCard'
+import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
 import { useReceipts } from '../hooks/useReceipts'
@@ -31,6 +31,13 @@ export function LibraryPage({
     useLibrary()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
+  // The suggested tool's own card is the notification (pill + accent);
+  // confirmation happens on its detail page.
+  const { suggestions } = useGapSuggestions()
+  const suggestedToolIds = useMemo(
+    () => new Set(suggestions.map((s) => s.toolId)),
+    [suggestions],
+  )
   const [receiptFilter, setReceiptFilter] = useState<ReceiptOutcomeFilter>('all')
   const [receiptExporting, setReceiptExporting] = useState(false)
   const {
@@ -388,9 +395,6 @@ export function LibraryPage({
         </div>
       ) : null}
 
-      {/* Home-only: the one gap surface Simple mode ever sees. */}
-      {mode === 'all' ? <GapSuggestionCard /> : null}
-
       {mode === 'recent' ? (
         <section className="panel" style={{ marginBottom: '1rem' }}>
           <div className="panel-header">
@@ -481,6 +485,7 @@ export function LibraryPage({
                   key={tool.id}
                   tool={tool}
                   state={states[tool.id]}
+                  suggested={suggestedToolIds.has(tool.id)}
                   onLaunch={() => void startTool(tool.id)}
                   onStop={() => void stopTool(tool.id)}
                 />
@@ -495,6 +500,7 @@ export function LibraryPage({
               key={tool.id}
               tool={tool}
               state={states[tool.id]}
+              suggested={suggestedToolIds.has(tool.id)}
               hideChips={!isDeveloper}
               onLaunch={() => void startTool(tool.id)}
               onStop={() => void stopTool(tool.id)}

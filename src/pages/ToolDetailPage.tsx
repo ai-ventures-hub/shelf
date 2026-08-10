@@ -5,11 +5,12 @@ import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
 import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
+import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
 import { friendlyLaunchError } from '../lib/launchErrorCopy'
-import { Star } from 'lucide-react'
+import { Sparkles, Star } from 'lucide-react'
 import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
 
 function formatRelative(iso?: string): string {
@@ -54,6 +55,9 @@ export function ToolDetailPage() {
     toolId: id,
     limit: 25,
   })
+  // The Library card links here to confirm/deny a resolve suggestion.
+  const { suggestions, resolve, dismiss } = useGapSuggestions()
+  const toolSuggestions = suggestions.filter((s) => s.toolId === id)
 
   useEffect(() => {
     if (!id) return
@@ -287,6 +291,47 @@ export function ToolDetailPage() {
           </div>
         </div>
       ) : null}
+
+      {toolSuggestions.map((suggestion) => (
+        <div
+          className="gap-suggestion gap-suggestion-card"
+          key={`${suggestion.gapId}:${suggestion.toolId}`}
+          role="status"
+        >
+          <p>
+            <Sparkles size={14} aria-hidden className="gap-suggestion-icon" /> This
+            tool can do something your AI assistant was missing —{' '}
+            <em>{suggestion.matched.join(', ')}</em>
+            {suggestion.matched.length < suggestion.total
+              ? ` (${suggestion.matched.length} of ${suggestion.total} requested)`
+              : ''}
+            .
+          </p>
+          <div className="gap-suggestion-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={busy}
+              onClick={() => void run(() => resolve(suggestion))}
+            >
+              {isDeveloper ? 'Resolve gap with this tool' : 'Mark it handled'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-quiet btn-sm"
+              disabled={busy}
+              onClick={() => void run(() => dismiss(suggestion))}
+            >
+              Not a match
+            </button>
+            {isDeveloper ? (
+              <Link className="btn btn-quiet btn-sm" to="/gaps">
+                View in Capability gaps
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ))}
 
       {/* Context-aware: Launch when idle, Stop when live; Open + More for the rest. */}
       <div className="detail-actions">

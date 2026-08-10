@@ -260,6 +260,13 @@
   border-top-color:var(--danger);
 }
 
+/* Suggestion state: the card itself is the notification — brand accent,
+   same silhouette as every other card. Live status (running/starting)
+   outranks it (enforced in ToolCard, not here). */
+.tool-card[data-suggestion] {
+  border-top-color:var(--brand);
+}
+
 .tool-card:hover {
   border-color:#7895ff59;
 }
@@ -487,4 +494,10 @@
 
 .status-pill[data-status='starting'] {
   animation: pill-pulse 1.6s ease-in-out infinite;
+}
+
+/* "Tool suggestion": replaces Stopped on a suggested tool's card/row. */
+.status-pill[data-status='suggestion'] {
+  color:var(--brand-strong);
+  background:color-mix(in srgb, var(--brand) 12%, transparent);
 }
