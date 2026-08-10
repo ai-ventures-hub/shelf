@@ -2,13 +2,14 @@
  * Collection detail reuses LibraryPage filtering, plus membership management
  * and stack actions (start/stop every member).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Play, Square } from 'lucide-react'
 import { LibraryPage } from './LibraryPage'
+import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
-import type { CollectionActionResult, DesignProfile } from '../types'
+import type { CollectionActionResult } from '../types'
 
 function summarizeStackResult(
   result: CollectionActionResult,
@@ -46,22 +47,7 @@ export function CollectionPage() {
   const [editing, setEditing] = useState(false)
   const [stackBusy, setStackBusy] = useState<'start' | 'stop' | null>(null)
   const [stackSummary, setStackSummary] = useState<string | null>(null)
-  const [designProfiles, setDesignProfiles] = useState<DesignProfile[]>([])
-
-  useEffect(() => {
-    // Optional context: absence of profiles (or the bridge) just hides the picker.
-    const load = () => {
-      window.shelf?.listDesignProfiles?.()
-        .then(setDesignProfiles)
-        .catch(() => setDesignProfiles([]))
-    }
-    load()
-    // External writes (seed script, agents) should surface without a remount.
-    const unsubscribe = window.shelf?.onExternalDataChange?.((filename) => {
-      if (filename === 'design-profiles.json') load()
-    })
-    return () => unsubscribe?.()
-  }, [])
+  const { profiles: designProfiles } = useDesignProfiles()
 
   const members = useMemo(() => {
     if (!collection) return []
@@ -175,7 +161,7 @@ export function CollectionPage() {
             <h2 className="panel-title">Members ({members.length})</h2>
           </div>
           <div className="panel-body stack">
-            {designProfiles.length > 0 ? (
+            {designProfiles.length > 0 || collection.designProfileId ? (
               <label className="field">
                 <span className="field-label">Design profile</span>
                 <select
@@ -195,6 +181,12 @@ export function CollectionPage() {
                       {profile.isDefault ? ' (default)' : ''}
                     </option>
                   ))}
+                  {collection.designProfileId &&
+                  !designProfiles.some((p) => p.id === collection.designProfileId) ? (
+                    // Bound profile was deleted — show the dangling binding
+                    // instead of silently pretending "Default profile".
+                    <option value={collection.designProfileId}>(missing profile)</option>
+                  ) : null}
                 </select>
                 <span className="field-hint">
                   Agents building for tools in this collection use this brand profile.

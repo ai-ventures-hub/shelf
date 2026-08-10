@@ -3,6 +3,8 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
+import { useDesignProfiles } from '../hooks/useDesignProfiles'
+import { STARTER_TOKENS } from '../lib/designTokens'
 import { usePrefs } from '../hooks/usePrefs'
 import { useUiMode } from '../hooks/useUiMode'
 import { NamePromptDialog } from './NamePromptDialog'
@@ -73,6 +75,14 @@ function NavIcon({ name }: { name: string }) {
           <path d="M12 5v14M5 12h14" />
         </svg>
       )
+    case 'design':
+      // Overlapping swatch circles — a palette without the painter's kitsch.
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="9" r="5.5" />
+          <circle cx="15" cy="13" r="5.5" />
+        </svg>
+      )
     case 'mcp':
       // Plug / connector — clearer than the old rack glyph at small sizes.
       return (
@@ -116,6 +126,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const { isDeveloper } = useUiMode()
   const mcpLabel = isDeveloper ? 'MCP Connections' : 'AI Connections'
   const { gaps: openGaps } = useCapabilityGaps({ status: 'open', limit: 200 })
+  const { profiles: designProfiles, saveProfile: saveDesignProfile } = useDesignProfiles()
   const dragRef = useRef<{
     startX: number
     startWidth: number
@@ -124,6 +135,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const collapsed = prefs.sidebarCollapsed
   // Electron has no window.prompt — use an in-app dialog instead.
   const [collectionPromptOpen, setCollectionPromptOpen] = useState(false)
+  const [designPromptOpen, setDesignPromptOpen] = useState(false)
   // Status line while a dropped folder is being registered/launched.
   const [dropBusy, setDropBusy] = useState<string | null>(null)
   // Highlight the window as a drop target while files are dragged over it.
@@ -222,6 +234,12 @@ export function StudioShell({ children }: { children: ReactNode }) {
     })
     setCollectionPromptOpen(false)
     navigate(`/collections/${saved.id}`)
+  }
+
+  async function createDesignProfile(name: string) {
+    const saved = await saveDesignProfile({ name: name.trim(), tokens: STARTER_TOKENS })
+    setDesignPromptOpen(false)
+    navigate(`/design/${saved.id}`)
   }
 
   return (
@@ -354,6 +372,19 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavLabel collapsed={collapsed}>New collection</NavLabel>
           </button>
 
+          {/* Design: brand profiles — headline feature, visible in both modes. */}
+          {!collapsed ? <p className="nav-label">Design</p> : <div className="nav-divider" />}
+          <NavLink
+            to="/design"
+            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+            title="Design profiles"
+            aria-label="Design profiles"
+          >
+            <NavIcon name="design" />
+            <NavLabel collapsed={collapsed}>Profiles</NavLabel>
+            <NavCount collapsed={collapsed} value={designProfiles.length} />
+          </NavLink>
+
           {/* System: MCP + Settings once each — never duplicate Connect chrome. */}
           {!collapsed ? <p className="nav-label">System</p> : <div className="nav-divider" />}
           <NavLink
@@ -409,7 +440,10 @@ export function StudioShell({ children }: { children: ReactNode }) {
       ) : null}
 
       {/* Global ⌘K palette — mounted once so it works from every route. */}
-      <QuickOpen onRequestNewCollection={() => setCollectionPromptOpen(true)} />
+      <QuickOpen
+        onRequestNewCollection={() => setCollectionPromptOpen(true)}
+        onRequestNewDesignProfile={() => setDesignPromptOpen(true)}
+      />
 
       <NamePromptDialog
         open={collectionPromptOpen}
@@ -419,6 +453,15 @@ export function StudioShell({ children }: { children: ReactNode }) {
         confirmLabel="Create"
         onCancel={() => setCollectionPromptOpen(false)}
         onConfirm={createCollection}
+      />
+      <NamePromptDialog
+        open={designPromptOpen}
+        title="New design profile"
+        label="Profile name"
+        placeholder="e.g. Acme Studio"
+        confirmLabel="Create"
+        onCancel={() => setDesignPromptOpen(false)}
+        onConfirm={createDesignProfile}
       />
     </div>
   )

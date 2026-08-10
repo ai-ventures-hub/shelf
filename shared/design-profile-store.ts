@@ -167,7 +167,8 @@ export class DesignProfileStore {
   /**
    * Copy a file into <root>/brand-assets/<profileId>/ (the icons/ precedent)
    * and record it on the profile. Re-importing the same basename overwrites
-   * in place, so seeding is idempotent.
+   * in place, so seeding is idempotent. The copy lands via tmp+rename so a
+   * concurrent reader of assets[].path never sees torn bytes.
    */
   importAsset(profileId: string, sourcePath: string, kind: DesignAssetKind): DesignAsset {
     if (!fs.existsSync(sourcePath)) throw new Error(`Asset file not found: ${sourcePath}`)
@@ -175,7 +176,13 @@ export class DesignProfileStore {
     fs.mkdirSync(dir, { recursive: true })
     const basename = path.basename(sourcePath)
     const destPath = path.join(dir, basename)
-    fs.copyFileSync(sourcePath, destPath)
+    const tmpPath = `${destPath}.tmp-${process.pid}`
+    try {
+      fs.copyFileSync(sourcePath, tmpPath)
+      fs.renameSync(tmpPath, destPath)
+    } finally {
+      fs.rmSync(tmpPath, { force: true })
+    }
     const asset: DesignAsset = {
       kind,
       path: destPath,
@@ -194,6 +201,29 @@ export class DesignProfileStore {
       this.write(data)
       return asset
     })
+  }
+
+  /**
+   * Remove one asset from a profile. The file is unlinked only when it lives
+   * inside this profile's brand-assets dir — a hand-edited record pointing
+   * elsewhere must never delete files outside the store.
+   */
+  removeAsset(profileId: string, assetPath: string): void {
+    const removed = withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const profile = data.profiles.find((p) => p.id === profileId)
+      if (!profile) throw new Error(`Design profile not found: ${profileId}`)
+      const before = profile.assets.length
+      profile.assets = profile.assets.filter((asset) => asset.path !== assetPath)
+      if (profile.assets.length === before) return false // no-op: don't churn updatedAt
+      profile.updatedAt = new Date().toISOString()
+      this.write(data)
+      return true
+    })
+    if (!removed) return
+    const resolved = path.resolve(assetPath)
+    const ownDir = path.resolve(this.getAssetsDir(profileId)) + path.sep
+    if (resolved.startsWith(ownDir)) fs.rmSync(resolved, { force: true })
   }
 
   getAssetsDir(profileId: string): string {

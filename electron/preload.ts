@@ -17,9 +17,12 @@ import type {
   CollectionActionResult,
   CursorConnectResult,
   CursorMcpStatus,
+  DesignAsset,
+  DesignAssetKind,
   DesignMdResult,
   DesignProfile,
   GapResolveSuggestion,
+  SaveDesignProfileInput,
   LogLine,
   OnboardingSubmissionInput,
   ProjectImportSuggestion,
@@ -71,9 +74,33 @@ const api = {
   /** Stop every running member Shelf owns ("Stop stack"). */
   stopCollection: (id: string): Promise<CollectionActionResult> =>
     ipcRenderer.invoke('collections:stop', id),
-  /** Design Engine profiles (read-only in the GUI until the editor phase). */
+  /** Design Engine profiles — the GUI is the only write surface (agents read over MCP). */
   listDesignProfiles: (): Promise<DesignProfile[]> =>
     ipcRenderer.invoke('designProfiles:list'),
+  saveDesignProfile: (input: SaveDesignProfileInput): Promise<DesignProfile> =>
+    ipcRenderer.invoke('designProfiles:save', input),
+  deleteDesignProfile: (id: string): Promise<void> =>
+    ipcRenderer.invoke('designProfiles:delete', id),
+  setDefaultDesignProfile: (id: string): Promise<DesignProfile> =>
+    ipcRenderer.invoke('designProfiles:setDefault', id),
+  /** Native file picker → copy into brand-assets; null when canceled. */
+  pickDesignAsset: (profileId: string, kind: DesignAssetKind): Promise<DesignAsset | null> =>
+    ipcRenderer.invoke('designProfiles:pickAsset', profileId, kind),
+  /** Import a known path (drag-and-drop) into brand-assets. */
+  importDesignAsset: (
+    profileId: string,
+    sourcePath: string,
+    kind: DesignAssetKind,
+  ): Promise<DesignAsset> =>
+    ipcRenderer.invoke('designProfiles:importAsset', profileId, sourcePath, kind),
+  removeDesignAsset: (profileId: string, assetPath: string): Promise<void> =>
+    ipcRenderer.invoke('designProfiles:removeAsset', profileId, assetPath),
+  /** Paste-ready markdown brand brief (secrets masked); null for unknown ids. */
+  designBrief: (id: string): Promise<string | null> =>
+    ipcRenderer.invoke('designProfiles:brief', id),
+  /** Preview data-url for a brand asset; null for non-image assets. */
+  designAssetDataUrl: (assetPath: string): Promise<string | null> =>
+    ipcRenderer.invoke('designProfiles:assetDataUrl', assetPath),
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (

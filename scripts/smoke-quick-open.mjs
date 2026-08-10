@@ -64,6 +64,14 @@ const items = [
     keywords: ['preferences', 'appearance'],
     boost: 5,
   },
+  {
+    id: 'design:acme',
+    kind: 'design',
+    title: 'Acme',
+    subtitle: 'Design profile',
+    keywords: ['brand', 'branding', 'colors', 'tokens'],
+    boost: 9,
+  },
 ]
 
 const empty = rankQuickOpenItems(items, '')
@@ -78,6 +86,9 @@ assert.equal(keyword[0].id, 'action:settings')
 
 const multi = rankQuickOpenItems(items, 'alpha board')
 assert.equal(multi[0].id, 'tool:alpha')
+
+const brand = rankQuickOpenItems(items, 'branding')
+assert.equal(brand[0].id, 'design:acme', 'design profiles reachable by brand keywords')
 
 const miss = rankQuickOpenItems(items, 'zzzz')
 assert.equal(miss.length, 0)

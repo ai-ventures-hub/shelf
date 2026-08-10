@@ -14,7 +14,10 @@ export function ColorField({
   value: string
   onChange: (hex: string) => void
 }) {
-  const display = value?.startsWith('#') ? value : value ? `#${value}` : ''
+  // Only hex-like values get the '#' treatment — agent/JSON-authored tokens
+  // may hold rgb()/color-mix() strings, which must display verbatim.
+  const hexLike = !value || /^#?[0-9a-fA-F]{3,8}$/.test(value)
+  const display = !hexLike || value?.startsWith('#') ? value || '' : value ? `#${value}` : ''
   const preview = normalizeHex(display) || '#000000'
 
   return (

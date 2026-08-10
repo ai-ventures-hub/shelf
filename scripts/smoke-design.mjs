@@ -42,7 +42,7 @@ try {
   assert.equal(store.list()[0].id, acme.id, 'list() puts the default first')
   assert.ok(summarizeDesignProfile(store.get(acme.id)).includes('1 color'), 'summary counts tokens')
 
-  // --- Asset import: copy + dedupe by basename ---
+  // --- Asset import: copy + dedupe by basename, atomic (no tmp residue) ---
   const assetSource = path.join(root, 'mark.svg')
   fs.writeFileSync(assetSource, '<svg/>')
   store.importAsset(acme.id, assetSource, 'logo')
@@ -51,6 +51,33 @@ try {
   assert.equal(withAsset.assets.length, 1, 're-import dedupes by basename')
   assert.ok(fs.existsSync(withAsset.assets[0].path))
   assert.equal(withAsset.assets[0].mime, 'image/svg+xml')
+  assert.ok(
+    !fs.readdirSync(store.getAssetsDir(acme.id)).some((name) => name.includes('.tmp-')),
+    'importAsset leaves no tmp residue',
+  )
+
+  // --- removeAsset: record filtered, file unlinked only inside brand-assets ---
+  const secondSource = path.join(root, 'wordmark.png')
+  fs.writeFileSync(secondSource, 'png-bytes')
+  store.importAsset(acme.id, secondSource, 'wordmark')
+  const wordmark = store.get(acme.id).assets.find((a) => a.path.endsWith('wordmark.png'))
+  store.removeAsset(acme.id, wordmark.path)
+  assert.equal(store.get(acme.id).assets.length, 1, 'removeAsset filters the record')
+  assert.ok(!fs.existsSync(wordmark.path), 'removeAsset unlinks the file')
+  assert.ok(fs.existsSync(store.get(acme.id).assets[0].path), 'surviving asset intact')
+  const outside = path.join(root, 'outside.txt')
+  fs.writeFileSync(outside, 'keep me')
+  store.removeAsset(acme.id, outside) // not in assets; also outside brand-assets
+  assert.ok(fs.existsSync(outside), 'paths outside brand-assets are never unlinked')
+
+  // --- save with explicit assets (kind-change path) round-trips ---
+  const currentAssets = store.get(acme.id).assets
+  store.save({
+    id: acme.id,
+    name: 'Acme',
+    assets: currentAssets.map((a) => ({ ...a, kind: 'icon' })),
+  })
+  assert.equal(store.get(acme.id).assets[0].kind, 'icon', 'explicit assets save round-trips')
 
   // --- Collection binding round-trip through LibraryStore normalization ---
   const library = new LibraryStore(libRoot)
@@ -172,6 +199,14 @@ try {
     libraryBytes.equals(fs.readFileSync(path.join(libRoot, 'library.json'))),
     'deleting a profile never touches library.json',
   )
+
+  // --- Delete-the-default: store contract behind the GUI successor flow ---
+  const gamma = store.save({ name: 'Gamma' })
+  store.setDefault(gamma.id)
+  store.delete(gamma.id)
+  assert.equal(store.getDefault(), undefined, 'deleting the default leaves none')
+  const promoted = store.setDefault(beta.id)
+  assert.equal(promoted.isDefault, true, 'a survivor can be promoted afterwards')
 
   // --- Corrupt-backup-reset (last: it wipes the store) ---
   fs.writeFileSync(path.join(root, 'design-profiles.json'), '{not json')

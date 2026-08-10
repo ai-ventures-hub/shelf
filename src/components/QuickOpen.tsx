@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
@@ -26,18 +27,23 @@ type Runnable = QuickOpenCandidate & {
 }
 
 interface QuickOpenProps {
-  /** Electron has no window.prompt — parent owns the name dialog. */
+  /** Electron has no window.prompt — parent owns the name dialogs. */
   onRequestNewCollection?: () => void
+  onRequestNewDesignProfile?: () => void
 }
 
 /**
  * Command palette for tools, collections, and common nav actions.
  * Opened via View → Quick Open… (⌘K) from the Electron menu.
  */
-export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
+export function QuickOpen({
+  onRequestNewCollection,
+  onRequestNewDesignProfile,
+}: QuickOpenProps = {}) {
   const navigate = useNavigate()
   const { isDeveloper } = useUiMode()
   const { tools, collections, states, startTool, stopTool } = useLibrary()
+  const { profiles: designProfiles } = useDesignProfiles()
   // Recent receipts for relaunch / jump-to-tool from the palette.
   const { receipts } = useReceipts({ limit: 8 })
   const [open, setOpen] = useState(false)
@@ -168,6 +174,16 @@ export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
       })
     }
 
+    const designItems: Runnable[] = designProfiles.map((profile) => ({
+      id: `design:${profile.id}`,
+      kind: 'design',
+      title: profile.name,
+      subtitle: `Design profile${profile.isDefault ? ' · default' : ''}`,
+      keywords: ['brand', 'branding', 'design', 'colors', 'tokens', 'style'],
+      boost: 9,
+      run: () => navigate(`/design/${profile.id}`),
+    }))
+
     const actions: Runnable[] = [
       {
         id: 'action:add-tool',
@@ -237,6 +253,28 @@ export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
           ]
         : []),
       {
+        id: 'action:design',
+        kind: 'action',
+        title: 'Design profiles',
+        subtitle: 'Your brand source of truth for agents',
+        keywords: ['brand', 'branding', 'colors', 'tokens', 'style', 'design'],
+        boost: 5,
+        run: () => navigate('/design'),
+      },
+      {
+        id: 'action:new-design-profile',
+        kind: 'action',
+        title: 'New design profile',
+        subtitle: 'Start a brand profile agents can apply',
+        keywords: ['brand', 'branding', 'create', 'design'],
+        boost: 6,
+        run: () => {
+          // Close palette first so the name dialog is not buried under it.
+          setOpen(false)
+          onRequestNewDesignProfile?.()
+        },
+      },
+      {
         id: 'action:mcp',
         kind: 'action',
         title: isDeveloper ? 'MCP Connections' : 'AI Connections',
@@ -255,16 +293,18 @@ export function QuickOpen({ onRequestNewCollection }: QuickOpenProps = {}) {
       },
     ]
 
-    return [...toolItems, ...collectionItems, ...receiptItems, ...actions]
+    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...actions]
   }, [
     tools,
     collections,
+    designProfiles,
     receipts,
     states,
     navigate,
     startTool,
     stopTool,
     onRequestNewCollection,
+    onRequestNewDesignProfile,
     isDeveloper,
   ])
 

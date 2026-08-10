@@ -97,6 +97,17 @@ export interface DesignAsset {
   mime: string
 }
 
+/** Editor upsert input (mirror of shared/design-profile-store.ts). */
+export interface SaveDesignProfileInput {
+  id?: string
+  name: string
+  isDefault?: boolean
+  tokens?: DesignTokenGroup
+  modes?: { light?: DesignTokenGroup; dark?: DesignTokenGroup }
+  direction?: string
+  assets?: DesignAsset[]
+}
+
 /** Design/brand profile from design-profiles.json (mirror of shared/types.ts). */
 export interface DesignProfile {
   id: string
@@ -487,6 +498,18 @@ export interface ShelfApi {
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
   listDesignProfiles: () => Promise<DesignProfile[]>
+  saveDesignProfile: (input: SaveDesignProfileInput) => Promise<DesignProfile>
+  deleteDesignProfile: (id: string) => Promise<void>
+  setDefaultDesignProfile: (id: string) => Promise<DesignProfile>
+  pickDesignAsset: (profileId: string, kind: DesignAssetKind) => Promise<DesignAsset | null>
+  importDesignAsset: (
+    profileId: string,
+    sourcePath: string,
+    kind: DesignAssetKind,
+  ) => Promise<DesignAsset>
+  removeDesignAsset: (profileId: string, assetPath: string) => Promise<void>
+  designBrief: (id: string) => Promise<string | null>
+  designAssetDataUrl: (assetPath: string) => Promise<string | null>
   startCollection: (
     id: string,
     options?: StartOptions,

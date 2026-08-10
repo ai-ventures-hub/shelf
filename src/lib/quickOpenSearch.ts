@@ -4,7 +4,7 @@
  * Contract mirrored by scripts/smoke-quick-open.mjs — update both when scoring changes.
  */
 
-export type QuickOpenKind = 'tool' | 'collection' | 'receipt' | 'action'
+export type QuickOpenKind = 'tool' | 'collection' | 'design' | 'receipt' | 'action'
 
 export interface QuickOpenCandidate {
   id: string
@@ -75,18 +75,20 @@ export function rankQuickOpenItems(
 function kindRank(kind: QuickOpenKind): number {
   if (kind === 'tool') return 0
   if (kind === 'collection') return 1
-  if (kind === 'receipt') return 2
-  return 3
+  if (kind === 'design') return 2
+  if (kind === 'receipt') return 3
+  return 4
 }
 
 /** Group a flat ranked list for section headers in the palette. */
 export function groupQuickOpenItems(
   items: QuickOpenCandidate[],
 ): { kind: QuickOpenKind; label: string; items: QuickOpenCandidate[] }[] {
-  const order: QuickOpenKind[] = ['tool', 'collection', 'receipt', 'action']
+  const order: QuickOpenKind[] = ['tool', 'collection', 'design', 'receipt', 'action']
   const labels: Record<QuickOpenKind, string> = {
     tool: 'Tools',
     collection: 'Collections',
+    design: 'Design',
     receipt: 'Recent runs',
     action: 'Actions',
   }

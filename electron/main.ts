@@ -14,11 +14,15 @@ import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
+import { buildDesignBrief } from '../shared/design-brief'
 import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
-import { DesignProfileStore } from '../shared/design-profile-store'
+import {
+  DesignProfileStore,
+  type SaveDesignProfileInput,
+} from '../shared/design-profile-store'
 import { resolveProfileForGap } from '../shared/design-resolve'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
@@ -59,6 +63,7 @@ import type {
   AgentAccessKind,
   CapabilityGapStatus,
   Collection,
+  DesignAssetKind,
   OnboardingSubmissionInput,
   Tool,
   UiPrefs,
@@ -325,6 +330,11 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+2',
           click: () => navigate('/mcp'),
         },
+        {
+          label: 'Design',
+          accelerator: 'CmdOrCtrl+3',
+          click: () => navigate('/design'),
+        },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
@@ -434,8 +444,80 @@ function registerIpc(): void {
       capabilityGaps.dismissSuggestion(id, toolId),
   )
 
-  // Design Engine read path (v1.0 Phase 1) — profiles are edited in a later phase.
+  // Design Engine (v1.0): list + editor mutations. Agents stay read-only over
+  // MCP; the GUI is the only write surface.
   ipcMain.handle('designProfiles:list', () => designProfiles.list())
+  ipcMain.handle('designProfiles:save', (_e, input: SaveDesignProfileInput) =>
+    designProfiles.save(input),
+  )
+  ipcMain.handle('designProfiles:delete', (_e, id: string) => {
+    designProfiles.delete(id)
+  })
+  ipcMain.handle('designProfiles:setDefault', (_e, id: string) =>
+    designProfiles.setDefault(id),
+  )
+  ipcMain.handle(
+    'designProfiles:pickAsset',
+    async (_e, profileId: string, kind: DesignAssetKind) => {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openFile'],
+        filters: [
+          {
+            name: 'Brand assets',
+            extensions: [
+              'svg', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'ico',
+              'pdf', 'woff2', 'woff', 'ttf', 'otf',
+            ],
+          },
+        ],
+      })
+      if (result.canceled || !result.filePaths[0]) return null
+      return designProfiles.importAsset(profileId, result.filePaths[0], kind)
+    },
+  )
+  ipcMain.handle(
+    'designProfiles:importAsset',
+    (_e, profileId: string, sourcePath: string, kind: DesignAssetKind) =>
+      designProfiles.importAsset(profileId, sourcePath, kind),
+  )
+  ipcMain.handle(
+    'designProfiles:removeAsset',
+    (_e, profileId: string, assetPath: string) => {
+      designProfiles.removeAsset(profileId, assetPath)
+    },
+  )
+  ipcMain.handle('designProfiles:brief', (_e, id: string) => {
+    const profile = designProfiles.get(id)
+    return profile ? buildDesignBrief(profile) : null
+  })
+  // Data-url previews for the editor. Restricted to the brand-assets root so
+  // the renderer cannot read arbitrary files through this channel.
+  ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {
+    const assetsRoot = path.join(designProfiles.getRoot(), 'brand-assets') + path.sep
+    if (!fs.existsSync(assetPath)) return null
+    // realpath, not resolve: a symlink planted inside brand-assets must not
+    // read files outside it through this channel.
+    const resolved = fs.realpathSync(assetPath)
+    if (!resolved.startsWith(assetsRoot)) return null
+    const ext = path.extname(resolved).toLowerCase()
+    const mime =
+      ext === '.svg'
+        ? 'image/svg+xml'
+        : ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : ext === '.ico'
+                ? 'image/x-icon'
+                : ext === '.png'
+                  ? 'image/png'
+                  : null
+    if (!mime) return null // non-previewable (pdf/fonts) — renderer shows a glyph tile
+    const buf = fs.readFileSync(resolved)
+    return `data:${mime};base64,${buf.toString('base64')}`
+  })
 
   ipcMain.handle('collections:list', () => store.listCollections())
   ipcMain.handle('collections:save', (_e, collection: Collection) =>

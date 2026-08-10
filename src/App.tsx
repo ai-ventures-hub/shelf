@@ -1,10 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { OnboardingGate } from './components/onboarding/OnboardingFlow'
 import { StudioShell } from './components/StudioShell'
+import { DesignProfilesProvider } from './hooks/useDesignProfiles'
 import { LibraryProvider } from './hooks/useLibrary'
 import { PrefsProvider } from './hooks/usePrefs'
 import { CollectionPage } from './pages/CollectionPage'
 import { CapabilityGapsPage } from './pages/CapabilityGapsPage'
+import { DesignListPage } from './pages/DesignListPage'
+import { DesignProfilePage } from './pages/DesignProfilePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { McpConnectPage } from './pages/McpConnectPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -15,6 +18,7 @@ export default function App() {
   return (
     <PrefsProvider>
       <LibraryProvider>
+        <DesignProfilesProvider>
         <OnboardingGate>
           <StudioShell>
           <Routes>
@@ -25,6 +29,8 @@ export default function App() {
             <Route path="/gaps" element={<CapabilityGapsPage />} />
             <Route path="/tags/:tag" element={<LibraryPage mode="tag" />} />
             <Route path="/collections/:collectionId" element={<CollectionPage />} />
+            <Route path="/design" element={<DesignListPage />} />
+            <Route path="/design/:id" element={<DesignProfilePage />} />
             <Route path="/mcp" element={<McpConnectPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tools/new" element={<ToolFormPage />} />
@@ -34,6 +40,7 @@ export default function App() {
           </Routes>
           </StudioShell>
         </OnboardingGate>
+        </DesignProfilesProvider>
       </LibraryProvider>
     </PrefsProvider>
   )
