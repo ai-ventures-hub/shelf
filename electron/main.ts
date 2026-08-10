@@ -395,12 +395,16 @@ function registerIpc(): void {
     'capabilityGaps:update',
     (_e, id: string, patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] }) => {
       const knownIds = new Set(store.list().map((tool) => tool.id))
-      return capabilityGaps.update(id, {
-        ...patch,
-        relatedToolIds: (patch.relatedToolIds || []).filter((toolId) =>
-          knownIds.has(toolId),
-        ),
-      })
+      const validToolIds = (patch.relatedToolIds || []).filter((toolId) =>
+        knownIds.has(toolId),
+      )
+      // Resolve-with-tool must record WHICH tool resolved the gap; if the
+      // tool vanished since the suggestion rendered, fail instead of
+      // resolving with no provenance.
+      if (patch.relatedToolIds?.length && validToolIds.length === 0) {
+        throw new Error('That tool no longer exists in the library.')
+      }
+      return capabilityGaps.update(id, { ...patch, relatedToolIds: validToolIds })
     },
   )
   ipcMain.handle('capabilityGaps:delete', (_e, id: string) => {
@@ -408,16 +412,17 @@ function registerIpc(): void {
   })
   // Paste-ready build brief ("Copy brief for your AI tool").
   ipcMain.handle('capabilityGaps:brief', (_e, id: string) => {
-    const gap = capabilityGaps.list({ limit: 200 }).find((item) => item.id === id)
+    const gap = capabilityGaps.get(id)
     if (!gap) throw new Error(`Capability gap not found: ${id}`)
     const related = gap.relatedToolIds
       .map((toolId) => store.get(toolId))
       .filter((tool): tool is Tool => Boolean(tool))
     return buildGapBrief(gap, related)
   })
-  // Suggest-only resolve matching; the user confirms in the GUI.
+  // Suggest-only resolve matching; the user confirms in the GUI. Uncapped
+  // read — list()'s 200 cap would silently starve older gaps.
   ipcMain.handle('capabilityGaps:suggestions', () =>
-    suggestGapResolutions(capabilityGaps.list({ limit: 200 }), store.list()),
+    suggestGapResolutions(capabilityGaps.listAll(), store.list()),
   )
   ipcMain.handle(
     'capabilityGaps:dismissSuggestion',

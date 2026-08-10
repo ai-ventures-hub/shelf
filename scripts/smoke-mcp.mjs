@@ -8,6 +8,9 @@ import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const requireCjs = createRequire(import.meta.url)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
@@ -157,7 +160,40 @@ async function main() {
     if (!resolveRejected) {
       throw new Error('Agents must not be able to set a gap to resolved')
     }
-    console.log('OK: gap agent update (planned only)')
+
+    // Regression (0.9 review): an all-unknown relatedToolIds list must error,
+    // not report success while attaching nothing.
+    let unknownIdsRejected = false
+    try {
+      await callTool(client, 'shelf_update_capability_gap', {
+        id: smokeGap.id,
+        relatedToolIds: ['not-a-real-tool-id'],
+      })
+    } catch {
+      unknownIdsRejected = true
+    }
+    if (!unknownIdsRejected) {
+      throw new Error('All-unknown relatedToolIds must be rejected, not a silent no-op')
+    }
+
+    // Regression (0.9 review): agents must not reopen a USER-resolved gap by
+    // re-marking it planned. Flip to resolved via the shared store (the GUI
+    // path), then verify the agent update is refused.
+    const { CapabilityGapStore } = requireCjs('../dist-electron/shared/capability-gap-store.js')
+    new CapabilityGapStore(smokeDataRoot).updateStatus(smokeGap.id, 'resolved')
+    let reopenRejected = false
+    try {
+      await callTool(client, 'shelf_update_capability_gap', {
+        id: smokeGap.id,
+        status: 'planned',
+      })
+    } catch {
+      reopenRejected = true
+    }
+    if (!reopenRejected) {
+      throw new Error('Agents must not reopen a user-resolved gap')
+    }
+    console.log('OK: gap agent update (planned only, no reopen, no silent no-op)')
 
     const inspected = await callTool(client, 'shelf_inspect_project', {
       projectPath: fixture,

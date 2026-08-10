@@ -85,6 +85,13 @@ export class LibraryStore {
       const now = new Date().toISOString()
       const existing = data.tools.findIndex((t) => t.id === input.id)
 
+      const nextCapabilities = normalizeCapabilities(input.capabilities)
+      const previous = existing >= 0 ? data.tools[existing] : undefined
+      // Stamp only real capability changes — renames, icon edits, port
+      // reassigns and launches must not re-qualify a tool for suggestions.
+      const capabilitiesChanged =
+        !previous || !sameCapabilitySet(previous.capabilities, nextCapabilities)
+
       const tool: Tool = {
         ...input,
         id: input.id || randomUUID(),
@@ -109,7 +116,10 @@ export class LibraryStore {
         iconColor: input.iconColor?.trim() || undefined,
         iconBackground: input.iconBackground?.trim() || undefined,
         updatedAt: now,
-        createdAt: existing >= 0 ? data.tools[existing].createdAt : input.createdAt || now,
+        createdAt: previous ? previous.createdAt : input.createdAt || now,
+        capabilitiesUpdatedAt: capabilitiesChanged
+          ? now
+          : previous?.capabilitiesUpdatedAt || previous?.createdAt,
       }
 
       if (existing >= 0) data.tools[existing] = tool
@@ -296,7 +306,17 @@ function normalizeTool(input: Partial<Tool>): Tool {
     lastLaunchedAt: input.lastLaunchedAt,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
+    // Fail closed for pre-0.9 records: createdAt, never "now" — a normalize
+    // pass must not make every old tool look freshly capable.
+    capabilitiesUpdatedAt: input.capabilitiesUpdatedAt || input.createdAt || undefined,
   }
+}
+
+/** Case-insensitive set equality over normalized capability phrases. */
+function sameCapabilitySet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a.map((value) => value.toLowerCase()))
+  return b.every((value) => set.has(value.toLowerCase()))
 }
 
 function readLibraryFile(filePath: string): LibraryFile | null {

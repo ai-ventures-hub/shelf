@@ -35,11 +35,7 @@ export function LibraryPage({
     useLibrary()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
-  // Suggestions render as standalone cards in the grid (home view only) —
-  // uniform silhouette, not attached to the tool — linking to the
-  // Capability gaps page where the decision is made.
   const { suggestions } = useGapSuggestions()
-  const shownSuggestions = mode === 'all' ? suggestions : []
   const [receiptFilter, setReceiptFilter] = useState<ReceiptOutcomeFilter>('all')
   const [receiptExporting, setReceiptExporting] = useState(false)
   const {
@@ -61,6 +57,28 @@ export function LibraryPage({
   )
   const searchRef = useRef<HTMLInputElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+
+  // Suggestions render as standalone cards in the grid (home view only,
+  // never inside an active search/filter) — uniform silhouette, not attached
+  // to the tool — linking to the Capability gaps page for the decision.
+  const shownSuggestions = useMemo(() => {
+    const browsing =
+      mode === 'all' &&
+      !query.trim() &&
+      tagFilter.length === 0 &&
+      statusFilter === 'all'
+    if (!browsing) return []
+    // One card per tool (best coverage wins) — a tool matching several gaps
+    // must not flood the grid with identical cards. Cap keeps tools primary.
+    const byTool = new Map<string, (typeof suggestions)[number]>()
+    for (const suggestion of suggestions) {
+      const existing = byTool.get(suggestion.toolId)
+      if (!existing || suggestion.matched.length > existing.matched.length) {
+        byTool.set(suggestion.toolId, suggestion)
+      }
+    }
+    return Array.from(byTool.values()).slice(0, 3)
+  }, [mode, query, tagFilter, statusFilter, suggestions])
 
   // Redirect legacy /tags/:tag into filter tokens on the main library.
   useEffect(() => {

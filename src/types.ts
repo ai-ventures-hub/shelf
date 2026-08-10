@@ -61,6 +61,8 @@ export interface Tool {
   lastLaunchedAt?: string
   createdAt: string
   updatedAt: string
+  /** When capabilities last actually changed (drives resolve suggestions). */
+  capabilitiesUpdatedAt?: string
 }
 
 export interface Collection {

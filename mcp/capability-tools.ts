@@ -108,7 +108,7 @@ export function registerCapabilityTools({
       inputSchema: { id: z.string().describe('Capability gap id') },
     },
     async ({ id }) => {
-      const gap = gaps.list({ limit: 200 }).find((item) => item.id === id)
+      const gap = gaps.get(id)
       if (!gap) return errorResult(`Capability gap not found: ${id}`)
       const related = gap.relatedToolIds
         .map((toolId) => store.get(toolId))
@@ -136,17 +136,33 @@ export function registerCapabilityTools({
     },
     async ({ id, status, relatedToolIds }) => {
       try {
-        if (!status && !relatedToolIds?.length) {
-          return errorResult('Provide status "planned" and/or relatedToolIds.')
+        const current = gaps.get(id)
+        if (!current) return errorResult(`Capability gap not found: ${id}`)
+        // Resolved/dismissed are USER decisions. An agent re-marking such a
+        // gap "planned" would silently reopen it — refuse instead.
+        if (current.status === 'resolved' || current.status === 'dismissed') {
+          return errorResult(
+            `Gap is ${current.status} — the user decided this in the GUI. Record a new gap if the need genuinely returns.`,
+          )
         }
+        // Validate BEFORE the do-something guard: an all-unknown id list must
+        // error, not report success while attaching nothing.
         const knownIds = new Set(store.list().map((tool) => tool.id))
-        const gap = gaps.update(id, {
-          status,
-          relatedToolIds: (relatedToolIds || []).filter((toolId) =>
-            knownIds.has(toolId),
-          ),
-        })
-        return textResult({ gap })
+        const validToolIds = (relatedToolIds || []).filter((toolId) =>
+          knownIds.has(toolId),
+        )
+        const droppedToolIds = (relatedToolIds || []).filter(
+          (toolId) => !knownIds.has(toolId),
+        )
+        if (!status && validToolIds.length === 0) {
+          return errorResult(
+            droppedToolIds.length > 0
+              ? `No known tool ids in relatedToolIds (unknown: ${droppedToolIds.join(', ')}). Pass ids from shelf_list_tools.`
+              : 'Provide status "planned" and/or relatedToolIds.',
+          )
+        }
+        const gap = gaps.update(id, { status, relatedToolIds: validToolIds })
+        return textResult({ gap, droppedToolIds })
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err))
       }

@@ -204,8 +204,8 @@ try {
   assert.match(brief, /Legacy Image Tool/)
   assert.match(brief, /Do NOT mark the gap resolved/)
 
-  // Only tools created/edited at-or-after the gap suggest; matching is
-  // case-insensitive; dismissal and non-open statuses suppress.
+  // Only tools whose CAPABILITIES changed at-or-after the gap suggest;
+  // matching is case-insensitive; dismissal and non-open statuses suppress.
   const olderStamp = new Date(Date.parse(briefGap.createdAt) - 60_000).toISOString()
   const newerStamp = new Date(Date.parse(briefGap.createdAt) + 60_000).toISOString()
   const newTool = {
@@ -213,20 +213,58 @@ try {
     id: 'new-cap-tool',
     name: 'PDF Filler',
     capabilities: ['Fill PDF Forms'],
+    createdAt: newerStamp,
     updatedAt: newerStamp,
+    capabilitiesUpdatedAt: newerStamp,
   }
+  // Regression (0.9 review): a LAUNCH or rename bumps updatedAt but not
+  // capabilitiesUpdatedAt — this tool predates the gap and must not
+  // re-qualify no matter how fresh its updatedAt is.
   const oldTool = {
     ...ready,
     id: 'old-cap-tool',
     name: 'Old PDF Tool',
     capabilities: ['fill PDF forms'],
-    updatedAt: olderStamp,
+    capabilitiesUpdatedAt: olderStamp,
+    updatedAt: newerStamp,
   }
-  const matched = suggestGapResolutions([briefGap], [newTool, oldTool])
+  // Regression: corrupt timestamps fail closed (no suggestion), never open.
+  const corruptTool = {
+    ...newTool,
+    id: 'corrupt-cap-tool',
+    name: 'Corrupt Stamp Tool',
+    capabilitiesUpdatedAt: 'not-a-date',
+    createdAt: 'not-a-date',
+  }
+  const matched = suggestGapResolutions([briefGap], [newTool, oldTool, corruptTool])
   assert.equal(matched.length, 1)
   assert.equal(matched[0].toolId, 'new-cap-tool')
   assert.deepEqual(matched[0].matched, ['fill PDF forms'])
   assert.equal(matched[0].total, 2)
+
+  // capabilitiesUpdatedAt bumps only on real capability changes.
+  const beforeRename = library.get(ready.id)
+  assert.ok(beforeRename.capabilitiesUpdatedAt, 'save() must stamp capabilitiesUpdatedAt')
+  library.touchLastLaunched(ready.id)
+  const renamed = library.save({ ...library.get(ready.id), name: 'Legacy Image Tool' })
+  assert.equal(
+    renamed.capabilitiesUpdatedAt,
+    beforeRename.capabilitiesUpdatedAt,
+    'launch + rename must not bump capabilitiesUpdatedAt',
+  )
+  const capsChanged = library.save({
+    ...renamed,
+    capabilities: [...renamed.capabilities, 'annotate images'],
+  })
+  assert.notEqual(
+    capsChanged.capabilitiesUpdatedAt,
+    renamed.capabilitiesUpdatedAt,
+    'capability change must bump capabilitiesUpdatedAt',
+  )
+
+  // Uncapped id lookup (list() caps at 200 and would hide older gaps).
+  assert.equal(gaps.get(briefGap.id)?.id, briefGap.id)
+  assert.ok(gaps.listAll().some((gap) => gap.id === briefGap.id))
 
   const afterDismiss = gaps.dismissSuggestion(briefGap.id, 'new-cap-tool')
   assert.equal(suggestGapResolutions([afterDismiss], [newTool]).length, 0)

@@ -24,7 +24,10 @@ export function useCapabilityGaps(
     try {
       const [nextGaps, nextSuggestions] = await Promise.all([
         window.shelf.listCapabilityGaps({ status, limit }),
-        window.shelf.listGapSuggestions(),
+        // Suggestions are a nudge, never load-bearing: a failure here must
+        // not take down the gaps list (or the sidebar's open-gap count).
+        window.shelf.listGapSuggestions?.().catch(() => []) ??
+          Promise.resolve([]),
       ])
       setGaps(nextGaps)
       setSuggestions(nextSuggestions)

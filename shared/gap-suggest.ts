@@ -30,9 +30,15 @@ export function suggestGapResolutions(
     if (gap.status !== 'open' && gap.status !== 'planned') continue
     const dismissed = new Set(gap.suggestionDismissedToolIds || [])
     const gapCreated = Date.parse(gap.createdAt)
+    // Fail closed on corrupt timestamps: no suggestion beats a wrong one.
+    if (!Number.isFinite(gapCreated)) continue
     for (const tool of tools) {
       if (dismissed.has(tool.id)) continue
-      if (Date.parse(tool.updatedAt) < gapCreated) continue
+      // Compare when the tool's CAPABILITIES changed — updatedAt bumps on
+      // every launch/edit and would re-qualify tools the gap already
+      // deemed insufficient. Pre-0.9 records fall back to createdAt.
+      const capableSince = Date.parse(tool.capabilitiesUpdatedAt || tool.createdAt)
+      if (!Number.isFinite(capableSince) || capableSince < gapCreated) continue
       const toolCaps = new Set(
         tool.capabilities.map((capability) => capability.trim().toLowerCase()),
       )

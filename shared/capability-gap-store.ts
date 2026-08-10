@@ -51,6 +51,16 @@ export class CapabilityGapStore {
       .slice(0, limit)
   }
 
+  /** Uncapped id lookup — list() caps at 200 and would hide older gaps. */
+  get(id: string): CapabilityGap | undefined {
+    return this.read().gaps.find((gap) => gap.id === id)
+  }
+
+  /** Every gap, uncapped — for suggestion matching, which must not skip old gaps. */
+  listAll(): CapabilityGap[] {
+    return this.read().gaps.slice()
+  }
+
   record(input: RecordCapabilityGapInput): { action: 'created' | 'updated'; gap: CapabilityGap } {
     const task = input.task.trim().replace(/\s+/g, ' ')
     const reason = input.reason.trim().replace(/\s+/g, ' ')

@@ -98,6 +98,12 @@ export interface Tool {
   lastLaunchedAt?: string
   createdAt: string
   updatedAt: string
+  /**
+   * When `capabilities` last actually changed. Gap resolve-suggestions
+   * compare against THIS — `updatedAt` bumps on every launch/edit, which
+   * would re-qualify old tools a gap already deemed insufficient.
+   */
+  capabilitiesUpdatedAt?: string
 }
 
 /** Curated library destination; a tool may belong to many collections. */
