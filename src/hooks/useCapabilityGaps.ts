@@ -3,6 +3,7 @@ import type {
   AgentAccessKind,
   CapabilityGap,
   CapabilityGapStatus,
+  GapResolveSuggestion,
 } from '../types'
 
 export function useCapabilityGaps(
@@ -10,6 +11,7 @@ export function useCapabilityGaps(
 ) {
   const { status, limit } = opts
   const [gaps, setGaps] = useState<CapabilityGap[]>([])
+  const [suggestions, setSuggestions] = useState<GapResolveSuggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,7 +22,12 @@ export function useCapabilityGaps(
       return
     }
     try {
-      setGaps(await window.shelf.listCapabilityGaps({ status, limit }))
+      const [nextGaps, nextSuggestions] = await Promise.all([
+        window.shelf.listCapabilityGaps({ status, limit }),
+        window.shelf.listGapSuggestions(),
+      ])
+      setGaps(nextGaps)
+      setSuggestions(nextSuggestions)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -55,6 +62,31 @@ export function useCapabilityGaps(
     await refresh()
   }, [refresh])
 
+  /** Resolve from a suggestion: records WHICH tool resolved the gap. */
+  const resolveWithTool = useCallback(
+    async (id: string, toolId: string) => {
+      await window.shelf.updateCapabilityGap(id, {
+        status: 'resolved',
+        relatedToolIds: [toolId],
+      })
+      await refresh()
+    },
+    [refresh],
+  )
+
+  const dismissSuggestion = useCallback(
+    async (id: string, toolId: string) => {
+      await window.shelf.dismissGapSuggestion(id, toolId)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  const getBrief = useCallback(
+    (id: string) => window.shelf.getGapBrief(id),
+    [],
+  )
+
   const record = useCallback(async (input: {
     task: string
     capabilities: string[]
@@ -67,5 +99,17 @@ export function useCapabilityGaps(
     return result
   }, [refresh])
 
-  return { gaps, loading, error, refresh, updateStatus, remove, record }
+  return {
+    gaps,
+    suggestions,
+    loading,
+    error,
+    refresh,
+    updateStatus,
+    remove,
+    record,
+    resolveWithTool,
+    dismissSuggestion,
+    getBrief,
+  }
 }

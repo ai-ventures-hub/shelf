@@ -191,6 +191,32 @@
   color:var(--subtle);
 }
 
+/* Suggest-only resolve prompt: brand-tinted so it reads as Shelf's
+   suggestion awaiting the user's call, not a state change that happened. */
+.gap-suggestion {
+  margin-top:.85rem;
+  padding:.75rem .9rem;
+  border:1px solid color-mix(in srgb, var(--brand) 45%, transparent);
+  border-radius:10px;
+  background:color-mix(in srgb, var(--brand) 7%, transparent);
+}
+
+.gap-suggestion p {
+  margin:0 0 .6rem;
+  font-size:.86rem;
+  color:var(--ink);
+}
+
+.gap-suggestion a {
+  color:var(--brand-strong);
+  font-weight:650;
+}
+
+.gap-suggestion-actions {
+  display:flex;
+  gap:.5rem;
+}
+
 .gap-actions {
   margin:1rem 0 0;
 }

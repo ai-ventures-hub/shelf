@@ -54,6 +54,7 @@ export type {
   CollectionToolOutcome,
   CollectionToolResult,
 } from '../shared/collection-launch'
+export type { GapResolveSuggestion } from '../shared/gap-suggest'
 export type { ShortcutStatus } from '../shared/global-shortcut'
 export {
   DEFAULT_GLOBAL_SHORTCUT,

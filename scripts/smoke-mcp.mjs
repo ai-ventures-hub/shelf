@@ -124,6 +124,41 @@ async function main() {
     }
     console.log('OK: capability gap')
 
+    const briefResult = await callTool(client, 'shelf_get_gap_brief', { id: smokeGap.id })
+    if (
+      !briefResult.brief?.includes(gapInput.capabilities[0]) ||
+      !briefResult.brief.includes('shelf_register_project') ||
+      !briefResult.brief.includes(smokeGap.id)
+    ) {
+      throw new Error('Gap brief missing capabilities, register-back, or gap id')
+    }
+    console.log('OK: gap brief')
+
+    const plannedGap = await callTool(client, 'shelf_update_capability_gap', {
+      id: smokeGap.id,
+      status: 'planned',
+      relatedToolIds: [toolId, 'unknown-tool'],
+    })
+    if (
+      plannedGap.gap.status !== 'planned' ||
+      plannedGap.gap.relatedToolIds.includes('unknown-tool')
+    ) {
+      throw new Error('Agent planned-update failed or leaked an unknown tool id')
+    }
+    let resolveRejected = false
+    try {
+      await callTool(client, 'shelf_update_capability_gap', {
+        id: smokeGap.id,
+        status: 'resolved',
+      })
+    } catch {
+      resolveRejected = true
+    }
+    if (!resolveRejected) {
+      throw new Error('Agents must not be able to set a gap to resolved')
+    }
+    console.log('OK: gap agent update (planned only)')
+
     const inspected = await callTool(client, 'shelf_inspect_project', {
       projectPath: fixture,
     })

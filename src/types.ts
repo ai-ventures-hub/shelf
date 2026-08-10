@@ -318,6 +318,17 @@ export interface CapabilityGap {
   createdAt: string
   updatedAt: string
   lastRequestedAt: string
+  /** Tools the user declined as resolve suggestions. */
+  suggestionDismissedToolIds?: string[]
+}
+
+/** Suggest-only gap resolution match (mirror of shared/gap-suggest.ts). */
+export interface GapResolveSuggestion {
+  gapId: string
+  toolId: string
+  toolName: string
+  matched: string[]
+  total: number
 }
 
 export interface LaunchAlternative {
@@ -465,7 +476,14 @@ export interface ShelfApi {
     id: string,
     status: CapabilityGapStatus,
   ) => Promise<CapabilityGap>
+  updateCapabilityGap: (
+    id: string,
+    patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] },
+  ) => Promise<CapabilityGap>
   deleteCapabilityGap: (id: string) => Promise<void>
+  getGapBrief: (id: string) => Promise<string>
+  listGapSuggestions: () => Promise<GapResolveSuggestion[]>
+  dismissGapSuggestion: (id: string, toolId: string) => Promise<CapabilityGap>
   getRuntimeStates: () => Promise<ToolRuntimeState[]>
   startTool: (id: string, options?: StartOptions) => Promise<ToolRuntimeState>
   stopTool: (id: string) => Promise<ToolRuntimeState>

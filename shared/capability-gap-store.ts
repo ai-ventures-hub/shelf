@@ -111,11 +111,43 @@ export class CapabilityGapStore {
   }
 
   updateStatus(id: string, status: CapabilityGapStatus): CapabilityGap {
+    return this.update(id, { status })
+  }
+
+  /**
+   * Partial update. relatedToolIds merge (never replace) so an agent
+   * attaching its in-progress tool cannot drop earlier references. Status
+   * policy (e.g. agents may only set 'planned') is enforced by callers —
+   * the GUI uses the full status set.
+   */
+  update(
+    id: string,
+    patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] },
+  ): CapabilityGap {
     return withFileLockSync(this.filePath, () => {
       const data = this.read()
       const gap = data.gaps.find((item) => item.id === id)
       if (!gap) throw new Error(`Capability gap not found: ${id}`)
-      gap.status = status
+      if (patch.status) gap.status = patch.status
+      if (patch.relatedToolIds?.length) {
+        gap.relatedToolIds = unique([...gap.relatedToolIds, ...patch.relatedToolIds])
+      }
+      gap.updatedAt = new Date().toISOString()
+      this.write(data)
+      return gap
+    })
+  }
+
+  /** Hide one tool's resolve suggestion for this gap; the gap itself stays open. */
+  dismissSuggestion(id: string, toolId: string): CapabilityGap {
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const gap = data.gaps.find((item) => item.id === id)
+      if (!gap) throw new Error(`Capability gap not found: ${id}`)
+      gap.suggestionDismissedToolIds = unique([
+        ...(gap.suggestionDismissedToolIds || []),
+        toolId,
+      ])
       gap.updatedAt = new Date().toISOString()
       this.write(data)
       return gap

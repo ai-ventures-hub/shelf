@@ -24,11 +24,22 @@ function formatDate(value: string): string {
 
 export function CapabilityGapsPage() {
   const [filter, setFilter] = useState<CapabilityGapStatus | 'all'>('open')
-  const { gaps, loading, error, updateStatus, remove } = useCapabilityGaps({
+  const {
+    gaps,
+    suggestions,
+    loading,
+    error,
+    updateStatus,
+    remove,
+    resolveWithTool,
+    dismissSuggestion,
+    getBrief,
+  } = useCapabilityGaps({
     status: filter === 'all' ? undefined : filter,
   })
   const { tools } = useLibrary()
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function run(id: string, action: () => Promise<void>) {
@@ -41,6 +52,16 @@ export function CapabilityGapsPage() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  async function copyBrief(id: string) {
+    await run(id, async () => {
+      await navigator.clipboard.writeText(await getBrief(id))
+      setCopiedId(id)
+      window.setTimeout(() => {
+        setCopiedId((current) => (current === id ? null : current))
+      }, 2000)
+    })
   }
 
   return (
@@ -90,6 +111,7 @@ export function CapabilityGapsPage() {
             const related = gap.relatedToolIds
               .map((id) => tools.find((tool) => tool.id === id))
               .filter((tool) => Boolean(tool))
+            const gapSuggestions = suggestions.filter((s) => s.gapId === gap.id)
             const params = new URLSearchParams({
               capabilities: gap.capabilities.join('\n'),
             })
@@ -142,10 +164,60 @@ export function CapabilityGapsPage() {
                       </ul>
                     </details>
                   ) : null}
+                  {gapSuggestions.map((suggestion) => (
+                    <div
+                      className="gap-suggestion"
+                      key={`${suggestion.gapId}:${suggestion.toolId}`}
+                      role="status"
+                    >
+                      <p>
+                        <Link to={`/tools/${suggestion.toolId}`}>
+                          {suggestion.toolName}
+                        </Link>{' '}
+                        covers {suggestion.matched.length} of {suggestion.total}{' '}
+                        requested capabilit{suggestion.total === 1 ? 'y' : 'ies'}:{' '}
+                        {suggestion.matched.join(', ')}
+                      </p>
+                      <div className="gap-suggestion-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={busyId === gap.id}
+                          onClick={() =>
+                            void run(gap.id, () =>
+                              resolveWithTool(gap.id, suggestion.toolId),
+                            )
+                          }
+                        >
+                          Resolve with this tool
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-quiet btn-sm"
+                          disabled={busyId === gap.id}
+                          onClick={() =>
+                            void run(gap.id, () =>
+                              dismissSuggestion(gap.id, suggestion.toolId),
+                            )
+                          }
+                        >
+                          Not a match
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                   <div className="action-row gap-actions">
                     <Link className="btn btn-primary btn-sm" to={`/tools/new?${params.toString()}`}>
                       Create tool
                     </Link>
+                    <button
+                      type="button"
+                      className="btn btn-quiet btn-sm"
+                      disabled={busyId === gap.id}
+                      onClick={() => void copyBrief(gap.id)}
+                    >
+                      {copiedId === gap.id ? 'Copied ✓' : 'Copy brief for your AI tool'}
+                    </button>
                     {gap.status !== 'planned' ? (
                       <button type="button" className="btn btn-quiet btn-sm" disabled={busyId === gap.id} onClick={() => void run(gap.id, () => updateStatus(gap.id, 'planned'))}>
                         Plan

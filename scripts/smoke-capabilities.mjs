@@ -181,6 +181,71 @@ try {
   gaps.delete(deduped[0].id)
   assert.equal(gaps.list().length, 0)
 
+  // v0.9: brief generator (composable sections) + suggest-only matching.
+  const { buildGapBrief, buildGapBriefSections } = require('../dist-electron/shared/gap-brief.js')
+  const { suggestGapResolutions } = require('../dist-electron/shared/gap-suggest.js')
+
+  const briefGap = gaps.record({
+    task: 'Fill a PDF form',
+    capabilities: ['fill PDF forms', 'write PDF fields'],
+    reason: 'No installed tool exposes structured form editing.',
+    relatedToolIds: [ready.id],
+    suggestedAccess: 'mcp',
+  }).gap
+  const sections = buildGapBriefSections(briefGap, [ready])
+  assert.deepEqual(
+    sections.map((section) => section.id),
+    ['task', 'capabilities', 'related-tools', 'register-back'],
+  )
+  const brief = buildGapBrief(briefGap, [ready])
+  assert.match(brief, /fill PDF forms/)
+  assert.match(brief, /shelf_register_project/)
+  assert.ok(brief.includes(briefGap.id), 'brief must carry the gap id for update calls')
+  assert.match(brief, /Legacy Image Tool/)
+  assert.match(brief, /Do NOT mark the gap resolved/)
+
+  // Only tools created/edited at-or-after the gap suggest; matching is
+  // case-insensitive; dismissal and non-open statuses suppress.
+  const olderStamp = new Date(Date.parse(briefGap.createdAt) - 60_000).toISOString()
+  const newerStamp = new Date(Date.parse(briefGap.createdAt) + 60_000).toISOString()
+  const newTool = {
+    ...ready,
+    id: 'new-cap-tool',
+    name: 'PDF Filler',
+    capabilities: ['Fill PDF Forms'],
+    updatedAt: newerStamp,
+  }
+  const oldTool = {
+    ...ready,
+    id: 'old-cap-tool',
+    name: 'Old PDF Tool',
+    capabilities: ['fill PDF forms'],
+    updatedAt: olderStamp,
+  }
+  const matched = suggestGapResolutions([briefGap], [newTool, oldTool])
+  assert.equal(matched.length, 1)
+  assert.equal(matched[0].toolId, 'new-cap-tool')
+  assert.deepEqual(matched[0].matched, ['fill PDF forms'])
+  assert.equal(matched[0].total, 2)
+
+  const afterDismiss = gaps.dismissSuggestion(briefGap.id, 'new-cap-tool')
+  assert.equal(suggestGapResolutions([afterDismiss], [newTool]).length, 0)
+
+  const planned = gaps.update(briefGap.id, {
+    status: 'planned',
+    relatedToolIds: ['another-tool'],
+  })
+  assert.equal(planned.status, 'planned')
+  assert.ok(
+    planned.relatedToolIds.includes(ready.id) &&
+      planned.relatedToolIds.includes('another-tool'),
+    'update must merge relatedToolIds, never replace',
+  )
+  assert.equal(
+    suggestGapResolutions([{ ...planned, status: 'resolved' }], [newTool]).length,
+    0,
+  )
+
   console.log('OK: capability intelligence smoke passed')
 } finally {
   fs.rmSync(root, { recursive: true, force: true })

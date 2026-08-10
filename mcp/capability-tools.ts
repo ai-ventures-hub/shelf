@@ -6,9 +6,10 @@ import {
   findCapabilityMatches,
   summarizeAgentAccess,
 } from '../shared/capability-intelligence'
+import { buildGapBrief } from '../shared/gap-brief'
 import type { LibraryStore } from '../shared/library-store'
 import type { ProcessManager } from '../shared/process-manager'
-import type { AgentAccessKind, CapabilityGapStatus } from '../shared/types'
+import type { AgentAccessKind, CapabilityGapStatus, Tool } from '../shared/types'
 import { errorResult, textResult } from './result'
 
 interface CapabilityToolHost {
@@ -93,6 +94,59 @@ export function registerCapabilityTools({
             relatedToolIds: (args.relatedToolIds || []).filter((id) => knownIds.has(id)),
           }),
         )
+      } catch (err) {
+        return errorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  )
+
+  server.registerTool(
+    'shelf_get_gap_brief',
+    {
+      description:
+        'Get a paste-ready build brief for one capability gap: the task, requested capabilities, related existing tools, and instructions for registering the finished tool back to Shelf. Use this when asked to build something that fills a recorded gap.',
+      inputSchema: { id: z.string().describe('Capability gap id') },
+    },
+    async ({ id }) => {
+      const gap = gaps.list({ limit: 200 }).find((item) => item.id === id)
+      if (!gap) return errorResult(`Capability gap not found: ${id}`)
+      const related = gap.relatedToolIds
+        .map((toolId) => store.get(toolId))
+        .filter((tool): tool is Tool => Boolean(tool))
+      return textResult({ id, brief: buildGapBrief(gap, related) })
+    },
+  )
+
+  server.registerTool(
+    'shelf_update_capability_gap',
+    {
+      description:
+        'Update a capability gap while building for it: set status "planned" and/or attach related tool ids. Agents cannot resolve or dismiss gaps — resolution is suggested by Shelf and confirmed by the user in the GUI.',
+      inputSchema: {
+        id: z.string().describe('Capability gap id'),
+        status: z
+          .literal('planned')
+          .optional()
+          .describe('The only status agents may set'),
+        relatedToolIds: z
+          .array(z.string())
+          .optional()
+          .describe('Tool ids to attach (merged, unknown ids dropped)'),
+      },
+    },
+    async ({ id, status, relatedToolIds }) => {
+      try {
+        if (!status && !relatedToolIds?.length) {
+          return errorResult('Provide status "planned" and/or relatedToolIds.')
+        }
+        const knownIds = new Set(store.list().map((tool) => tool.id))
+        const gap = gaps.update(id, {
+          status,
+          relatedToolIds: (relatedToolIds || []).filter((toolId) =>
+            knownIds.has(toolId),
+          ),
+        })
+        return textResult({ gap })
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err))
       }

@@ -18,6 +18,7 @@ import type {
   CursorConnectResult,
   CursorMcpStatus,
   DesignMdResult,
+  GapResolveSuggestion,
   LogLine,
   OnboardingSubmissionInput,
   ProjectImportSuggestion,
@@ -105,8 +106,20 @@ const api = {
     status: CapabilityGapStatus,
   ): Promise<CapabilityGap> =>
     ipcRenderer.invoke('capabilityGaps:updateStatus', id, status),
+  updateCapabilityGap: (
+    id: string,
+    patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] },
+  ): Promise<CapabilityGap> =>
+    ipcRenderer.invoke('capabilityGaps:update', id, patch),
   deleteCapabilityGap: (id: string): Promise<void> =>
     ipcRenderer.invoke('capabilityGaps:delete', id),
+  /** Paste-ready build brief for a capability gap (markdown). */
+  getGapBrief: (id: string): Promise<string> =>
+    ipcRenderer.invoke('capabilityGaps:brief', id),
+  listGapSuggestions: (): Promise<GapResolveSuggestion[]> =>
+    ipcRenderer.invoke('capabilityGaps:suggestions'),
+  dismissGapSuggestion: (id: string, toolId: string): Promise<CapabilityGap> =>
+    ipcRenderer.invoke('capabilityGaps:dismissSuggestion', id, toolId),
 
   getRuntimeStates: (): Promise<ToolRuntimeState[]> =>
     ipcRenderer.invoke('process:states'),

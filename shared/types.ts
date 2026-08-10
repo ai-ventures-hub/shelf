@@ -230,6 +230,8 @@ export interface CapabilityGap {
   createdAt: string
   updatedAt: string
   lastRequestedAt: string
+  /** Tools the user declined as resolve suggestions (suggestion hidden, gap stays open). */
+  suggestionDismissedToolIds?: string[]
 }
 
 export interface CapabilityGapsFile {
