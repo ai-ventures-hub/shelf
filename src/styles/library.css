@@ -227,12 +227,13 @@
   gap:.4rem;
 }
 
-/* Pending resolve decision on a LIVE card — the truthful status pill keeps
-   its place, but launching a tool never hides the decision. */
-.suggestion-chip {
-  border-style:solid;
-  border-color:color-mix(in srgb, var(--brand) 45%, transparent);
+/* Icon tile on the standalone suggestion card/row (not a tool icon). */
+.suggestion-tile {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
   color:var(--brand-strong);
+  background:color-mix(in srgb, var(--brand) 14%, transparent);
 }
 .tool-grid {
   display:grid;
@@ -268,9 +269,7 @@
   border-top-color:var(--danger);
 }
 
-/* Suggestion state: the card itself is the notification — brand accent,
-   same silhouette as every other card. Live status (running/starting)
-   outranks it (enforced in ToolCard, not here). */
+/* Standalone suggestion card: brand accent on the shared card silhouette. */
 .tool-card[data-suggestion] {
   border-top-color:var(--brand);
 }

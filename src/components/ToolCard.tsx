@@ -1,4 +1,4 @@
-import { ArrowUpRight, ExternalLink, Play, Square, Star } from 'lucide-react'
+import { ExternalLink, Play, Square, Star } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
@@ -40,7 +40,6 @@ export function ToolCard({
   tool,
   state,
   hideChips = false,
-  suggested = false,
   onLaunch,
   onStop,
   onOpenUrl,
@@ -50,10 +49,6 @@ export function ToolCard({
   state?: ToolRuntimeState
   /** Simple mode: no port/time/tag chips — icon, name, status, controls. */
   hideChips?: boolean
-  /** This tool covers something an agent recorded as missing: the card IS
-   *  the notification — suggestion pill + link into detail (where the user
-   *  confirms), uniform with the rest of the grid. */
-  suggested?: boolean
   onLaunch?: () => void
   onStop?: () => void
   onOpenUrl?: () => void
@@ -61,11 +56,6 @@ export function ToolCard({
 }) {
   const status = state?.status || 'stopped'
   const live = status === 'running' || status === 'starting'
-  // Idle: the suggestion takes the pill + accent. Live: truthful status keeps
-  // the pill, but the pending decision stays visible as a meta chip —
-  // launching a tool to try it must never hide the decision.
-  const showSuggestionPill = suggested && !live
-  const showSuggestionChip = suggested && live
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
   const hasControls = Boolean(onLaunch || onStop)
@@ -82,12 +72,7 @@ export function ToolCard({
       to={`/tools/${tool.id}`}
       className="tool-card"
       data-status={status}
-      data-suggestion={showSuggestionPill || undefined}
-      aria-label={
-        showSuggestionPill
-          ? `${tool.name}, tool suggestion`
-          : `${tool.name}, ${status}`
-      }
+      aria-label={`${tool.name}, ${status}`}
     >
       <div className="tool-card-top">
         <ToolIcon
@@ -97,17 +82,7 @@ export function ToolCard({
           iconColor={tool.iconColor}
           iconBackground={tool.iconBackground}
         />
-        {showSuggestionPill ? (
-          <span
-            className="status-pill"
-            data-status="suggestion"
-            title="Covers something your AI assistant was missing — open for details"
-          >
-            Tool suggestion
-          </span>
-        ) : (
-          <StatusPill status={status} message={state?.message} />
-        )}
+        <StatusPill status={status} message={state?.message} />
       </div>
       <div>
         <h3 className="tool-name">{tool.name}</h3>
@@ -118,14 +93,6 @@ export function ToolCard({
       <div className="tool-card-footer">
         <div className="tool-meta">
           <OriginChip state={state} />
-          {showSuggestionChip ? (
-            <span
-              className="meta-chip suggestion-chip"
-              title="Covers something your AI assistant was missing — open for details"
-            >
-              Suggestion
-            </span>
-          ) : null}
           {!hideChips ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
@@ -174,16 +141,6 @@ export function ToolCard({
               >
                 <Square size={13} aria-hidden />
               </button>
-            ) : showSuggestionPill ? (
-              /* No preventDefault: the click falls through to the card Link,
-                 landing on the detail page where the user confirms/denies. */
-              <span
-                className="btn btn-quiet btn-sm btn-icon control-suggestion"
-                title="Review suggestion"
-                aria-hidden
-              >
-                <ArrowUpRight size={13} />
-              </span>
             ) : (
               <button
                 type="button"
@@ -218,19 +175,16 @@ export function ToolCard({
 export function ToolListRow({
   tool,
   state,
-  suggested = false,
   onLaunch,
   onStop,
 }: {
   tool: Tool
   state?: ToolRuntimeState
-  suggested?: boolean
   onLaunch?: () => void
   onStop?: () => void
 }) {
   const status = state?.status || 'stopped'
   const canStop = status === 'running' || status === 'starting'
-  const showSuggestionPill = suggested && !canStop
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
 
@@ -261,16 +215,7 @@ export function ToolListRow({
       </td>
       <td>
         <div className="tool-list-status">
-          {showSuggestionPill ? (
-            <span className="status-pill" data-status="suggestion">
-              Tool suggestion
-            </span>
-          ) : (
-            <StatusPill status={status} />
-          )}
-          {suggested && canStop ? (
-            <span className="meta-chip suggestion-chip">Suggestion</span>
-          ) : null}
+          <StatusPill status={status} />
           <OriginChip state={state} />
         </div>
       </td>

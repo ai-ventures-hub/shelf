@@ -6,6 +6,10 @@ import {
   outcomesForFilter,
   type ReceiptOutcomeFilter,
 } from '../components/ReceiptHistory'
+import {
+  SuggestionGridCard,
+  SuggestionListRow,
+} from '../components/SuggestionGridCard'
 import { ToolCard, ToolListRow } from '../components/ToolCard'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
@@ -31,13 +35,11 @@ export function LibraryPage({
     useLibrary()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
-  // The suggested tool's own card is the notification (pill + accent);
-  // confirmation happens on its detail page.
+  // Suggestions render as standalone cards in the grid (home view only) —
+  // uniform silhouette, not attached to the tool — linking to the
+  // Capability gaps page where the decision is made.
   const { suggestions } = useGapSuggestions()
-  const suggestedToolIds = useMemo(
-    () => new Set(suggestions.map((s) => s.toolId)),
-    [suggestions],
-  )
+  const shownSuggestions = mode === 'all' ? suggestions : []
   const [receiptFilter, setReceiptFilter] = useState<ReceiptOutcomeFilter>('all')
   const [receiptExporting, setReceiptExporting] = useState(false)
   const {
@@ -480,12 +482,17 @@ export function LibraryPage({
               </tr>
             </thead>
             <tbody>
+              {shownSuggestions.map((suggestion) => (
+                <SuggestionListRow
+                  key={`suggestion:${suggestion.gapId}:${suggestion.toolId}`}
+                  suggestion={suggestion}
+                />
+              ))}
               {filtered.map((tool) => (
                 <ToolListRow
                   key={tool.id}
                   tool={tool}
                   state={states[tool.id]}
-                  suggested={suggestedToolIds.has(tool.id)}
                   onLaunch={() => void startTool(tool.id)}
                   onStop={() => void stopTool(tool.id)}
                 />
@@ -495,12 +502,17 @@ export function LibraryPage({
         </div>
       ) : (
         <div className="tool-grid">
+          {shownSuggestions.map((suggestion) => (
+            <SuggestionGridCard
+              key={`suggestion:${suggestion.gapId}:${suggestion.toolId}`}
+              suggestion={suggestion}
+            />
+          ))}
           {filtered.map((tool) => (
             <ToolCard
               key={tool.id}
               tool={tool}
               state={states[tool.id]}
-              suggested={suggestedToolIds.has(tool.id)}
               hideChips={!isDeveloper}
               onLaunch={() => void startTool(tool.id)}
               onStop={() => void stopTool(tool.id)}
