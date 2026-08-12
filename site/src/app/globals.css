@@ -2068,6 +2068,230 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   font-weight: 600;
 }
 
+/* —— #design · Brand switcher (1.0) —— */
+/* Copy left, window right — zigzags against #agents/#dev around it.
+   The demo surface runs on --be-* inline custom properties set per preset,
+   the same mechanism the app's own live preview uses; the profile card and
+   switcher stay on site chrome tokens. Transitions live on concrete
+   properties of consuming elements — custom properties don't interpolate. */
+.be-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 56px;
+  align-items: center;
+}
+
+.be-copy .sec-h2 {
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.05;
+}
+
+.be-copy .sec-lead {
+  margin-top: 16px;
+}
+
+.be-points {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--av-text-secondary);
+}
+
+.be-points strong {
+  color: var(--av-text-primary);
+}
+
+.be-verb {
+  margin-top: 20px;
+}
+
+.be-window {
+  min-height: 400px;
+}
+
+.be-body {
+  display: grid;
+  grid-template-columns: 216px 1fr;
+  min-height: 348px;
+}
+
+.be-profile {
+  padding: 20px;
+  border-right: 1px solid var(--av-border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeUp 0.3s var(--av-ease-out) both;
+}
+
+.be-profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.be-profile-name {
+  font-size: 15px;
+  font-weight: var(--av-weight-bold);
+}
+
+.be-swatches {
+  display: flex;
+  gap: 5px;
+}
+
+.be-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--av-radius-sm);
+  border: 1px solid var(--av-border-default);
+  flex-shrink: 0;
+}
+
+.be-font {
+  font-family: var(--av-font-mono);
+  font-size: 12px;
+  color: var(--av-text-tertiary);
+}
+
+.be-voice {
+  font-size: 13.5px;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--av-text-secondary);
+}
+
+.be-source {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--av-text-tertiary);
+}
+
+/* The rendered mini page — everything below consumes --be-* vars. */
+.be-page {
+  background: var(--be-bg);
+  color: var(--be-ink);
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition:
+    background-color 0.35s var(--av-ease-out),
+    color 0.35s var(--av-ease-out);
+}
+
+.be-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--be-line);
+  font-size: 13px;
+  transition: border-color 0.35s var(--av-ease-out);
+}
+
+.be-monogram {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--be-radius) * 0.6);
+  background: var(--be-brand);
+  color: var(--be-on-brand);
+  font-size: 13px;
+  font-weight: 800;
+  transition:
+    background-color 0.35s var(--av-ease-out),
+    color 0.35s var(--av-ease-out),
+    border-radius 0.35s var(--av-ease-out);
+}
+
+.be-display {
+  margin: 0;
+  font-family: var(--be-font);
+  font-weight: var(--be-hw);
+  letter-spacing: var(--be-ht);
+  text-transform: var(--be-tt);
+  font-size: 25px;
+  line-height: 1.12;
+  min-height: 2.3em;
+}
+
+.be-bodycopy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: color 0.35s var(--av-ease-out);
+}
+
+.be-muted {
+  color: var(--be-muted);
+  transition: color 0.35s var(--av-ease-out);
+}
+
+.be-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.be-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 15px;
+  border-radius: var(--be-radius);
+  font-size: 12.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.35s var(--av-ease-out),
+    color 0.35s var(--av-ease-out),
+    border-color 0.35s var(--av-ease-out),
+    border-radius 0.35s var(--av-ease-out);
+}
+
+.be-btn-primary {
+  background: var(--be-brand);
+  color: var(--be-on-brand);
+}
+
+.be-btn-quiet {
+  border-color: var(--be-line);
+  color: var(--be-ink);
+}
+
+.be-minicard {
+  background: var(--be-surface);
+  border: 1px solid var(--be-line);
+  border-radius: var(--be-radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  transition:
+    background-color 0.35s var(--av-ease-out),
+    border-color 0.35s var(--av-ease-out),
+    border-radius 0.35s var(--av-ease-out);
+}
+
+.be-mono {
+  font-family: var(--av-font-mono);
+  font-size: 12px;
+  color: var(--be-muted);
+  transition: color 0.35s var(--av-ease-out);
+}
+
+/* #dev sits on canvas since 1.0 — keep its inset switch visible there. */
+.section:not([data-well]) .mode-switch {
+  background: var(--av-bg-well);
+}
+
 /* —— #dev · Mode toggle —— */
 /* Window left, copy right — mirrors #agents above for page balance.
    DOM keeps copy first so the mobile stack leads with the words. */
@@ -2414,7 +2638,8 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   }
 
   .chat-grid,
-  .mode-grid {
+  .mode-grid,
+  .be-grid {
     grid-template-columns: 1fr;
     gap: 40px;
   }
@@ -2523,6 +2748,35 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 @media (max-width: 700px) {
   .section-inner {
     --sec-pad-y: 56px;
+  }
+
+  /* Profile card becomes a compact strip above the rendered page. */
+  .be-body {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .be-window {
+    min-height: 0;
+  }
+
+  .be-profile {
+    border-right: none;
+    border-bottom: 1px solid var(--av-border-default);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 14px 16px;
+  }
+
+  .be-profile-head {
+    gap: 10px;
+  }
+
+  .be-display {
+    font-size: 21px;
+    min-height: 0;
   }
 
   .section-inner,
@@ -2670,6 +2924,19 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
 /* Phone-density details. */
 @media (max-width: 520px) {
+  .be-swatch {
+    width: 18px;
+    height: 18px;
+  }
+
+  .be-page {
+    padding: 18px 16px;
+  }
+
+  .be-switch button {
+    padding: 0 14px;
+  }
+
   .drop-titlebar {
     padding: 12px 16px;
   }

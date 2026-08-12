@@ -104,3 +104,19 @@ export const CHAT_BUBBLES = [
   role: 'user' | 'agent'
   parts: readonly { text: string; tone?: 'success' }[]
 }[]
+
+/** #design — the three proof points under the lead. */
+export const DESIGN_POINTS = [
+  {
+    title: 'DTCG tokens.',
+    body: 'Standard design-token JSON — colors, type, radius — any agent can consume.',
+  },
+  {
+    title: 'A brief agents can read.',
+    body: 'A markdown brand brief rides along: voice, personality, the rules that don’t fit in a hex code.',
+  },
+  {
+    title: 'Drafts you approve.',
+    body: 'Your agent can extract a brand it saw and save a draft. You review. Agents never set the default.',
+  },
+] as const satisfies readonly { title: string; body: string }[]

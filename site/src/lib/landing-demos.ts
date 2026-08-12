@@ -127,6 +127,96 @@ export const MCP_CLIENTS = [
 
 export type McpClientId = (typeof MCP_CLIENTS)[number]['id']
 
+/**
+ * #design — brand-switcher presets. The hex values here are demo CONTENT
+ * (the design tokens being shown), applied as inline custom properties on
+ * the demo surface — the same mechanism the app's own live preview uses.
+ * Site chrome around the demo stays on --av-* tokens; the "no inline
+ * colors" rule governs chrome, not the tokens a token demo demonstrates.
+ */
+export type BrandPresetId = 'shelf' | 'verdant' | 'klaxon'
+
+export const BRAND_PRESETS = [
+  {
+    id: 'shelf',
+    name: 'Shelf',
+    badge: 'Default',
+    swatches: ['#090d16', '#131a2b', '#526fdd', '#9aafff', '#f7f8fc'],
+    fontLabel: 'Archivo · 800 / tight',
+    voiceLine: 'Plain words. Honest states. No ceremony.',
+    source: 'design-profiles.json · default profile',
+    cssVars: {
+      '--be-bg': '#090d16',
+      '--be-surface': '#131a2b',
+      '--be-ink': '#f7f8fc',
+      '--be-muted': '#99a3b8',
+      '--be-brand': '#526fdd',
+      '--be-on-brand': '#f2f5ff',
+      '--be-line': '#26304a',
+      '--be-radius': '12px',
+      '--be-font': 'var(--av-font-display)',
+      '--be-hw': '800',
+      '--be-ht': '-0.02em',
+      '--be-tt': 'none',
+    },
+  },
+  {
+    id: 'verdant',
+    name: 'Verdant',
+    badge: 'Approved',
+    swatches: ['#f4f0e6', '#fdfbf4', '#2d4a34', '#b4552d', '#5a5348'],
+    fontLabel: 'Georgia · serif / roman',
+    voiceLine: 'Slow growth is still growth.',
+    source: 'agent-extracted from a site you loved — you approved the draft',
+    cssVars: {
+      '--be-bg': '#f4f0e6',
+      '--be-surface': '#fdfbf4',
+      '--be-ink': '#2d4a34',
+      '--be-muted': '#5a5348',
+      '--be-brand': '#b4552d',
+      '--be-on-brand': '#fdfbf4',
+      '--be-line': '#ddd5c2',
+      '--be-radius': '16px',
+      '--be-font': "Georgia, 'Times New Roman', serif",
+      '--be-hw': '400',
+      '--be-ht': '-0.01em',
+      '--be-tt': 'none',
+    },
+  },
+  {
+    id: 'klaxon',
+    name: 'Klaxon',
+    badge: 'Approved',
+    swatches: ['#0c0d10', '#16181d', '#d8f34e', '#f2f2ef', '#7a7f8a'],
+    fontLabel: 'JetBrains Mono · 700 / caps',
+    voiceLine: 'Louder than your roadmap.',
+    source: 'drafted by your agent from a screenshot — reviewed, then saved',
+    cssVars: {
+      '--be-bg': '#0c0d10',
+      '--be-surface': '#16181d',
+      '--be-ink': '#f2f2ef',
+      '--be-muted': '#7a7f8a',
+      '--be-brand': '#d8f34e',
+      '--be-on-brand': '#0c0d10',
+      '--be-line': '#2a2d34',
+      '--be-radius': '4px',
+      '--be-font': 'var(--av-font-mono)',
+      '--be-hw': '700',
+      '--be-ht': '0.04em',
+      '--be-tt': 'uppercase',
+    },
+  },
+] as const satisfies readonly {
+  id: BrandPresetId
+  name: string
+  badge: string
+  swatches: readonly string[]
+  fontLabel: string
+  voiceLine: string
+  source: string
+  cssVars: Readonly<Record<string, string>>
+}[]
+
 /** #dev — mode-toggle mock rows. `dim` renders at .55 opacity (the "tucked away" cue). */
 export const MODE_ROWS = {
   simple: [

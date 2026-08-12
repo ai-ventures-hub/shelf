@@ -6,7 +6,8 @@ import { ModeToggle } from './ModeToggle'
  */
 export function DevMode() {
   return (
-    <section id="dev" className="section" data-well aria-labelledby="dev-heading">
+    // Canvas since 1.0: #design took the well slot before it (alternation).
+    <section id="dev" className="section" aria-labelledby="dev-heading">
       <div className="section-inner mode-grid">
         <ModeToggle>
           <p className="eyebrow">New in 0.7</p>

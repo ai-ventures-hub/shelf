@@ -1,5 +1,6 @@
 import { AgentChat } from '@/components/landing/AgentChat'
 import { AppShowcase } from '@/components/landing/AppShowcase'
+import { DesignEngine } from '@/components/landing/DesignEngine'
 import { DevMode } from '@/components/landing/DevMode'
 import { FinalCta } from '@/components/landing/FinalCta'
 import { HeroScrollStage } from '@/components/landing/HeroScrollStage'
@@ -21,7 +22,7 @@ const SOFTWARE_JSON_LD = {
   url: 'https://shelfmcp.com',
   downloadUrl: 'https://shelfmcp.com/download',
   description:
-    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, and share them honestly with your AI agents over MCP. No cloud, no account.',
+    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, and share them honestly with your AI agents over MCP — along with design profiles so agents build in your brand. No cloud, no account.',
 }
 
 /** Landing v2 — the scroll-scrubbed hero leads, the story beats follow. */
@@ -39,6 +40,7 @@ export default function HomePage() {
         <AppShowcase />
         <HonestCards />
         <AgentChat />
+        <DesignEngine />
         <DevMode />
         <FinalCta />
       </main>
