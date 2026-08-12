@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ShelfMark } from '@/components/ShelfMark'
 import {
   APP_TABS,
+  BRAND_PRESETS,
   GAP_ROWS,
   IMPORT_FIELDS,
   LIB_CARDS,
@@ -93,6 +94,14 @@ export function AppShowcase() {
               </div>
               <div className="showcase-side-row" data-quiet="true">
                 <span>+ New collection</span>
+              </div>
+              <div className="showcase-side-label">DESIGN</div>
+              <div
+                className="showcase-side-row"
+                data-active={tab === 'design' ? 'true' : 'false'}
+              >
+                <span>Profiles</span>
+                <span className="n">3</span>
               </div>
               <div className="showcase-side-label">SYSTEM</div>
               <div
@@ -204,6 +213,40 @@ export function AppShowcase() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {tab === 'design' && (
+                <div className="showcase-panel" key="design">
+                  <h3>Design profiles</h3>
+                  <p className="showcase-panel-sub">
+                    Your brand — colors, type, voice — served to every agent as
+                    tokens and a paste-ready brief.
+                  </p>
+                  <div className="design-rows">
+                    {BRAND_PRESETS.map((preset) => (
+                      <div className="design-row" key={preset.id}>
+                        <span className="design-row-swatches" aria-hidden>
+                          {preset.swatches.slice(0, 4).map((hex) => (
+                            <span key={hex} style={{ background: hex }} />
+                          ))}
+                        </span>
+                        <span className="design-row-id">
+                          <span className="design-row-name">{preset.name}</span>
+                          <span className="design-row-font">{preset.fontLabel}</span>
+                        </span>
+                        <span
+                          className="pill"
+                          data-tone={preset.id === 'shelf' ? 'accent' : 'muted'}
+                        >
+                          {preset.id === 'shelf' ? 'Default' : 'From agent'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mcp-verbs">
+                    “build it with my branding” — resolved from the default
+                    profile, no design context from you.
+                  </p>
                 </div>
               )}
               {tab === 'register' && (

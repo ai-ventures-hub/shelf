@@ -1850,6 +1850,57 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   color: var(--av-text-secondary);
 }
 
+/* Design profiles tab — compact rows sharing BRAND_PRESETS with #design. */
+.design-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+  max-width: 560px;
+}
+
+.design-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--av-border-default);
+  border-radius: 12px;
+  background: var(--av-bg-well);
+}
+
+.design-row-swatches {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.design-row-swatches span {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid var(--av-border-default);
+}
+
+.design-row-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.design-row-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.design-row-font {
+  font-family: var(--av-font-mono);
+  font-size: 11.5px;
+  color: var(--av-text-tertiary);
+}
+
 /* Register tab */
 .reg-fields {
   display: grid;

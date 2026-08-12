@@ -50,11 +50,12 @@ export const SCAN_ROWS = [
 ] as const satisfies readonly { left: string; right: string; tone: DemoTone }[]
 
 /** #app — showcase tabs, in pill order. Default active tab is 'mcp'. */
-export type AppTabId = 'library' | 'gaps' | 'register' | 'mcp'
+export type AppTabId = 'library' | 'gaps' | 'register' | 'design' | 'mcp'
 export const APP_TABS = [
   { id: 'library', label: 'Library' },
   { id: 'gaps', label: 'Capability gaps' },
   { id: 'register', label: 'Register a tool' },
+  { id: 'design', label: 'Design profiles' },
   { id: 'mcp', label: 'MCP Connections' },
 ] as const satisfies readonly { id: AppTabId; label: string }[]
 
