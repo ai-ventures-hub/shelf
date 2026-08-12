@@ -447,8 +447,10 @@ function registerIpc(): void {
   // Design Engine (v1.0): list + editor mutations. Agents stay read-only over
   // MCP; the GUI is the only write surface.
   ipcMain.handle('designProfiles:list', () => designProfiles.list())
+  // Any GUI save transfers ownership to the user: agents may then no longer
+  // overwrite the profile via shelf_upsert_design_profile.
   ipcMain.handle('designProfiles:save', (_e, input: SaveDesignProfileInput) =>
-    designProfiles.save(input),
+    designProfiles.save({ ...input, origin: 'user' }),
   )
   ipcMain.handle('designProfiles:delete', (_e, id: string) => {
     designProfiles.delete(id)

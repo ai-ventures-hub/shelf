@@ -15,7 +15,10 @@ const STOP_WORDS = new Set([
   'use', 'want', 'with', 'would',
 ])
 
-const SECRET_ASSIGNMENT = /\b(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)\s*=\s*(?!\*{3}|\$\{?[A-Z0-9_]+\}?)([^\s]+)/i
+// Prefixed keys (AWS_SECRET, MY_API_KEY) must match too — keep this shape in
+// sync with maskSecrets in shared/types.ts, or refusal ends up narrower than
+// the masking it is meant to precede.
+const SECRET_ASSIGNMENT = /\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*\s*=\s*(?!\*{3}|\$\{?[A-Z0-9_]+\}?)([^\s]+)/i
 const BEARER_SECRET = /\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/i
 
 export function normalizeCapabilities(values: string[] | undefined): string[] {

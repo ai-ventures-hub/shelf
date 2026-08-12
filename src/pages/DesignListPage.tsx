@@ -40,6 +40,11 @@ function DesignProfileCard({
       <div className="design-card-head">
         <strong className="design-card-name">{profile.name}</strong>
         {profile.isDefault ? <span className="tag-chip">Default</span> : null}
+        {profile.origin === 'agent' ? (
+          <span className="tag-chip" title={profile.sourceNote || 'Created by an agent over MCP'}>
+            From agent
+          </span>
+        ) : null}
       </div>
       <div className="design-card-palette">
         {swatches.map((leaf) => (

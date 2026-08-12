@@ -358,6 +358,120 @@ async function main() {
     }
     console.log('OK: design profile resource')
 
+    // --- Agent write path: shelf_upsert_design_profile constraints ---
+    const agentUpsert = await callTool(client, 'shelf_upsert_design_profile', {
+      name: 'Extracted Brand',
+      tokens: { color: { brand: { $value: '#a1b2c3', $type: 'color' } } },
+      direction: 'Bold, geometric, high-contrast.',
+      sourceNote: 'https://example.com/brand-page',
+    })
+    if (agentUpsert.action !== 'created' || agentUpsert.profile.origin !== 'agent') {
+      throw new Error('Agent upsert must create an agent-owned profile')
+    }
+    if (agentUpsert.profile.isDefault) {
+      throw new Error('Agent-created profile must not become default when one exists')
+    }
+    if (
+      !agentUpsert.brief?.includes('#a1b2c3') ||
+      !agentUpsert.brief.includes('Source: https://example.com/brand-page')
+    ) {
+      throw new Error('Upsert response brief missing tokens or sourceNote')
+    }
+    const agentReupsert = await callTool(client, 'shelf_upsert_design_profile', {
+      name: 'Extracted Brand',
+      direction: 'Bold, geometric, high-contrast. Revised.',
+    })
+    if (agentReupsert.action !== 'updated' || agentReupsert.profile.id !== agentUpsert.profile.id) {
+      throw new Error('Same-name re-extraction must update the agent draft in place')
+    }
+
+    // User-owned profiles are untouchable by name and by id.
+    let userOwnedRejected = false
+    try {
+      await callTool(client, 'shelf_upsert_design_profile', { name: 'Smoke Brand' })
+    } catch (err) {
+      userOwnedRejected = /user-owned/i.test(String(err.message || err))
+    }
+    if (!userOwnedRejected) {
+      throw new Error('Upsert must refuse a user-owned profile name with guidance')
+    }
+    let userIdRejected = false
+    try {
+      await callTool(client, 'shelf_upsert_design_profile', {
+        id: seededProfile.id,
+        name: 'Hijack',
+      })
+    } catch {
+      userIdRejected = true
+    }
+    if (!userIdRejected) {
+      throw new Error('Upsert must refuse an explicit user-owned profile id')
+    }
+
+    // Credential-looking content is refused in EVERY field, not masked.
+    const secretPayloads = [
+      { name: 'Leaky Brand', direction: 'Use API_KEY=abc123 everywhere.' },
+      { name: 'Leaky Brand', sourceNote: 'from https://x.test?ACCESS_KEY=abc123' },
+      {
+        name: 'Leaky Brand',
+        tokens: { color: { sneaky: { $value: 'AWS_SECRET=abc123', $type: 'color' } } },
+      },
+    ]
+    for (const payload of secretPayloads) {
+      let secretRejected = false
+      try {
+        await callTool(client, 'shelf_upsert_design_profile', payload)
+      } catch {
+        secretRejected = true
+      }
+      if (!secretRejected) {
+        throw new Error(
+          `Upsert must refuse credential-like content in ${Object.keys(payload).join('/')}`,
+        )
+      }
+    }
+
+    // Rename-by-id cannot masquerade under an existing profile's name.
+    let renameRejected = false
+    try {
+      await callTool(client, 'shelf_upsert_design_profile', {
+        id: agentUpsert.profile.id,
+        name: 'Smoke Brand',
+      })
+    } catch {
+      renameRejected = true
+    }
+    if (!renameRejected) {
+      throw new Error('Rename-by-id onto an existing name must be refused')
+    }
+
+    // GUI edit transfers ownership and locks the agent out.
+    profileStore.save({
+      id: agentUpsert.profile.id,
+      name: 'Extracted Brand',
+      origin: 'user',
+    })
+    let lockedOut = false
+    try {
+      await callTool(client, 'shelf_upsert_design_profile', {
+        id: agentUpsert.profile.id,
+        name: 'Extracted Brand',
+      })
+    } catch {
+      lockedOut = true
+    }
+    if (!lockedOut) {
+      throw new Error('A user-edited profile must be closed to agent updates')
+    }
+
+    // The default never moved through any of the above.
+    const afterUpserts = await callTool(client, 'shelf_list_design_profiles')
+    const stillDefault = afterUpserts.profiles.find((p) => p.isDefault)
+    if (afterUpserts.count !== 2 || stillDefault?.id !== seededProfile.id) {
+      throw new Error('Agent writes must never move the default profile')
+    }
+    console.log('OK: agent upsert (draft-only, ownership, secret refusal)')
+
     // Gap briefs gain a Brand section once a profile resolves — existing
     // content (capabilities, register-back, id) must be untouched.
     const brandedBrief = await callTool(client, 'shelf_get_gap_brief', { id: smokeGap.id })

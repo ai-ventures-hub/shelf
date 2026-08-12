@@ -157,6 +157,14 @@ export interface DesignProfile {
   /** Markdown prose direction — personality, voice, do/don't rules. */
   direction: string
   assets: DesignAsset[]
+  /**
+   * 'agent' = created over MCP and still agent-owned; agents may update it.
+   * Absent = user-owned (GUI/seed, or a user has since edited it) — agents
+   * must not touch it. Any GUI save transfers ownership to the user.
+   */
+  origin?: 'agent'
+  /** Where an extracted brand came from (URL, screenshot, style guide). */
+  sourceNote?: string
   createdAt: string
   updatedAt: string
 }

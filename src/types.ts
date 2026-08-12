@@ -106,6 +106,9 @@ export interface SaveDesignProfileInput {
   modes?: { light?: DesignTokenGroup; dark?: DesignTokenGroup }
   direction?: string
   assets?: DesignAsset[]
+  /** Ownership marker — the main process stamps 'user' on every GUI save. */
+  origin?: 'agent' | 'user'
+  sourceNote?: string
 }
 
 /** Design/brand profile from design-profiles.json (mirror of shared/types.ts). */
@@ -117,6 +120,9 @@ export interface DesignProfile {
   modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
   direction: string
   assets: DesignAsset[]
+  /** 'agent' = MCP-created, still agent-owned; absent = user-owned. */
+  origin?: 'agent'
+  sourceNote?: string
   createdAt: string
   updatedAt: string
 }

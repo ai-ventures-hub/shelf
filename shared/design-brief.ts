@@ -101,8 +101,11 @@ export function buildDesignBriefSections(
     body: [
       `This is the user's brand/design source of truth${profile.isDefault ? ' (default profile)' : ''}.`,
       'Apply these tokens and this direction to what you build unless the project itself overrides them.',
+      profile.sourceNote ? `Source: ${maskSecrets(profile.sourceNote)}` : null,
       `Last updated: ${profile.updatedAt.slice(0, 10)}`,
-    ].join('\n'),
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
   })
 
   sections.push({

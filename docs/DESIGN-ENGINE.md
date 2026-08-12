@@ -98,6 +98,30 @@ library v3→v4 migration required.
   the user's style."* Every MCP client reads tool descriptions; no new
   protocol.
 
+### MCP surface (agent write path — added pre-1.0, 2026-08-12)
+
+`shelf_upsert_design_profile { id?, name, tokens?, modes?, direction?,
+sourceNote? }` — "give my agent a URL/screenshot of branding I like".
+The **agent** does the extraction with its own vision/reading (Shelf
+still performs no inference — that non-goal is about Shelf, not agents);
+Shelf stores the structured result as a **draft**. Constraints, mirroring
+the capability-gap write policy (record yes, resolve never):
+
+- Agent profiles carry `origin: 'agent'`; agents may create profiles and
+  update only agent-owned ones. **Any GUI save — including "Make default"
+  (promotion is adoption) — transfers ownership to the user** and locks
+  agents out of that profile.
+- Agents can never set or move `isDefault` — the user promotes drafts in
+  the GUI ("Make default"). Exception inherent to the store: the very
+  first profile in an empty library auto-defaults so zero-arg resolution
+  works.
+- No asset writes over MCP (brand-assets stay GUI/user-managed);
+  `sourceNote` records where the brand came from and renders in the brief.
+- Credential-looking `direction`/`sourceNote` content is refused outright
+  (`containsLikelySecret`), same policy as agent-access metadata.
+- Same-name re-extraction updates the agent's earlier draft
+  (idempotent); a user-owned name collision errors with guidance.
+
 ### Composition with per-project DESIGN.md
 
 Tool-scoped requests merge global profile + that project's `DESIGN.md`;

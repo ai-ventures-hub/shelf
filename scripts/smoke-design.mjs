@@ -200,6 +200,27 @@ try {
     'deleting a profile never touches library.json',
   )
 
+  // --- Ownership (origin) semantics behind the agent write path ---
+  const agentOwned = store.save({
+    name: 'Agent Draft',
+    origin: 'agent',
+    sourceNote: 'https://example.com TOKEN=supersecret',
+  })
+  assert.equal(agentOwned.origin, 'agent', 'agent origin stored')
+  const preserved = store.save({ id: agentOwned.id, name: 'Agent Draft', direction: 'x' })
+  assert.equal(preserved.origin, 'agent', 'omitted origin preserves ownership')
+  const briefWithSource = buildDesignBrief(preserved)
+  assert.ok(briefWithSource.includes('Source: https://example.com'), 'brief shows sourceNote')
+  assert.ok(!briefWithSource.includes('supersecret'), 'sourceNote is masked in the brief')
+  const transferred = store.save({ id: agentOwned.id, name: 'Agent Draft', origin: 'user' })
+  assert.equal(transferred.origin, undefined, "GUI save ('user') clears agent ownership")
+  // Promotion is adoption: setDefault must also strip agent ownership.
+  const reAgented = store.save({ id: agentOwned.id, name: 'Agent Draft', origin: 'agent' })
+  assert.equal(reAgented.origin, 'agent')
+  const adopted = store.setDefault(agentOwned.id)
+  assert.equal(adopted.origin, undefined, 'Make default transfers ownership to the user')
+  store.delete(agentOwned.id)
+
   // --- Delete-the-default: store contract behind the GUI successor flow ---
   const gamma = store.save({ name: 'Gamma' })
   store.setDefault(gamma.id)

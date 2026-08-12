@@ -46,6 +46,13 @@ export interface SaveDesignProfileInput {
   modes?: { light?: DesignTokenGroup; dark?: DesignTokenGroup }
   direction?: string
   assets?: DesignAsset[]
+  /**
+   * 'agent' marks/keeps the profile agent-owned; 'user' transfers ownership
+   * to the user (any GUI save passes this); omitted preserves the current
+   * owner. Ownership policy (who may write what) lives in the callers.
+   */
+  origin?: 'agent' | 'user'
+  sourceNote?: string
 }
 
 export class DesignProfileStore {
@@ -93,10 +100,15 @@ export class DesignProfileStore {
     return this.read().profiles.find((profile) => profile.id === id)
   }
 
-  /** Case-insensitive name lookup — lets the seed script upsert idempotently. */
+  /**
+   * Case-insensitive, NFC-normalized name lookup — idempotent seeding, and
+   * the ownership guard must not be dodged by a Unicode doppelganger.
+   */
   findByName(name: string): DesignProfile | undefined {
-    const needle = name.trim().toLowerCase()
-    return this.read().profiles.find((profile) => profile.name.toLowerCase() === needle)
+    const needle = name.normalize('NFC').trim().toLowerCase()
+    return this.read().profiles.find(
+      (profile) => profile.name.normalize('NFC').toLowerCase() === needle,
+    )
   }
 
   getDefault(): DesignProfile | undefined {
@@ -121,6 +133,17 @@ export class DesignProfileStore {
       const makeDefault =
         input.isDefault ?? existing?.isDefault ?? data.profiles.length === 0
 
+      const origin =
+        input.origin === 'agent'
+          ? ('agent' as const)
+          : input.origin === 'user'
+            ? undefined
+            : existing?.origin
+      const sourceNote =
+        input.sourceNote !== undefined
+          ? input.sourceNote.trim() || undefined
+          : existing?.sourceNote
+
       const profile: DesignProfile = {
         id: existing?.id || randomUUID(),
         name,
@@ -132,6 +155,8 @@ export class DesignProfileStore {
         },
         direction: input.direction ?? existing?.direction ?? '',
         assets: input.assets ?? existing?.assets ?? [],
+        ...(origin ? { origin } : {}),
+        ...(sourceNote ? { sourceNote } : {}),
         createdAt: existing?.createdAt || now,
         updatedAt: now,
       }
@@ -154,6 +179,10 @@ export class DesignProfileStore {
       const profile = data.profiles.find((p) => p.id === id)
       if (!profile) throw new Error(`Design profile not found: ${id}`)
       for (const other of data.profiles) other.isDefault = other.id === id
+      // Promotion is the strongest adoption signal there is: the user made
+      // this THE brand. Transfer ownership so agents can no longer rewrite
+      // what every brief now serves as the default.
+      delete profile.origin
       profile.updatedAt = new Date().toISOString()
       this.write(data)
       return profile
@@ -284,6 +313,10 @@ function normalizeProfile(input: Partial<DesignProfile>): DesignProfile {
     assets: Array.isArray(input.assets)
       ? input.assets.filter((asset) => Boolean(asset) && typeof asset.path === 'string')
       : [],
+    ...(input.origin === 'agent' ? { origin: 'agent' as const } : {}),
+    ...(typeof input.sourceNote === 'string' && input.sourceNote.trim()
+      ? { sourceNote: input.sourceNote.trim() }
+      : {}),
     createdAt: str(input.createdAt, now),
     updatedAt: str(input.updatedAt, now),
   }
