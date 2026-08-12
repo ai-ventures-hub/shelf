@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.0.0 — 2026-08-12
+
+The Design Engine: Shelf becomes the local source of truth for how your
+tools look and feel. Say "build it with my branding" in any connected
+agent and it just works — no copy-paste, no design context from you.
+
+- **Design profiles**: brand colors (with light/dark mode overrides),
+  typography, spacing/radii, a markdown direction brief (voice,
+  personality, do/don't), and logo assets — stored locally as W3C
+  Design Tokens (DTCG), never in the cloud.
+- **"Build this using my branding" over MCP**: agents discover
+  `shelf_get_design_profile` from the tool description alone. A
+  zero-argument call resolves your default profile and returns both the
+  raw tokens (for wiring CSS/Tailwind) and a paste-ready markdown brand
+  brief. Resolution precedence: explicit profile → tool's collection →
+  collection → default. A project's own `DESIGN.md` still wins on
+  conflict, and capability-gap build briefs now carry a Brand section.
+- **A design editor that shows, not tells**: the new Design section
+  edits colors with swatches, mode overrides with inherited/override
+  affordances, fonts, dimensions, and direction prose — next to a live
+  preview that repaints your brand on every keystroke, before anything
+  saves. Everything auto-saves; assets import by picker or drag-and-drop;
+  raw DTCG JSON paste lives behind a Developer-mode disclosure.
+- **Show an agent a brand you love**: give your agent a URL or
+  screenshot and it can save the extracted brand back via
+  `shelf_upsert_design_profile` — as a draft. Agents can never set your
+  default profile and can never modify a profile you own or have edited;
+  making a draft the default adopts it as yours and locks agents out.
+  Credential-looking content is refused in every field.
+- **Collections carry a brand**: bind a profile to a collection and
+  agents building for those tools resolve it automatically.
+- **Stress-tested before shipping**: a new release gauntlet hammers the
+  store with concurrent processes, 300-token profiles, hostile
+  hand-edited files, 400-op churn, and 46 simultaneous MCP resolutions —
+  and the robustness gaps it found are fixed in this release.
+
 ## 0.9.0 — 2026-08-10
 
 The gap → build loop closes: what your agent couldn't do becomes a work

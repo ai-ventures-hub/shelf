@@ -39,6 +39,7 @@ Free, local-first, no account required:
 - System, light, and dark appearance
 - Detect a project-local `DESIGN.md` and expose it to the current agent (`shelf_get_design_md`, `shelf://tools/{id}/design-md`)
 - Capability Intelligence (0.4.0): task capabilities, declared agent access, readiness, `shelf_find_capability`, Capability Gaps inbox
+- Design Engine (1.0.0): design profiles (DTCG tokens + direction + assets) with live-preview editor, collection binding, brand briefs over MCP, and agent-extracted draft profiles (`shelf_upsert_design_profile`, user-owned wins)
 
 ## Soft-launch readiness (Community)
 
@@ -89,12 +90,14 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
 
 ## Roadmap
 
-- **v0.9 — Gap → Build loop**: agent briefs from capability gaps, resolve
-  suggestions (never auto-resolve), agent `planned` status. See
-  [`PLAN-0.9.md`](PLAN-0.9.md).
-- **v1.0 — Design Engine**: Shelf as the local source of truth for brand/
-  design context; "build this using my branding" over MCP. See
-  [`DESIGN-ENGINE.md`](DESIGN-ENGINE.md).
+- **v0.9 — Gap → Build loop** (shipped 2026-08-10): agent briefs from
+  capability gaps, resolve suggestions (never auto-resolve), agent
+  `planned` status. See [`PLAN-0.9.md`](PLAN-0.9.md).
+- **v1.0 — Design Engine** (shipped 2026-08-12): Shelf as the local source
+  of truth for brand/design context; "build this using my branding" over
+  MCP, GUI editor with live preview, and agent-extracted draft profiles.
+  See [`DESIGN-ENGINE.md`](DESIGN-ENGINE.md). Phase 3 (binding UI polish +
+  deterministic token extraction) follows post-1.0.
 
 ## Later Community enhancements
 
