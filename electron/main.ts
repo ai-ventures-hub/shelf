@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
+import { extractProjectTokens } from '../shared/design-extract'
 import { buildDesignBrief } from '../shared/design-brief'
 import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
@@ -492,6 +493,11 @@ function registerIpc(): void {
     const profile = designProfiles.get(id)
     return profile ? buildDesignBrief(profile) : null
   })
+  // Phase 3 assist: deterministic parse of the project's CSS custom
+  // properties / Tailwind literals. Read-only — applying is a GUI save.
+  ipcMain.handle('designProfiles:extractTokens', (_e, projectPath: string) =>
+    extractProjectTokens(projectPath),
+  )
   // Data-url previews for the editor. Restricted to the brand-assets root so
   // the renderer cannot read arbitrary files through this channel.
   ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {

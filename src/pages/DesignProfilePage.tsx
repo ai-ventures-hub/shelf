@@ -14,6 +14,7 @@ import {
   type ColorEditTarget,
 } from '../components/design/ColorTokensSection'
 import { DesignPreview } from '../components/design/DesignPreview'
+import { ImportTokensDialog } from '../components/design/ImportTokensDialog'
 import { NamePromptDialog } from '../components/NamePromptDialog'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { usePrefs } from '../hooks/usePrefs'
@@ -24,9 +25,10 @@ import {
   flattenGroup,
   humanizeTokenName,
   leavesOf,
+  mergeTokenGroups,
   setToken,
 } from '../lib/designTokens'
-import type { DesignAssetKind, DesignTokenGroup } from '../types'
+import type { DesignAssetKind, DesignTokenGroup, ExtractedTokens } from '../types'
 
 interface Draft {
   name: string
@@ -68,6 +70,7 @@ export function DesignProfilePage() {
   // user just saw (a light starter palette under a "Dark" toggle reads broken).
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>(resolvedTheme)
   const [addColorOpen, setAddColorOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [briefCopied, setBriefCopied] = useState(false)
   const [assetBusy, setAssetBusy] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -234,6 +237,20 @@ export function DesignProfilePage() {
     setAddColorOpen(false)
   }
 
+  /** Merge extracted tokens into the draft — extracted values win on the
+      same path, everything else the user set survives. */
+  function applyExtracted(extracted: ExtractedTokens) {
+    if (!draft) return
+    updateDraft({
+      tokens: mergeTokenGroups(draft.tokens, extracted.tokens),
+      modes: {
+        light: mergeTokenGroups(draft.modes.light, extracted.modes.light),
+        dark: mergeTokenGroups(draft.modes.dark, extracted.modes.dark),
+      },
+    })
+    setImportOpen(false)
+  }
+
   async function copyBrief() {
     if (!id) return
     try {
@@ -381,6 +398,14 @@ export function DesignProfilePage() {
             Make default
           </button>
         )}
+        <button
+          type="button"
+          className="btn btn-quiet btn-sm"
+          title="Read design tokens this project already declares (CSS variables, Tailwind config)"
+          onClick={() => setImportOpen(true)}
+        >
+          Import from project
+        </button>
         <button type="button" className="btn btn-quiet btn-sm" onClick={() => void copyBrief()}>
           {briefCopied ? 'Copied ✓' : 'Copy brand brief'}
         </button>
@@ -617,6 +642,12 @@ export function DesignProfilePage() {
           onModeChange={setPreviewMode}
         />
       </div>
+
+      <ImportTokensDialog
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onApply={applyExtracted}
+      />
 
       <NamePromptDialog
         open={addColorOpen}

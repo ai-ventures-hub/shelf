@@ -111,6 +111,15 @@ export interface SaveDesignProfileInput {
   sourceNote?: string
 }
 
+/** Deterministic project token extraction (mirror of shared/design-extract.ts). */
+export interface ExtractedTokens {
+  tokens: DesignTokenGroup
+  modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
+  counts: { color: number; typography: number; dimension: number; light: number; dark: number }
+  sources: Array<{ file: string; declarations: number }>
+  skipped: string[]
+}
+
 /** Design/brand profile from design-profiles.json (mirror of shared/types.ts). */
 export interface DesignProfile {
   id: string
@@ -516,6 +525,7 @@ export interface ShelfApi {
   removeDesignAsset: (profileId: string, assetPath: string) => Promise<void>
   designBrief: (id: string) => Promise<string | null>
   designAssetDataUrl: (assetPath: string) => Promise<string | null>
+  extractDesignTokens: (projectPath: string) => Promise<ExtractedTokens>
   startCollection: (
     id: string,
     options?: StartOptions,

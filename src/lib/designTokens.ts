@@ -81,6 +81,28 @@ export function deleteToken(group: DesignTokenGroup, path: string): DesignTokenG
   return next
 }
 
+/**
+ * Deep merge for token imports: incoming leaves overwrite same-path leaves,
+ * everything else in the base survives. A leaf/group collision takes the
+ * incoming side (the fresher extraction).
+ */
+export function mergeTokenGroups(
+  base: DesignTokenGroup,
+  incoming: DesignTokenGroup,
+): DesignTokenGroup {
+  const merged: DesignTokenGroup = { ...base }
+  for (const [key, node] of Object.entries(incoming)) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) continue
+    const existing = merged[key]
+    if (!isDesignToken(node) && existing && !isDesignToken(existing)) {
+      merged[key] = mergeTokenGroups(existing, node)
+    } else {
+      merged[key] = node
+    }
+  }
+  return merged
+}
+
 /** 'font-family.app' → 'Font family app'; 'brand-strong' → 'Brand strong'. */
 export function humanizeTokenName(name: string): string {
   const flat = name.replace(/[.\-_]/g, ' ').trim()

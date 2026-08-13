@@ -21,6 +21,7 @@ import type {
   DesignAssetKind,
   DesignMdResult,
   DesignProfile,
+  ExtractedTokens,
   GapResolveSuggestion,
   SaveDesignProfileInput,
   LogLine,
@@ -101,6 +102,9 @@ const api = {
   /** Preview data-url for a brand asset; null for non-image assets. */
   designAssetDataUrl: (assetPath: string): Promise<string | null> =>
     ipcRenderer.invoke('designProfiles:assetDataUrl', assetPath),
+  /** Deterministic token extraction from a project folder (Phase 3 assist). */
+  extractDesignTokens: (projectPath: string): Promise<ExtractedTokens> =>
+    ipcRenderer.invoke('designProfiles:extractTokens', projectPath),
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (
