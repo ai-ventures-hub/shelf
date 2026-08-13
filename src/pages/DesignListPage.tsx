@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { NamePromptDialog } from '../components/NamePromptDialog'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
+import { useLibrary } from '../hooks/useLibrary'
 import { STARTER_TOKENS, colorLeaves, leavesOf } from '../lib/designTokens'
 import type { DesignProfile } from '../types'
 
@@ -24,9 +25,12 @@ function orderSwatches(leaves: ReturnType<typeof colorLeaves>) {
 
 function DesignProfileCard({
   profile,
+  boundCollections,
   onOpen,
 }: {
   profile: DesignProfile
+  /** Names of collections bound to this profile — where the brand applies. */
+  boundCollections: string[]
   onOpen: () => void
 }) {
   const swatches = orderSwatches(colorLeaves(profile.tokens)).slice(0, 6)
@@ -64,6 +68,14 @@ function DesignProfileCard({
         {colorCount} color{colorCount === 1 ? '' : 's'} · {profile.assets.length} asset
         {profile.assets.length === 1 ? '' : 's'}
       </p>
+      {boundCollections.length > 0 ? (
+        <p
+          className="design-card-meta"
+          title="Agents building for tools in these collections resolve this profile"
+        >
+          Used by {boundCollections.join(' · ')}
+        </p>
+      ) : null}
     </button>
   )
 }
@@ -71,6 +83,7 @@ function DesignProfileCard({
 export function DesignListPage() {
   const navigate = useNavigate()
   const { profiles, loading, error, saveProfile } = useDesignProfiles()
+  const { collections } = useLibrary()
   const [promptOpen, setPromptOpen] = useState(false)
 
   async function createProfile(name: string) {
@@ -134,6 +147,9 @@ export function DesignListPage() {
             <DesignProfileCard
               key={profile.id}
               profile={profile}
+              boundCollections={collections
+                .filter((collection) => collection.designProfileId === profile.id)
+                .map((collection) => collection.name)}
               onOpen={() => navigate(`/design/${profile.id}`)}
             />
           ))}
