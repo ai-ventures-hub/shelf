@@ -408,13 +408,27 @@ async function main() {
       throw new Error('Upsert must refuse an explicit user-owned profile id')
     }
 
-    // Credential-looking content is refused in EVERY field, not masked.
+    // Credential-looking content is refused in EVERY field, not masked —
+    // including bare vendor tokens with no KEY= assignment.
     const secretPayloads = [
       { name: 'Leaky Brand', direction: 'Use API_KEY=abc123 everywhere.' },
       { name: 'Leaky Brand', sourceNote: 'from https://x.test?ACCESS_KEY=abc123' },
       {
         name: 'Leaky Brand',
         tokens: { color: { sneaky: { $value: 'AWS_SECRET=abc123', $type: 'color' } } },
+      },
+      { name: 'Leaky Brand', direction: `Deploy key ghp_${'a'.repeat(36)} lives here.` },
+      { name: 'Leaky Brand', sourceNote: 'sk-abcdefghijklmnop1234' },
+      {
+        name: 'Leaky Brand',
+        tokens: {
+          color: {
+            sneaky: {
+              $value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghij_klm',
+              $type: 'color',
+            },
+          },
+        },
       },
     ]
     for (const payload of secretPayloads) {
@@ -427,6 +441,30 @@ async function main() {
       if (!secretRejected) {
         throw new Error(
           `Upsert must refuse credential-like content in ${Object.keys(payload).join('/')}`,
+        )
+      }
+    }
+
+    // Size caps: agent drafts are brand summaries, not document storage.
+    const oversizePayloads = [
+      { name: 'Cap Brand', direction: 'x'.repeat(20_001) },
+      { name: 'Cap Brand', sourceNote: 'y'.repeat(1_001) },
+      {
+        name: 'Cap Brand',
+        tokens: { blob: { big: { $value: 'z'.repeat(140 * 1024), $type: 'other' } } },
+      },
+      { name: 'N'.repeat(121) },
+    ]
+    for (const payload of oversizePayloads) {
+      let oversizeRejected = false
+      try {
+        await callTool(client, 'shelf_upsert_design_profile', payload)
+      } catch (err) {
+        oversizeRejected = /exceeds|max/i.test(String(err.message || err))
+      }
+      if (!oversizeRejected) {
+        throw new Error(
+          `Upsert must refuse oversized ${Object.keys(payload).join('/')} with a size message`,
         )
       }
     }

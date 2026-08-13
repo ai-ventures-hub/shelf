@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import {
+  BARE_SECRET_SOURCE,
   maskSecrets,
   type AgentAccess,
   type AgentAccessKind,
@@ -20,6 +21,7 @@ const STOP_WORDS = new Set([
 // the masking it is meant to precede.
 const SECRET_ASSIGNMENT = /\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*\s*=\s*(?!\*{3}|\$\{?[A-Z0-9_]+\}?)([^\s]+)/i
 const BEARER_SECRET = /\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/i
+const BARE_SECRET = new RegExp(`(?:^|\\b)(?:${BARE_SECRET_SOURCE})`)
 
 export function normalizeCapabilities(values: string[] | undefined): string[] {
   const seen = new Set<string>()
@@ -194,7 +196,9 @@ export function findCapabilityMatches(
 }
 
 export function containsLikelySecret(value: string): boolean {
-  if (SECRET_ASSIGNMENT.test(value) || BEARER_SECRET.test(value)) return true
+  if (SECRET_ASSIGNMENT.test(value) || BEARER_SECRET.test(value) || BARE_SECRET.test(value)) {
+    return true
+  }
   try {
     const parsed = new URL(value)
     if (parsed.username || parsed.password) return true

@@ -452,6 +452,25 @@ export function launchOriginLabel(
   return raw
 }
 
+/**
+ * Bare credentials carrying a recognizable vendor prefix — a pasted token
+ * needs no KEY= assignment to be a leak. Case-sensitive on purpose: the
+ * prefixes are exact vendor formats, and an `i` flag would let ordinary
+ * words swallow the entropy tails. containsLikelySecret (refusal) must stay
+ * at least as broad as this masking.
+ */
+export const BARE_SECRET_SOURCE = [
+  'sk-[A-Za-z0-9_-]{16,}', // OpenAI / Anthropic style
+  'sk_(?:live|test)_[A-Za-z0-9]{16,}', // Stripe
+  'gh[pousr]_[A-Za-z0-9]{36,}', // GitHub tokens
+  'github_pat_[A-Za-z0-9_]{22,}',
+  'xox[baprs]-[A-Za-z0-9-]{10,}', // Slack
+  'npm_[A-Za-z0-9]{36,}',
+  '(?:AKIA|ASIA)[0-9A-Z]{16}', // AWS access key ids
+  'eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{6,}\\.[A-Za-z0-9_-]{10,}', // JWT
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----',
+].join('|')
+
 /** Redact likely secrets before returning tool/log payloads to agents or UI. */
 export function maskSecrets(text: string): string {
   return text
@@ -460,6 +479,7 @@ export function maskSecrets(text: string): string {
       '$1=***',
     )
     .replace(/\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi, '$1 ***')
+    .replace(new RegExp(`(?:^|\\b)(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
 }
 
 /** Strip secret env values from a tool record for safe MCP/UI serialization. */
