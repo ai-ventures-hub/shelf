@@ -105,8 +105,12 @@ export const CHAT_BUBBLES = [
   parts: readonly { text: string; tone?: 'success' }[]
 }[]
 
-/** #design — the three proof points under the lead. */
+/** #design — the proof points under the lead. */
 export const DESIGN_POINTS = [
+  {
+    title: 'Extracted from your code.',
+    body: 'Point Shelf at a project and it reads the tokens already there — CSS variables, Tailwind config. Deterministic: nothing guessed, skips reported.',
+  },
   {
     title: 'DTCG tokens.',
     body: 'Standard design-token JSON — colors, type, radius — any agent can consume.',
