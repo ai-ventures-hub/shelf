@@ -2,10 +2,13 @@
  * Phase 3 assist: pull the design tokens a project literally declares (CSS
  * custom properties, Tailwind config literals) into the profile draft.
  * Extraction is deterministic and read-only — nothing is guessed, and
- * nothing changes until Apply merges into the auto-saving draft.
+ * nothing changes until Apply merges into the auto-saving draft. Additive
+ * by design: resyncing a profile must not destroy hand-set tokens (fresh
+ * project-seeded profiles come from the New profile wizard instead).
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { useLibrary } from '../../hooks/useLibrary'
+import { ExtractionSummary, extractionTotal } from './ExtractionSummary'
+import { ProjectSourceList } from './ProjectSourceList'
 import type { ExtractedTokens } from '../../types'
 
 interface ImportTokensDialogProps {
@@ -15,9 +18,6 @@ interface ImportTokensDialogProps {
 }
 
 export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDialogProps) {
-  const { tools } = useLibrary()
-  const projects = tools.filter((tool) => tool.projectPath)
-
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sourcePath, setSourcePath] = useState<string | null>(null)
@@ -53,11 +53,6 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
     }
   }
 
-  async function browse() {
-    const folder = await window.shelf.pickFolder()
-    if (folder) await extractFrom(folder)
-  }
-
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
@@ -65,11 +60,7 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
     }
   }
 
-  const baseCount = result
-    ? result.counts.color + result.counts.typography + result.counts.dimension
-    : 0
-  const overrideCount = result ? result.counts.light + result.counts.dark : 0
-  const total = baseCount + overrideCount
+  const total = result ? extractionTotal(result) : 0
 
   return (
     <div
@@ -94,40 +85,11 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
         <p className="field-hint" style={{ margin: '0 0 .85rem' }}>
           Reads the tokens a project already declares — CSS custom properties and
           Tailwind config values. Nothing is guessed; component-scoped and computed
-          values are left out.
+          values are left out. Imported values update matching tokens; everything
+          else you have set stays.
         </p>
 
-        {!result && !busy ? (
-          <>
-            {projects.length > 0 ? (
-              <div className="import-tokens-sources" role="list">
-                {projects.map((tool) => (
-                  <button
-                    key={tool.id}
-                    type="button"
-                    role="listitem"
-                    className="quick-open-row"
-                    onClick={() => void extractFrom(tool.projectPath!)}
-                  >
-                    <span className="quick-open-row-main">
-                      <span className="quick-open-row-title">{tool.name}</span>
-                      <span className="quick-open-row-sub">{tool.projectPath}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="field-hint" style={{ margin: 0 }}>
-                No registered tools have a project folder — choose one below.
-              </p>
-            )}
-            <div className="action-row" style={{ marginTop: '.75rem' }}>
-              <button type="button" className="btn btn-quiet btn-sm" onClick={() => void browse()}>
-                Choose folder…
-              </button>
-            </div>
-          </>
-        ) : null}
+        {!result && !busy ? <ProjectSourceList onPick={(path) => void extractFrom(path)} /> : null}
 
         {busy ? (
           <p className="field-hint" style={{ margin: 0 }}>
@@ -143,46 +105,7 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
 
         {result ? (
           <div className="stack" style={{ gap: '.6rem' }}>
-            <p style={{ margin: 0 }}>
-              {total === 0 ? (
-                <>No literal design tokens found in this project.</>
-              ) : (
-                <>
-                  Found <strong>{result.counts.color}</strong> colors,{' '}
-                  <strong>{result.counts.typography}</strong> typography and{' '}
-                  <strong>{result.counts.dimension}</strong> dimension tokens
-                  {overrideCount > 0 ? (
-                    <>
-                      {' '}
-                      plus <strong>{overrideCount}</strong> light/dark overrides
-                    </>
-                  ) : null}
-                  .
-                </>
-              )}
-            </p>
-            {result.sources.length > 0 ? (
-              <ul className="import-tokens-files">
-                {result.sources.map((source) => (
-                  <li key={source.file}>
-                    <code>{source.file}</code> — {source.declarations} declaration
-                    {source.declarations === 1 ? '' : 's'}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {result.skipped.length > 0 ? (
-              <details>
-                <summary className="field-hint" style={{ cursor: 'pointer' }}>
-                  Not extracted ({result.skipped.length})
-                </summary>
-                <ul className="import-tokens-files">
-                  {result.skipped.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </details>
-            ) : null}
+            <ExtractionSummary result={result} />
             <div className="action-row" style={{ margin: 0 }}>
               <button
                 type="button"

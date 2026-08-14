@@ -5,10 +5,13 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { NamePromptDialog } from '../components/NamePromptDialog'
+import {
+  NewProfileWizard,
+  type NewProfileInput,
+} from '../components/design/NewProfileWizard'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
-import { STARTER_TOKENS, colorLeaves, leavesOf } from '../lib/designTokens'
+import { colorLeaves, leavesOf } from '../lib/designTokens'
 import type { DesignProfile } from '../types'
 
 /** Accent colors first — a strip of six grays sells no brand. */
@@ -86,17 +89,11 @@ export function DesignListPage() {
   const { collections } = useLibrary()
   const [promptOpen, setPromptOpen] = useState(false)
 
-  async function createProfile(name: string) {
-    try {
-      const saved = await saveProfile({ name: name.trim(), tokens: STARTER_TOKENS })
-      setPromptOpen(false)
-      navigate(`/design/${saved.id}`)
-    } catch (err) {
-      setPromptOpen(false)
-      window.alert(
-        `Could not create the profile: ${err instanceof Error ? err.message : String(err)}`,
-      )
-    }
+  async function createProfile(input: NewProfileInput) {
+    // Thrown errors surface inside the wizard, which stays open for a retry.
+    const saved = await saveProfile(input)
+    setPromptOpen(false)
+    navigate(`/design/${saved.id}`)
   }
 
   return (
@@ -163,14 +160,10 @@ export function DesignListPage() {
         </div>
       )}
 
-      <NamePromptDialog
+      <NewProfileWizard
         open={promptOpen}
-        title="New design profile"
-        label="Profile name"
-        placeholder="e.g. Acme Studio"
-        confirmLabel="Create"
         onCancel={() => setPromptOpen(false)}
-        onConfirm={createProfile}
+        onCreate={createProfile}
       />
     </>
   )
