@@ -31,6 +31,7 @@ import type {
   RunReceipt,
   ShortcutStatus,
   Tool,
+  ToolHealth,
   ToolReadiness,
   ToolRuntimeState,
   UiPrefs,
@@ -42,6 +43,8 @@ import type {
  */
 const api = {
   listTools: (): Promise<Tool[]> => ipcRenderer.invoke('tools:list'),
+  /** Launchability snapshot for every tool — one batched port scan. */
+  getToolHealth: (): Promise<ToolHealth[]> => ipcRenderer.invoke('tools:health'),
   saveTool: (tool: Tool): Promise<Tool> => ipcRenderer.invoke('tools:save', tool),
   deleteTool: (id: string): Promise<void> => ipcRenderer.invoke('tools:delete', id),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('tools:pickFolder'),

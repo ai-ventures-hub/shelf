@@ -6,6 +6,7 @@ export type {
   Tool,
   Collection,
   ToolRuntimeState,
+  ToolHealth,
   LogLine,
   LibraryFile,
   UiPrefs,

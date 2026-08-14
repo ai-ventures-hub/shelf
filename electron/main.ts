@@ -15,6 +15,7 @@ import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
 import { extractProjectTokens } from '../shared/design-extract'
+import { deriveLibraryHealth } from '../shared/tool-health'
 import { buildDesignBrief } from '../shared/design-brief'
 import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
@@ -643,6 +644,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('process:states', () => processes.getStates())
+  // Launchability glyphs for library cards — one lsof call for all tools.
+  ipcMain.handle('tools:health', async () =>
+    deriveLibraryHealth(store.list(), await processes.getStates()),
+  )
   ipcMain.handle('process:start', (_e, id: string, options?: StartOptions) =>
     processes.start(id, options),
   )

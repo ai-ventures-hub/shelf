@@ -42,6 +42,7 @@ async function main() {
   await run('capability intelligence', 'node', ['scripts/smoke-capabilities.mjs'])
   await run('design engine', 'node', ['scripts/smoke-design.mjs'])
   await run('design token extraction', 'node', ['scripts/smoke-design-extract.mjs'])
+  await run('tool health', 'node', ['scripts/smoke-health.mjs'])
   await run('smart import', 'node', ['scripts/smoke-import.mjs'])
   await run('receipts', 'node', ['scripts/smoke-receipts.mjs'])
   await run('receipt export', 'node', ['scripts/smoke-receipt-export.mjs'])

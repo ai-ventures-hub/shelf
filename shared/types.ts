@@ -106,6 +106,17 @@ export interface Tool {
   capabilitiesUpdatedAt?: string
 }
 
+/**
+ * Launchability snapshot behind the library card health glyph. Distinct from
+ * readiness (agent setup state): this answers "will Launch work right now".
+ */
+export interface ToolHealth {
+  toolId: string
+  launchable: boolean
+  /** Plain-language blockers, most severe first; empty when launchable. */
+  problems: string[]
+}
+
 /** Curated library destination; a tool may belong to many collections. */
 export interface Collection {
   id: string

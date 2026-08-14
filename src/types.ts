@@ -169,6 +169,13 @@ export interface LaunchOrigin {
   client?: string
 }
 
+/** Launchability snapshot behind the card health glyph (mirror of shared/types.ts). */
+export interface ToolHealth {
+  toolId: string
+  launchable: boolean
+  problems: string[]
+}
+
 export interface ToolRuntimeState {
   toolId: string
   status: ToolStatus
@@ -498,6 +505,7 @@ export interface RegisterProjectResult {
 /** Preload bridge API exposed on window.shelf */
 export interface ShelfApi {
   listTools: () => Promise<Tool[]>
+  getToolHealth: () => Promise<ToolHealth[]>
   saveTool: (tool: Tool) => Promise<Tool>
   deleteTool: (id: string) => Promise<void>
   pickFolder: () => Promise<string | null>

@@ -31,7 +31,7 @@ export function LibraryPage({
 }: {
   mode?: LibraryMode
 }) {
-  const { tools, collections, states, loading, error, startTool, stopTool, saveTool } =
+  const { tools, collections, states, health, loading, error, startTool, stopTool, saveTool } =
     useLibrary()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
@@ -511,6 +511,7 @@ export function LibraryPage({
                   key={tool.id}
                   tool={tool}
                   state={states[tool.id]}
+                  health={health[tool.id]}
                   onLaunch={() => void startTool(tool.id)}
                   onStop={() => void stopTool(tool.id)}
                 />
@@ -531,6 +532,7 @@ export function LibraryPage({
               key={tool.id}
               tool={tool}
               state={states[tool.id]}
+              health={health[tool.id]}
               hideChips={!isDeveloper}
               onLaunch={() => void startTool(tool.id)}
               onStop={() => void stopTool(tool.id)}

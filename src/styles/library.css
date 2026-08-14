@@ -508,3 +508,11 @@
   color:var(--brand-strong);
   background:color-mix(in srgb, var(--brand) 12%, transparent);
 }
+
+/* Launchability warning (health glyph, triage E) — amber, paired with text. */
+.health-chip {
+  gap: .3rem;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--warning);
+}
