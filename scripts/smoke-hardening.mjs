@@ -45,6 +45,46 @@ assert.deepEqual(
 )
 console.log('OK: env values fully masked for agents')
 
+// --- Inline secrets in adjacent fields mask too (audit-round finding) ---
+const cmdSanitized = sanitizeToolForOutput({
+  id: 't2',
+  name: 'T2',
+  tags: [],
+  capabilities: [],
+  agentAccess: [],
+  favorite: false,
+  launchCommand: 'API_KEY=abc123 DATABASE_URL=postgres://u:hunter2@h/db PORT=3000 npm start',
+  stopCommand: 'TOKEN=tok456 ./stop.sh',
+  notes: 'Remember DATABASE_URL=postgres://u:hunter2@h/db and PORT=3000 here.',
+  createdAt: 'x',
+  updatedAt: 'x',
+})
+assert.equal(
+  cmdSanitized.launchCommand,
+  'API_KEY=*** DATABASE_URL=*** PORT=3000 npm start',
+  'command env-prefix masks, benign PORT survives, command itself intact',
+)
+assert.equal(cmdSanitized.stopCommand, 'TOKEN=*** ./stop.sh')
+assert.ok(!cmdSanitized.notes.includes('hunter2'), 'notes assignments masked')
+assert.ok(cmdSanitized.notes.includes('PORT=3000'), 'benign keys survive in notes')
+const flagSanitized = sanitizeToolForOutput({
+  id: 't3',
+  name: 'T3',
+  tags: [],
+  capabilities: [],
+  agentAccess: [],
+  favorite: false,
+  launchCommand: 'node server.mjs --config=./app.json',
+  createdAt: 'x',
+  updatedAt: 'x',
+})
+assert.equal(
+  flagSanitized.launchCommand,
+  'node server.mjs --config=./app.json',
+  'flags after the command word are never masked',
+)
+console.log('OK: adjacent-field masking (commands, notes)')
+
 // --- Chunk-split masking: partial lines held until the newline arrives ---
 const rt = new ProcessRuntimeSupport()
 rt.appendLog('t1', 'stdout', 'prefix API_K')
@@ -139,6 +179,29 @@ try {
     'deleted tool leaves no ghost runtime state',
   )
   console.log('OK: failing stopCommand still kills; delete leaves no ghost state')
+
+  // A NEVER-STARTED tool whose stopCommand fails yields the dedicated code
+  // (audit-round finding: delete flows treat it as safe-to-remove).
+  const idle = store.save({
+    id: `smoke-idle-${Date.now()}`,
+    name: 'Idle Broken Stop',
+    tags: [],
+    favorite: false,
+    launchCommand: 'true',
+    stopCommand: 'exit 1',
+    createdAt: now,
+    updatedAt: now,
+  })
+  const idleStop = await manager.stop(idle.id)
+  assert.equal(idleStop.status, 'error')
+  assert.equal(
+    idleStop.code,
+    'stop_command_failed',
+    'idle tool with failing stopCommand reports the deletable error code',
+  )
+  store.delete(idle.id)
+  manager.forget(idle.id)
+  console.log('OK: idle failing-stopCommand tool is distinguishable (deletable)')
 } finally {
   await manager.stopAll('all').catch(() => {})
   fs.rmSync(dataRoot, { recursive: true, force: true })

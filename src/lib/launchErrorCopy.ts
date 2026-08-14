@@ -18,6 +18,8 @@ const COPY: Record<LaunchErrorCode, string> = {
   port_timeout: 'The app started but never opened a page.',
   stop_refused_not_owner:
     "Another program owns that port, so Shelf left it alone.",
+  stop_command_failed:
+    "This tool's stop command failed. Nothing was running that Shelf could see.",
 }
 
 export function friendlyLaunchError(code: LaunchErrorCode): string {

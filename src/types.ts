@@ -150,6 +150,7 @@ export type LaunchErrorCode =
   | 'app_crashed'
   | 'port_timeout'
   | 'stop_refused_not_owner'
+  | 'stop_command_failed'
 
 export type RemedyKind =
   | 'install_deps'

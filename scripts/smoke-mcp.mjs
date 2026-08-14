@@ -81,6 +81,34 @@ async function main() {
       throw new Error('Raw env value leaked somewhere in the upsert response')
     }
 
+    // Round-trip guard: echoing the MASKED read back through upsert must
+    // restore the stored values, never persist '***' placeholders.
+    const echoed = await callTool(client, 'shelf_upsert_tool', {
+      id: upserted.tool.id,
+      name: upserted.tool.name,
+      launchCommand: upserted.tool.launchCommand,
+      env: upserted.tool.env,
+      notes: 'Round-trip touched only this field.',
+    })
+    const { LibraryStore: SmokeLibraryStore } = requireCjs(
+      '../dist-electron/shared/library-store.js',
+    )
+    const rawStore = new SmokeLibraryStore(smokeDataRoot)
+    const rawTool = rawStore.get(echoed.tool.id)
+    if (rawTool.env?.SMOKE_SECRET_TOKEN !== 'should-be-masked') {
+      throw new Error('Masked env round-trip clobbered the stored secret value')
+    }
+    if (rawTool.env?.DATABASE_URL !== 'postgres://user:hunter2@localhost/db') {
+      throw new Error('Masked env round-trip clobbered DATABASE_URL')
+    }
+    if (rawTool.launchCommand !== 'PORT=8766 node server.mjs') {
+      throw new Error('Masked launchCommand round-trip clobbered the stored command')
+    }
+    if (rawTool.notes !== 'Round-trip touched only this field.') {
+      throw new Error('Round-trip guard must not block genuinely new values')
+    }
+    console.log('OK: masked read → upsert round-trip restores real values')
+
     const free = await callTool(client, 'shelf_find_free_port', {
       preferred: 8766,
       from: 8700,

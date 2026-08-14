@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.1.1 — 2026-08-13
+
+A security and hardening release. An external audit was independently
+verified finding-by-finding; everything real is fixed, plus two issues
+the audit missed that our verification found.
+
+- **No env values reach agents, period.** Tool env vars were masked by
+  key name (`*_TOKEN`, `*_SECRET`, …), which let secrets under other
+  names — `DATABASE_URL=postgres://user:password@host` — through MCP
+  output verbatim. Every env value is now `***` for agents; keys stay
+  visible, and the in-app editor still shows your real values.
+- **Log masking survives chunk boundaries.** Child output is masked per
+  assembled line, with partial lines held until their newline arrives —
+  a secret split across two pipe chunks used to evade redaction. The
+  "Copy report for your AI tool" payload now also masks the launch
+  command, matching run history.
+- **Deleting a running tool can no longer orphan its process.** A
+  failing custom stop command used to abort termination entirely; now it
+  logs and the process is still killed. Delete (GUI and MCP) waits for
+  the stop and refuses to remove the tool if stopping failed.
+- **Tighter renderer boundary.** The renderer now runs fully sandboxed
+  with all navigation and window-opening denied; an unused internal
+  protocol that could read arbitrary files is gone, and icon loading is
+  contained to Shelf's own icon folder (as brand assets already were).
+- **Design profile ids are validated** before any filesystem path is
+  derived from them — a traversal-shaped id planted in a hand-edited
+  design-profiles.json now heals to a UUID instead of reaching a
+  recursive delete.
+- **Releases fail closed.** The release workflow refuses to build
+  without signing credentials (an unsigned artifact can never reach the
+  auto-update channel), always runs Gatekeeper verification, and gates
+  the shipped artifact on the full smoke suite. CI now also builds the
+  app and site and audits production dependencies.
+- **Dependency refresh.** All production-dependency advisories cleared
+  (React Router, MCP SDK transitive packages, js-yaml, Next.js on the
+  site). Most were in code paths Shelf never executes; they are patched
+  regardless, and CI now keeps them at zero.
+- The MCP server now reports the real app version to connected clients
+  (it had been introducing itself as 0.1.0).
+
 ## 1.1.0 — 2026-08-13
 
 The Design Engine grows project roots: your brand can now come straight

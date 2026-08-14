@@ -116,7 +116,12 @@ app.on('web-contents-created', (_event, contents) => {
   contents.on('will-navigate', (event, url) => {
     const isDevOrigin =
       process.env.SHELF_DEV === '1' && url.startsWith('http://127.0.0.1:5173')
-    if (!isDevOrigin && !url.startsWith('file://')) event.preventDefault()
+    // Only the app's own bundle may load — any other file:// would carry the
+    // preload API into attacker-authored local HTML.
+    const ownBundle = url.startsWith(
+      `file://${path.join(__dirname, '../../dist/index.html')}`,
+    )
+    if (!isDevOrigin && !ownBundle) event.preventDefault()
   })
 })
 
@@ -370,7 +375,15 @@ function registerIpc(): void {
     // the library to represent it.
     const tool = store.get(id)
     const state = await processes.stop(id)
-    if (state.status === 'error') {
+    // Two error codes cannot orphan anything and must not block deletion:
+    // stop_command_failed (stop script errored while nothing was observably
+    // running) and stop_refused_not_owner (an UNRELATED process holds the
+    // tool's port — Shelf rightly left it alone, and it isn't ours).
+    if (
+      state.status === 'error' &&
+      state.code !== 'stop_command_failed' &&
+      state.code !== 'stop_refused_not_owner'
+    ) {
       throw new Error(
         `Could not stop “${tool?.name || id}”: ${state.message} The tool was not removed.`,
       )
@@ -509,7 +522,10 @@ function registerIpc(): void {
   // Data-url previews for the editor. Restricted to the brand-assets root so
   // the renderer cannot read arbitrary files through this channel.
   ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {
-    const assetsRoot = path.join(designProfiles.getRoot(), 'brand-assets') + path.sep
+    // realpath BOTH sides (like tools:iconDataUrl): a symlinked data root
+    // must still match, and a planted symlink must not escape.
+    const assetsRoot =
+      fs.realpathSync(path.join(designProfiles.getRoot(), 'brand-assets')) + path.sep
     if (!fs.existsSync(assetPath)) return null
     // realpath, not resolve: a symlink planted inside brand-assets must not
     // read files outside it through this channel.

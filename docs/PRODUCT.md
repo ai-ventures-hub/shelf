@@ -117,7 +117,7 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
 ## Distribution & privacy
 
 - Signed + notarized DMG (Apple Silicon) from public GitHub Releases; shelfmcp.com/download links `releases/latest`.
-- First launch shows a one-time, fully skippable survey (optional name/email + four questions). Completing it sends **one** POST to shelfmcp.com/api/onboarding containing the chosen answers, optional contact info, app version, and platform. That is the only user-data network call Shelf makes — nothing else ever leaves the Mac, and "no account required" remains true (skipping contact still sends the anonymous answers).
+- First launch shows a one-time, fully skippable survey (optional name/email + four questions). Completing it sends **one** POST to shelfmcp.com/api/onboarding containing the chosen answers, optional contact info, app version, and platform. That is the only user-data network call Shelf makes — nothing else ever leaves the Mac, and "no account required" remains true (skipping contact still sends the anonymous answers). Server-side, the endpoint keeps a hash of the submitting IP for up to 7 days purely for rate limiting; it is stored separately and never joined to the survey answers.
 
 ## Security posture
 

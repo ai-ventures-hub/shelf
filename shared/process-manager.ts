@@ -595,9 +595,21 @@ export class ProcessManager {
 
     try {
       // stopCommand was the ONLY lever for this tool and it failed — there is
-      // nothing to terminate, so report the failure instead of claiming stopped.
+      // nothing to terminate, so report the failure instead of claiming
+      // stopped. The dedicated code lets delete flows distinguish "stop
+      // command errored while nothing was observably running" (safe to
+      // remove) from a live process that could not be killed.
       if (stopCommandError && !managed && !externalOwner && !externalReceipt) {
-        throw new Error(stopCommandError)
+        this.runtime.endReceipt(receiptId, {
+          outcome: 'error',
+          message: `Stop failed: ${stopCommandError}`,
+        })
+        return this.runtime.setState(toolId, {
+          toolId,
+          status: 'error',
+          message: `Stop failed: ${stopCommandError}`,
+          code: 'stop_command_failed',
+        })
       }
 
       if (managed) {

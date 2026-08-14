@@ -144,7 +144,8 @@ names, no file paths, nothing recurring. The endpoint is
 [`site/src/app/api/onboarding/route.ts`](site/src/app/api/onboarding/route.ts) if you'd rather read it
 than take our word for it.
 
-MCP responses mask env keys matching `TOKEN|SECRET|PASSWORD|KEY`.
+MCP responses mask every env value, plus inline `KEY=value` assignments in launch/stop
+commands and notes — agents see which keys exist, never the values.
 
 ## Security notes
 
