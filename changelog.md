@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.2 — 2026-08-16
+
+One fix, a common one: launches no longer sit in **Starting** for 60
+seconds when the app is already serving.
+
+- **IPv6-only listeners are detected immediately.** Frameworks that bind
+  `localhost` — Vite's default — often listen on IPv6 loopback (`::1`)
+  only on macOS. Shelf's readiness probe only checked IPv4, so the card
+  stalled in Starting for the full 60-second timeout (then recovered via
+  log sniffing as "Running · port N (from logs)") while the app worked
+  fine in your browser the whole time. The probe now checks both loopback
+  stacks and flips to Running within about half a second of the
+  framework's ready line. Machines without IPv6 are unaffected, and a
+  regression test pins the fix.
+
 ## 1.1.1 — 2026-08-13
 
 A security and hardening release. An external audit was independently
