@@ -560,6 +560,7 @@ export function DesignProfilePage() {
 
           <AssetsSection
             assets={profile.assets}
+            refreshKey={profile.updatedAt}
             busy={assetBusy}
             onPick={() => void runAssetOp(() => pickAsset(profile.id, 'other'))}
             onDropPaths={(paths) =>
@@ -638,6 +639,7 @@ export function DesignProfilePage() {
           tokens={draft.tokens}
           modes={draft.modes}
           assets={profile.assets}
+          refreshKey={profile.updatedAt}
           mode={previewMode}
           onModeChange={setPreviewMode}
         />

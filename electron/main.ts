@@ -521,8 +521,16 @@ function registerIpc(): void {
                 ? 'image/x-icon'
                 : ext === '.png'
                   ? 'image/png'
-                  : null
-    if (!mime) return null // non-previewable (pdf/fonts) — renderer shows a glyph tile
+                  : ext === '.woff2'
+                    ? 'font/woff2'
+                    : ext === '.woff'
+                      ? 'font/woff'
+                      : ext === '.ttf'
+                        ? 'font/ttf'
+                        : ext === '.otf'
+                          ? 'font/otf'
+                          : null
+    if (!mime) return null // non-previewable (pdf) — renderer shows a glyph tile
     const buf = fs.readFileSync(resolved)
     return `data:${mime};base64,${buf.toString('base64')}`
   })

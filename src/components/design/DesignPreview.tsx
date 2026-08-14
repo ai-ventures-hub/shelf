@@ -6,11 +6,14 @@
  *
  * Token lookups use ordered aliases matching the app's canonical vocabulary
  * (surface = page canvas, panel = card) with hard fallbacks, so a missing
- * token can never break the preview. Declared font families render only if
- * installed on this Mac — fallback stacks are appended, nothing is fetched.
+ * token can never break the preview. Declared font families render with the
+ * profile's own imported font files when a font asset's filename matches a
+ * declared family (registered under a dp-preview-* name so they can never
+ * shadow the app's fonts); otherwise only locally installed fonts show and
+ * fallback stacks apply.
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { resolveModeTokens } from '../../lib/designTokens'
+import { flattenGroup, resolveModeTokens } from '../../lib/designTokens'
 import type { DesignAsset, DesignTokenGroup } from '../../types'
 
 interface DesignPreviewProps {
@@ -18,11 +21,13 @@ interface DesignPreviewProps {
   tokens: DesignTokenGroup
   modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
   assets: DesignAsset[]
+  /** Changes whenever the profile is saved — busts stale logo/font caches. */
+  refreshKey: string
   mode: 'light' | 'dark'
   onModeChange: (mode: 'light' | 'dark') => void
 }
 
-function usePreviewLogo(assets: DesignAsset[]): string | null {
+function usePreviewLogo(assets: DesignAsset[], refreshKey: string): string | null {
   const logo =
     assets.find((a) => a.kind === 'logo') ??
     assets.find((a) => a.kind === 'wordmark') ??
@@ -46,8 +51,101 @@ function usePreviewLogo(assets: DesignAsset[]): string | null {
     return () => {
       cancelled = true
     }
-  }, [logo?.path])
+    // refreshKey: same-basename re-import overwrites the file at this path.
+  }, [logo?.path, refreshKey])
   return src
+}
+
+const FONT_EXT = /\.(woff2?|ttf|otf)$/i
+const MAX_PREVIEW_FONTS = 8
+
+const normalizeFamily = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** Deterministic weight/style from the filename — a preview nicety, not metadata. */
+function faceDescriptors(basename: string): { weight: string; style: string } {
+  const b = basename.toLowerCase()
+  const weight = /variable|\[wght\]|-vf\b/.test(b)
+    ? '100 1000'
+    : /black|heavy/.test(b)
+      ? '900'
+      : /extrabold|ultrabold/.test(b)
+        ? '800'
+        : /semibold|demibold/.test(b)
+          ? '600'
+          : /bold/.test(b)
+            ? '700'
+            : /medium/.test(b)
+              ? '500'
+              : /extralight|ultralight/.test(b)
+                ? '200'
+                : /light/.test(b)
+                  ? '300'
+                  : /thin|hairline/.test(b)
+                    ? '100'
+                    : '400'
+  return { weight, style: /italic|oblique/.test(b) ? 'italic' : 'normal' }
+}
+
+/**
+ * Register the profile's imported font files with the document under
+ * prefixed dp-preview-* family names, matched to declared families by
+ * filename. Returns normalized-family → preview-family for the matched set.
+ */
+function usePreviewFonts(
+  assets: DesignAsset[],
+  familyNames: string[],
+  refreshKey: string,
+): Map<string, string> {
+  const [loaded, setLoaded] = useState<Map<string, string>>(new Map())
+  const assetsKey = assets
+    .filter((a) => FONT_EXT.test(a.path))
+    .map((a) => a.path)
+    .join('|')
+  const familiesKey = familyNames.join('|')
+
+  useEffect(() => {
+    let cancelled = false
+    const added: FontFace[] = []
+    const fontPaths = assetsKey ? assetsKey.split('|') : []
+    setLoaded(new Map())
+    if (fontPaths.length === 0 || !window.shelf?.designAssetDataUrl) return
+
+    void (async () => {
+      const map = new Map<string, string>()
+      for (const fontPath of fontPaths.slice(0, MAX_PREVIEW_FONTS)) {
+        const basename = fontPath.split('/').pop() || fontPath
+        const normBase = normalizeFamily(basename.replace(FONT_EXT, ''))
+        const family = familyNames.find((f) => normBase.includes(normalizeFamily(f)))
+        if (!family) continue
+        try {
+          const url = await window.shelf.designAssetDataUrl(fontPath)
+          if (!url || cancelled) continue
+          const previewName = `dp-preview-${normalizeFamily(family)}`
+          const { weight, style } = faceDescriptors(basename)
+          const face = new FontFace(previewName, `url(${url})`, {
+            weight,
+            style,
+            display: 'swap',
+          })
+          await face.load()
+          if (cancelled) return
+          document.fonts.add(face)
+          added.push(face)
+          map.set(normalizeFamily(family), previewName)
+          setLoaded(new Map(map))
+        } catch {
+          // Unloadable file — the fallback stack still renders.
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      for (const face of added) document.fonts.delete(face)
+    }
+  }, [assetsKey, familiesKey, refreshKey])
+
+  return loaded
 }
 
 export function DesignPreview({
@@ -55,10 +153,23 @@ export function DesignPreview({
   tokens,
   modes,
   assets,
+  refreshKey,
   mode,
   onModeChange,
 }: DesignPreviewProps) {
-  const logoSrc = usePreviewLogo(assets)
+  const logoSrc = usePreviewLogo(assets, refreshKey)
+
+  // First family name of every declared stack — the match targets for
+  // imported font files.
+  const familyNames = useMemo(
+    () =>
+      flattenGroup(tokens)
+        .filter((leaf) => leaf.path.startsWith('typography.font-family.'))
+        .map((leaf) => String(leaf.value).split(',')[0].trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean),
+    [tokens],
+  )
+  const previewFonts = usePreviewFonts(assets, familyNames, refreshKey)
 
   const { cssVars, colorChips } = useMemo(() => {
     const resolved = resolveModeTokens(tokens, mode === 'light' ? modes.light : modes.dark)
@@ -78,7 +189,12 @@ export function DesignPreview({
     }
     const font = (slot: string, fallback: string): string => {
       const v = resolved.get(`typography.font-family.${slot}`)
-      return typeof v === 'string' && v ? `${v}, ${fallback}` : fallback
+      if (typeof v !== 'string' || !v) return fallback
+      // Prepend the imported face (if one matched this stack's first family)
+      // so the preview shows the profile's actual font, not just local ones.
+      const first = v.split(',')[0].trim().replace(/^['"]|['"]$/g, '')
+      const previewName = previewFonts.get(normalizeFamily(first))
+      return previewName ? `"${previewName}", ${v}, ${fallback}` : `${v}, ${fallback}`
     }
 
     const dark = mode === 'dark'
@@ -106,7 +222,7 @@ export function DesignPreview({
       .map(([path, value]) => ({ name: path.slice('color.'.length), value: String(value) }))
 
     return { cssVars: vars as CSSProperties, colorChips: chips }
-  }, [tokens, modes, mode])
+  }, [tokens, modes, mode, previewFonts])
 
   const monogram = (name.trim()[0] || '?').toUpperCase()
 
