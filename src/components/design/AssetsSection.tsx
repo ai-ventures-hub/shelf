@@ -42,7 +42,8 @@ function AssetThumb({ asset, refreshKey }: { asset: DesignAsset; refreshKey: str
 
 interface AssetsSectionProps {
   assets: DesignAsset[]
-  /** Changes whenever the profile is saved — busts stale thumbnails. */
+  /** Changes on asset operations only — busts stale thumbnails without
+      re-fetching on every token/direction auto-save. */
   refreshKey: string
   busy: boolean
   onPick: () => void

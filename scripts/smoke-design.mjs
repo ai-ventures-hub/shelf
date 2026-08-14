@@ -268,6 +268,17 @@ try {
     'bare vendor tokens are masked in briefs',
   )
   store.delete(leaky.id)
+  // Mid-text PEM headers must mask too (a \b boundary once required a word
+  // char before the dashes, so anything after a space/newline slipped by).
+  const pem = store.save({
+    name: 'Pem',
+    direction: 'key follows:\n-----BEGIN RSA PRIVATE KEY-----\nMIIabc',
+  })
+  assert.ok(
+    !buildDesignBrief(pem).includes('BEGIN RSA PRIVATE KEY'),
+    'mid-text PEM headers are masked in briefs',
+  )
+  store.delete(pem.id)
 
   // --- Corrupt-backup-reset (last: it wipes the store) ---
   fs.writeFileSync(path.join(root, 'design-profiles.json'), '{not json')

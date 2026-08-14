@@ -54,6 +54,18 @@ html[data-theme='dark'] {
     path.join(root, 'src/styles/z-overrides.css'),
     ':root { --brand: #4459d8; }\n',
   )
+  // Audit regressions: SCSS // comments with apostrophes must not swallow
+  // declarations; minified blocks keep their final (semicolon-less) decl;
+  // .dark .card is a themed COMPONENT, not a global dark override.
+  fs.writeFileSync(
+    path.join(root, 'src/styles/edge.scss'),
+    `// don't let this comment eat what follows
+:root { --scss-a: #101010; --scss-b: #202020 }
+// it's also fine to comment again
+.dark .card { --themed-component: #303030; }
+`,
+  )
+  fs.writeFileSync(path.join(root, 'src/styles/min.css'), ':root{--min-a:#111111;--min-b:#222222}')
   // Never scanned: node_modules.
   fs.writeFileSync(
     path.join(root, 'node_modules/evil/style.css'),
@@ -127,6 +139,27 @@ module.exports = {
     'unclassified values are reported',
   )
 
+  // --- Audit-regression cases ---
+  assert.equal(result.tokens.color['scss-a'].$value, '#101010', 'scss // comments do not eat declarations')
+  assert.equal(
+    result.tokens.color['scss-b'].$value,
+    '#202020',
+    'last declaration before } without semicolon survives',
+  )
+  assert.equal(result.tokens.color['min-a'].$value, '#111111')
+  assert.equal(result.tokens.color['min-b'].$value, '#222222', 'minified final declaration extracted')
+  assert.equal(
+    result.modes.dark.color?.['themed-component'],
+    undefined,
+    '.dark .card is component-scoped, never a dark override',
+  )
+  assert.equal(result.tokens.color['themed-component'], undefined)
+  assert.equal(
+    new Set(result.skipped).size,
+    result.skipped.length,
+    'skipped notes are unique (no double-reported passes)',
+  )
+
   // --- Tailwind literals ---
   assert.equal(result.tokens.color.twbrand.$value, '#0ea5e9', 'tailwind literal color extracted')
   assert.equal(result.tokens.color.brand.$value, '#4459d8', 'CSS custom property beats tailwind on the same name')
@@ -147,8 +180,13 @@ module.exports = {
   assert.ok(result.counts.color >= 7, `color count sane (${result.counts.color})`)
   assert.equal(result.counts.dark, 2)
   assert.equal(result.counts.light, 1)
-  assert.equal(result.sources.length, 3, 'two css files + tailwind config as sources')
-  assert.ok(result.sources.some((s) => s.file === 'tailwind.config.js'))
+  assert.equal(result.sources.length, 5, 'four css/scss files + tailwind config as sources')
+  const twSource = result.sources.find((s) => s.file === 'tailwind.config.js')
+  assert.equal(
+    twSource?.declarations,
+    5,
+    'extend entries are counted once (twbrand, brand, ocean, ocean-deep, display)',
+  )
 
   // --- Determinism: same input, identical output ---
   assert.deepEqual(extractProjectTokens(root), result, 'extraction is deterministic')

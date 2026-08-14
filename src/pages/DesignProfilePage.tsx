@@ -71,6 +71,11 @@ export function DesignProfilePage() {
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>(resolvedTheme)
   const [addColorOpen, setAddColorOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  // Bumped only by asset operations. Thumbnails and preview fonts key off
+  // this rather than profile.updatedAt — updatedAt changes on every 500ms
+  // token/direction auto-save, which would tear down and re-register the
+  // preview FontFaces mid-typing (visible font flash) for no reason.
+  const [assetEpoch, setAssetEpoch] = useState(0)
   const [briefCopied, setBriefCopied] = useState(false)
   const [assetBusy, setAssetBusy] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -292,6 +297,9 @@ export function DesignProfilePage() {
     setAssetBusy(true)
     try {
       await op()
+      // Same-basename re-imports overwrite files at unchanged paths — the
+      // epoch is what tells thumbnails and preview fonts to re-read them.
+      setAssetEpoch((epoch) => epoch + 1)
     } catch (err) {
       // Surface through the same banner as save failures — a silently
       // missing asset reads as "the drop did nothing".
@@ -560,7 +568,7 @@ export function DesignProfilePage() {
 
           <AssetsSection
             assets={profile.assets}
-            refreshKey={profile.updatedAt}
+            refreshKey={String(assetEpoch)}
             busy={assetBusy}
             onPick={() => void runAssetOp(() => pickAsset(profile.id, 'other'))}
             onDropPaths={(paths) =>
@@ -639,7 +647,7 @@ export function DesignProfilePage() {
           tokens={draft.tokens}
           modes={draft.modes}
           assets={profile.assets}
-          refreshKey={profile.updatedAt}
+          refreshKey={String(assetEpoch)}
           mode={previewMode}
           onModeChange={setPreviewMode}
         />

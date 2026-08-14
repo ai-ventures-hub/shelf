@@ -21,7 +21,8 @@ interface DesignPreviewProps {
   tokens: DesignTokenGroup
   modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
   assets: DesignAsset[]
-  /** Changes whenever the profile is saved — busts stale logo/font caches. */
+  /** Changes on asset operations only — re-reads logo/fonts without a
+      teardown-and-flash on every token/direction auto-save. */
   refreshKey: string
   mode: 'light' | 'dark'
   onModeChange: (mode: 'light' | 'dark') => void
@@ -60,6 +61,28 @@ const FONT_EXT = /\.(woff2?|ttf|otf)$/i
 const MAX_PREVIEW_FONTS = 8
 
 const normalizeFamily = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** Weight/style/format words that trail family names in font filenames. */
+const FACE_SUFFIXES =
+  /(?:variablefont|webfont|italic|oblique|regular|medium|semibold|demibold|extrabold|ultrabold|bold|black|heavy|extralight|ultralight|light|thin|hairline|text|wght|vf)+$/
+
+/**
+ * Which declared family does this font file belong to? Equality after
+ * stripping face suffixes ("InterBold" → Inter), with a guarded prefix
+ * fallback for longer names. Deliberately NOT substring matching:
+ * "InterstateBold" must not claim Inter, and a family that normalizes to
+ * nothing (non-Latin names) must never wildcard-match every file.
+ */
+function familyForBasename(normBase: string, familyNames: string[]): string | undefined {
+  const stripped = normBase.replace(FACE_SUFFIXES, '')
+  for (const family of familyNames) {
+    const norm = normalizeFamily(family)
+    if (norm.length < 3) continue
+    if (stripped === norm) return family
+    if (norm.length >= 6 && stripped.startsWith(norm)) return family
+  }
+  return undefined
+}
 
 /** Deterministic weight/style from the filename — a preview nicety, not metadata. */
 function faceDescriptors(basename: string): { weight: string; style: string } {
@@ -115,7 +138,7 @@ function usePreviewFonts(
       for (const fontPath of fontPaths.slice(0, MAX_PREVIEW_FONTS)) {
         const basename = fontPath.split('/').pop() || fontPath
         const normBase = normalizeFamily(basename.replace(FONT_EXT, ''))
-        const family = familyNames.find((f) => normBase.includes(normalizeFamily(f)))
+        const family = familyForBasename(normBase, familyNames)
         if (!family) continue
         try {
           const url = await window.shelf.designAssetDataUrl(fontPath)

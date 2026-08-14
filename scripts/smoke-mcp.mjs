@@ -456,7 +456,12 @@ async function main() {
         tokens: { color: { sneaky: { $value: 'AWS_SECRET=abc123', $type: 'color' } } },
       },
       { name: 'Leaky Brand', direction: `Deploy key ghp_${'a'.repeat(36)} lives here.` },
-      { name: 'Leaky Brand', sourceNote: 'sk-abcdefghijklmnop1234' },
+      { name: 'Leaky Brand', sourceNote: 'sk-a1b2cdefghijklmnop34qr' },
+      // Mid-text PEM: \b never matched a leading '-', so this once slipped by.
+      {
+        name: 'Leaky Brand',
+        direction: 'key follows:\n-----BEGIN RSA PRIVATE KEY-----\nMIIabc',
+      },
       {
         name: 'Leaky Brand',
         tokens: {
@@ -481,6 +486,19 @@ async function main() {
           `Upsert must refuse credential-like content in ${Object.keys(payload).join('/')}`,
         )
       }
+    }
+
+    // Design-system vocabulary must NOT read as credentials: sk-/xox kebab
+    // identifiers without digits are legitimate content (audit regression).
+    const benign = await callTool(client, 'shelf_upsert_design_profile', {
+      name: 'Kebab Brand',
+      direction: 'Use sk-primary-button-large for CTAs; avoid xoxb-like-token-names.',
+      tokens: {
+        color: { 'sk-brand': { $value: 'var(--sk-color-brand-primary)', $type: 'color' } },
+      },
+    })
+    if (benign.action !== 'created') {
+      throw new Error('Kebab-case sk-/xox names must not be refused as secrets')
     }
 
     // Size caps: agent drafts are brand summaries, not document storage.
@@ -543,7 +561,7 @@ async function main() {
     // The default never moved through any of the above.
     const afterUpserts = await callTool(client, 'shelf_list_design_profiles')
     const stillDefault = afterUpserts.profiles.find((p) => p.isDefault)
-    if (afterUpserts.count !== 2 || stillDefault?.id !== seededProfile.id) {
+    if (afterUpserts.count !== 3 || stillDefault?.id !== seededProfile.id) {
       throw new Error('Agent writes must never move the default profile')
     }
     console.log('OK: agent upsert (draft-only, ownership, secret refusal)')

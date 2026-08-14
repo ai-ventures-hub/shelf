@@ -130,7 +130,9 @@ export function extractProjectTokens(projectPath: string): ExtractedTokens {
     )
   }
 
-  return { tokens, modes, counts, sources, skipped }
+  // Duplicate notes (e.g. the same file reported per pass) read as double
+  // work and break keyed list rendering — report each once.
+  return { tokens, modes, counts, sources, skipped: Array.from(new Set(skipped)) }
 }
 
 // ---------------------------------------------------------------------------
@@ -166,19 +168,65 @@ function findCssFiles(root: string): string[] {
 
 const DARK_SCOPE = /\.dark\b|\[data-theme\s*[*^|~]?=\s*["']?dark|\bdark-theme\b/i
 const LIGHT_SCOPE = /\.light\b|\[data-theme\s*[*^|~]?=\s*["']?light|\blight-theme\b/i
-const GLOBAL_SELECTOR = /(^|[\s,>~+])(:root\b|html\b|body\b|\*)/
+const THEME_TOKENS = /\.(?:dark|light)(?:-theme)?\b|\[data-theme[^\]]*\]/gi
+
+/**
+ * Strip `//` line comments (idiomatic in .scss, harmless to remove in .css),
+ * string-aware, and protocol-aware so `url(http://…)` survives.
+ */
+function stripLineComments(text: string): string {
+  let out = ''
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (ch === '"' || ch === "'") {
+      const quote = ch
+      let j = i + 1
+      while (j < text.length && text[j] !== quote) {
+        if (text[j] === '\\') j += 1
+        j += 1
+      }
+      out += text.slice(i, j + 1)
+      i = j + 1
+    } else if (ch === '/' && text[i + 1] === '/' && text[i - 1] !== ':') {
+      while (i < text.length && text[i] !== '\n') i += 1
+    } else {
+      out += ch
+      i += 1
+    }
+  }
+  return out
+}
 
 function parseCssCustomProperties(cssText: string): {
   declarations: Declaration[]
   scopedCount: number
 } {
-  const text = cssText.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const text = stripLineComments(cssText.replace(/\/\*[\s\S]*?\*\//g, ' '))
   const declarations: Declaration[] = []
   let scopedCount = 0
 
   // Context stack of selector/at-rule preludes, maintained by brace scanning.
   const stack: string[] = []
   let prelude = ''
+
+  const flushDeclaration = () => {
+    const decl = prelude.trim()
+    prelude = ''
+    const match = /^--([A-Za-z0-9_-]+)\s*:\s*([\s\S]+)$/.exec(decl)
+    if (!match || stack.length === 0) return
+    const scope = classifyScope(stack)
+    if (scope === null) scopedCount += 1
+    else {
+      declarations.push({
+        name: match[1].toLowerCase(),
+        // Multi-line declarations keep their source newlines — collapse.
+        value: match[2].replace(/\s+/g, ' ').trim(),
+        mode: scope,
+      })
+    }
+  }
+
   let i = 0
   while (i < text.length) {
     const ch = text[i]
@@ -187,25 +235,14 @@ function parseCssCustomProperties(cssText: string): {
       prelude = ''
       i += 1
     } else if (ch === '}') {
+      // A block's final declaration may lack a trailing semicolon (the
+      // universal shape of minified CSS) — flush before leaving the scope.
+      flushDeclaration()
       stack.pop()
-      prelude = ''
       i += 1
     } else if (ch === ';') {
-      const decl = prelude.trim()
-      prelude = ''
+      flushDeclaration()
       i += 1
-      const match = /^--([A-Za-z0-9_-]+)\s*:\s*([\s\S]+)$/.exec(decl)
-      if (!match || stack.length === 0) continue
-      const scope = classifyScope(stack)
-      if (scope === null) scopedCount += 1
-      else {
-        declarations.push({
-          name: match[1].toLowerCase(),
-          // Multi-line declarations keep their source newlines — collapse.
-          value: match[2].replace(/\s+/g, ' ').trim(),
-          mode: scope,
-        })
-      }
     } else if (ch === '"' || ch === "'") {
       // Consume strings whole so braces/semicolons inside them don't confuse
       // the scanner.
@@ -226,24 +263,44 @@ function parseCssCustomProperties(cssText: string): {
 }
 
 /**
+ * One comma-separated selector part: base/light/dark when it targets the
+ * document globally (optionally through a theme scope), null when it is
+ * component-scoped. `.dark .card` is a COMPONENT under a theme — stripping
+ * the theme tokens must leave only :root/html/body/* (or nothing).
+ */
+function classifySelectorPart(part: string): Mode | null {
+  const trimmed = part.trim()
+  if (!trimmed) return null
+  const hasDark = DARK_SCOPE.test(trimmed)
+  const hasLight = LIGHT_SCOPE.test(trimmed)
+  const remainder = trimmed.replace(THEME_TOKENS, '').trim()
+  const globalish = remainder === '' || /^(?::root|html|body|\*)$/.test(remainder)
+  if (!globalish) return null
+  return hasDark ? 'dark' : hasLight ? 'light' : 'base'
+}
+
+/**
  * Where does a declaration in this block context belong?
  * null = component-scoped (skip). Media conditions apply from any level;
  * the innermost selector decides eligibility.
  */
 function classifyScope(stack: string[]): Mode | null {
-  let mode: Mode = 'base'
+  let mediaMode: Mode = 'base'
   for (const entry of stack) {
     if (/@media/i.test(entry)) {
-      if (/prefers-color-scheme\s*:\s*dark/i.test(entry)) mode = 'dark'
-      else if (/prefers-color-scheme\s*:\s*light/i.test(entry)) mode = 'light'
+      if (/prefers-color-scheme\s*:\s*dark/i.test(entry)) mediaMode = 'dark'
+      else if (/prefers-color-scheme\s*:\s*light/i.test(entry)) mediaMode = 'light'
     }
   }
   const selector = stack[stack.length - 1]
-  if (/@theme\b/i.test(selector)) return mode // Tailwind v4 CSS-first config
+  if (/@theme\b/i.test(selector)) return mediaMode // Tailwind v4 CSS-first config
   if (/^@/.test(selector)) return null
-  if (DARK_SCOPE.test(selector)) return 'dark'
-  if (LIGHT_SCOPE.test(selector)) return 'light'
-  if (GLOBAL_SELECTOR.test(` ${selector}`)) return mode
+  // A rule may target several selectors; a global part makes it eligible.
+  for (const part of selector.split(',')) {
+    const scope = classifySelectorPart(part)
+    if (scope === 'dark' || scope === 'light') return scope
+    if (scope === 'base') return mediaMode
+  }
   return null
 }
 
@@ -374,10 +431,15 @@ function extractTailwindConfig(root: string): TailwindExtraction | null {
 
   const themeObject = findObjectAfterKey(text, 'theme')
   if (!themeObject) return { file, declarations, skipped }
-  const scopes = [themeObject]
+  // `extend` is nested INSIDE `theme` — scan it separately and cut it out of
+  // the theme scope, or every extend entry parses twice. Extend goes last so
+  // its values override same-named theme keys (Tailwind's merge order).
   const extendObject = findObjectAfterKey(themeObject, 'extend')
-  if (extendObject) scopes.push(extendObject)
+  const scopes = extendObject
+    ? [themeObject.replace(extendObject, '{}'), extendObject]
+    : [themeObject]
 
+  const byName = new Map<string, string>()
   for (const scope of scopes) {
     const colors = findObjectAfterKey(scope, 'colors')
     if (colors) {
@@ -390,16 +452,17 @@ function extractTailwindConfig(root: string): TailwindExtraction | null {
           .filter((key) => key !== 'DEFAULT')
           .join('-')
           .toLowerCase()
-        if (name) declarations.push({ name, value, mode: 'base' })
+        if (name) byName.set(name, value)
       })
     }
     const fontFamily = findObjectAfterKey(scope, 'fontFamily')
     if (fontFamily) {
       for (const [key, arr] of parseStringArrayEntries(fontFamily)) {
-        declarations.push({ name: `font-family-${key.toLowerCase()}`, value: arr.join(', '), mode: 'base' })
+        byName.set(`font-family-${key.toLowerCase()}`, arr.join(', '))
       }
     }
   }
+  for (const [name, value] of byName) declarations.push({ name, value, mode: 'base' })
   return { file, declarations, skipped }
 }
 

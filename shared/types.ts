@@ -471,16 +471,27 @@ export function launchOriginLabel(
  * at least as broad as this masking.
  */
 export const BARE_SECRET_SOURCE = [
-  'sk-[A-Za-z0-9_-]{16,}', // OpenAI / Anthropic style
+  // Hyphenated tails must demand digits, or kebab-case identifiers
+  // (sk-color-brand-primary, xoxb-like-token-name) read as credentials —
+  // real vendor keys always carry digits; design-token names rarely do.
+  'sk-(?=[A-Za-z0-9_-]*\\d[A-Za-z0-9_-]*\\d)[A-Za-z0-9_-]{20,}', // OpenAI / Anthropic style
   'sk_(?:live|test)_[A-Za-z0-9]{16,}', // Stripe
   'gh[pousr]_[A-Za-z0-9]{36,}', // GitHub tokens
   'github_pat_[A-Za-z0-9_]{22,}',
-  'xox[baprs]-[A-Za-z0-9-]{10,}', // Slack
+  'xox[baprs]-(?=[A-Za-z0-9-]*\\d)[A-Za-z0-9-]{10,}', // Slack
   'npm_[A-Za-z0-9]{36,}',
   '(?:AKIA|ASIA)[0-9A-Z]{16}', // AWS access key ids
   'eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{6,}\\.[A-Za-z0-9_-]{10,}', // JWT
   '-----BEGIN [A-Z ]*PRIVATE KEY-----',
 ].join('|')
+
+/**
+ * Boundary for BARE_SECRET_SOURCE. NOT `\b`: `\b` needs a word char before
+ * `-----BEGIN`, so a PEM block after a newline/space would never match, and
+ * `^` alone only covers index 0. The lookbehind also rejects `--sk-…` CSS
+ * custom-property references outright.
+ */
+export const BARE_SECRET_BOUNDARY = '(?<![\\w-])'
 
 /** Redact likely secrets before returning tool/log payloads to agents or UI. */
 export function maskSecrets(text: string): string {
@@ -490,7 +501,7 @@ export function maskSecrets(text: string): string {
       '$1=***',
     )
     .replace(/\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi, '$1 ***')
-    .replace(new RegExp(`(?:^|\\b)(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
+    .replace(new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
 }
 
 /** Strip secret env values from a tool record for safe MCP/UI serialization. */
