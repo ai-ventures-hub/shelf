@@ -102,6 +102,13 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   new-profile wizard (blank vs project-seeded), imported fonts in the
   live preview, `shelf_get_collection` stack context, launch-health
   chips on library cards, and agent write-path hardening.
+- **v1.2 candidate — `shelf_upsert_collection`**: make "create a
+  collection named X and build these N tools into it" work end-to-end
+  over MCP. Ownership mirrors design profiles (agents draft, you
+  decide): agent-created collections stay agent-editable until any GUI
+  edit adopts them; agents may only add tools they registered
+  themselves, and never bind or unbind a design profile on a
+  user-owned collection.
 
 ## Later Community enhancements
 
@@ -110,7 +117,7 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
 ## Distribution & privacy
 
 - Signed + notarized DMG (Apple Silicon) from public GitHub Releases; shelfmcp.com/download links `releases/latest`.
-- First launch shows a one-time, fully skippable survey (optional name/email + four questions). Completing it sends **one** POST to shelfmcp.com/api/onboarding containing the chosen answers, optional contact info, app version, and platform. That is the only user-data network call Shelf makes — nothing else ever leaves the Mac, and "no account required" remains true (skipping contact still sends the anonymous answers).
+- First launch shows a one-time, fully skippable survey (optional name/email + four questions). Completing it sends **one** POST to shelfmcp.com/api/onboarding containing the chosen answers, optional contact info, app version, and platform. That is the only user-data network call Shelf makes — nothing else ever leaves the Mac, and "no account required" remains true (skipping contact still sends the anonymous answers). Server-side, the endpoint keeps a hash of the submitting IP for up to 7 days purely for rate limiting; it is stored separately and never joined to the survey answers.
 
 ## Security posture
 

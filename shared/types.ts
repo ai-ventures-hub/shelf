@@ -202,6 +202,7 @@ export type LaunchErrorCode =
   | 'app_crashed'
   | 'port_timeout'
   | 'stop_refused_not_owner'
+  | 'stop_command_failed'
 
 /** What the UI can offer for a coded failure. */
 export type RemedyKind =
@@ -504,12 +505,60 @@ export function maskSecrets(text: string): string {
     .replace(new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
 }
 
-/** Strip secret env values from a tool record for safe MCP/UI serialization. */
+/** Env keys whose values are operational, not secret — safe to show agents. */
+const SAFE_ENV_KEYS = /^(PORT|HOST|HOSTNAME|NODE_ENV|DEBUG|CI|TZ|LANG|LC_ALL|FORCE_COLOR)$/i
+
+/**
+ * Mask the leading VAR=value env-prefix segment of a shell command
+ * (`API_KEY=x DATABASE_URL=y npm start`), sparing benign keys so agents
+ * keep PORT-style facts. Stops at the first non-assignment token, so
+ * `--config=./x` style flags are untouched.
+ */
+export function maskCommandEnvPrefix(command: string): string {
+  let done = false
+  return command
+    .split(/(\s+)/)
+    .map((token) => {
+      if (done || !token || /^\s+$/.test(token)) return token
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(token)
+      if (!match) {
+        done = true
+        return token
+      }
+      return SAFE_ENV_KEYS.test(match[1]) ? token : `${match[1]}=***`
+    })
+    .join('')
+}
+
+/** Mask UPPER_CASE=value assignments in prose (notes) — env-var convention. */
+function maskProseAssignments(text: string): string {
+  return text.replace(/\b([A-Z][A-Z0-9_]{2,})=(\S+)/g, (whole, key: string) =>
+    SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`,
+  )
+}
+
+/**
+ * Strip secrets from a tool record for agent-facing serialization.
+ * ALL env values are masked (a key-name allowlist misses
+ * DATABASE_URL=postgres://user:pass@host, and agents never need the
+ * values — keys say what is configured; tool.port/url carry the
+ * operational facts). launchCommand/stopCommand mask their env-prefix
+ * and notes mask env-style assignments — inline `KEY=value` in the
+ * adjacent fields is the same secret in a different pocket. The GUI
+ * editor reads the raw record over its own IPC (same-machine owner).
+ */
 export function sanitizeToolForOutput(tool: Tool): Tool {
-  if (!tool.env) return tool
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(tool.env)) {
-    env[key] = /TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY/i.test(key) ? '***' : value
+  const env: Record<string, string> | undefined = tool.env ? {} : undefined
+  if (tool.env && env) {
+    for (const key of Object.keys(tool.env)) env[key] = '***'
   }
-  return { ...tool, env }
+  return {
+    ...tool,
+    ...(env ? { env } : {}),
+    launchCommand: maskSecrets(maskCommandEnvPrefix(tool.launchCommand)),
+    ...(tool.stopCommand
+      ? { stopCommand: maskSecrets(maskCommandEnvPrefix(tool.stopCommand)) }
+      : {}),
+    ...(tool.notes ? { notes: maskSecrets(maskProseAssignments(tool.notes)) } : {}),
+  }
 }

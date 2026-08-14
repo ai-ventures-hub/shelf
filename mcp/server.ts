@@ -3,6 +3,7 @@
  * Log only to stderr; stdout is reserved for MCP JSON-RPC.
  */
 import { randomUUID } from 'node:crypto'
+import pkg from '../package.json'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -49,7 +50,9 @@ const processes = new ProcessManager(store, {
 
 const server = new McpServer({
   name: 'shelf',
-  version: '0.1.0',
+  // The app version — clients see what's actually installed (this sat at a
+  // hardcoded 0.1.0 through the 1.0 release).
+  version: pkg.version,
 })
 
 const agentAccessSchema = z.object({
@@ -196,10 +199,34 @@ server.registerTool(
     if (args.id) existing = store.get(args.id)
     if (!existing) existing = store.findByName(args.name)
 
+    // Round-trip guard: agent-facing reads are MASKED ('***' env values,
+    // KEY=*** command prefixes). The routine get_tool → tweak → upsert-back
+    // pattern must restore the stored values instead of persisting the
+    // placeholders — otherwise the next launch exports DATABASE_URL=*** .
+    const maskedExisting = existing ? sanitizeToolForOutput(existing) : undefined
+    const incomingEnv = args.env
+      ? Object.fromEntries(
+          Object.entries(args.env).flatMap(([key, value]) => {
+            if (value !== '***') return [[key, value]]
+            const real = existing?.env?.[key]
+            return real !== undefined ? [[key, real]] : [] // placeholder with no original: drop
+          }),
+        )
+      : undefined
+    const incomingStopCommand =
+      existing && args.stopCommand === maskedExisting?.stopCommand
+        ? existing.stopCommand
+        : args.stopCommand
+    const incomingNotes =
+      existing && args.notes === maskedExisting?.notes ? existing.notes : args.notes
+
     const checkPort = args.checkPort !== false
     let port = args.port ?? existing?.port
     let url = args.url ?? existing?.url
-    let launchCommand = args.launchCommand
+    let launchCommand =
+      existing && args.launchCommand === maskedExisting?.launchCommand
+        ? existing.launchCommand
+        : args.launchCommand
     const warnings: string[] = []
     let suggestedPort: number | undefined
     let freeCandidates: number[] = []
@@ -263,14 +290,14 @@ server.registerTool(
       favorite: args.favorite ?? existing?.favorite ?? false,
       projectPath: args.projectPath ?? existing?.projectPath,
       launchCommand,
-      stopCommand: args.stopCommand ?? existing?.stopCommand,
+      stopCommand: incomingStopCommand ?? existing?.stopCommand,
       url,
       port,
       env:
         portFixed && port
-          ? { ...(args.env ?? existing?.env ?? {}), PORT: String(port) }
-          : (args.env ?? existing?.env),
-      notes: args.notes ?? existing?.notes,
+          ? { ...(incomingEnv ?? existing?.env ?? {}), PORT: String(port) }
+          : (incomingEnv ?? existing?.env),
+      notes: incomingNotes ?? existing?.notes,
       iconPath: args.iconPath ?? existing?.iconPath,
       iconLucide: args.iconLucide ?? existing?.iconLucide,
       iconColor: args.iconColor ?? existing?.iconColor,
@@ -301,8 +328,24 @@ server.registerTool(
   },
   async ({ id }) => {
     if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
-    await processes.stop(id, 'Removed via MCP.')
+    const state = await processes.stop(id, 'Removed via MCP.')
+    // stop_command_failed (stop script errored, nothing observably running)
+    // and stop_refused_not_owner (unrelated process on the port) cannot
+    // orphan anything — removal proceeds (matching the GUI delete path).
+    if (
+      state.status === 'error' &&
+      state.code !== 'stop_command_failed' &&
+      state.code !== 'stop_refused_not_owner'
+    ) {
+      // Deleting the record anyway would permanently orphan the child: the
+      // MCP process has no quit-time stopAll, and reconcile only walks
+      // tools that still exist in the library.
+      return errorResult(
+        `Could not stop the running tool: ${state.message} The tool was NOT removed — stop it first (shelf_stop_tool) or fix its stop command, then remove again.`,
+      )
+    }
     store.delete(id)
+    processes.forget(id)
     return textResult({ removed: id })
   },
 )

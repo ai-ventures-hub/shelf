@@ -5,12 +5,9 @@ import {
   dialog,
   globalShortcut,
   ipcMain,
-  net,
-  protocol,
 } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
@@ -111,19 +108,22 @@ if (!gotLock) {
   app.quit()
 }
 
-// Must register before app ready so <img src="shelf-icon://…"> can load local icons.
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'shelf-icon',
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      bypassCSP: true,
-      stream: true,
-    },
-  },
-])
+// The renderer never legitimately navigates away or opens windows: prod is a
+// local file, dev is the Vite origin. Deny everything else at the source —
+// external links go through the validated shell.openExternal IPC instead.
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  contents.on('will-navigate', (event, url) => {
+    const isDevOrigin =
+      process.env.SHELF_DEV === '1' && url.startsWith('http://127.0.0.1:5173')
+    // Only the app's own bundle may load — any other file:// would carry the
+    // preload API into attacker-authored local HTML.
+    const ownBundle = url.startsWith(
+      `file://${path.join(__dirname, '../../dist/index.html')}`,
+    )
+    if (!isDevOrigin && !ownBundle) event.preventDefault()
+  })
+})
 
 // macOS may deliver open-url before ready — queue until host exists.
 app.on('open-url', (event, url) => {
@@ -205,7 +205,9 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // The preload requires only 'electron' (verified in the compiled
+      // output), so the full renderer sandbox costs nothing.
+      sandbox: true,
     },
   })
 
@@ -367,9 +369,27 @@ function resolveMcpServerPath(): string {
 function registerIpc(): void {
   ipcMain.handle('tools:list', () => store.list())
   ipcMain.handle('tools:save', (_e, tool: Tool) => store.save(tool))
-  ipcMain.handle('tools:delete', (_e, id: string) => {
-    void processes.stop(id)
+  ipcMain.handle('tools:delete', async (_e, id: string) => {
+    // Stop must complete AND succeed before the record goes: deleting first
+    // would orphan a child that a failed stop left running, with nothing in
+    // the library to represent it.
+    const tool = store.get(id)
+    const state = await processes.stop(id)
+    // Two error codes cannot orphan anything and must not block deletion:
+    // stop_command_failed (stop script errored while nothing was observably
+    // running) and stop_refused_not_owner (an UNRELATED process holds the
+    // tool's port — Shelf rightly left it alone, and it isn't ours).
+    if (
+      state.status === 'error' &&
+      state.code !== 'stop_command_failed' &&
+      state.code !== 'stop_refused_not_owner'
+    ) {
+      throw new Error(
+        `Could not stop “${tool?.name || id}”: ${state.message} The tool was not removed.`,
+      )
+    }
     store.delete(id)
+    processes.forget(id)
   })
   ipcMain.handle('tools:readiness', (_e, id: string) => {
     const tool = store.get(id)
@@ -502,7 +522,10 @@ function registerIpc(): void {
   // Data-url previews for the editor. Restricted to the brand-assets root so
   // the renderer cannot read arbitrary files through this channel.
   ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {
-    const assetsRoot = path.join(designProfiles.getRoot(), 'brand-assets') + path.sep
+    // realpath BOTH sides (like tools:iconDataUrl): a symlinked data root
+    // must still match, and a planted symlink must not escape.
+    const assetsRoot =
+      fs.realpathSync(path.join(designProfiles.getRoot(), 'brand-assets')) + path.sep
     if (!fs.existsSync(assetPath)) return null
     // realpath, not resolve: a symlink planted inside brand-assets must not
     // read files outside it through this channel.
@@ -628,18 +651,27 @@ function registerIpc(): void {
     return dest
   })
 
+  // Same containment stance as designProfiles:assetDataUrl: this channel
+  // reads ONLY inside the icons dir (realpath on both sides — a planted
+  // symlink must not escape, and a symlinked data root must still match).
   ipcMain.handle('tools:iconDataUrl', (_e, iconPath: string) => {
     if (!iconPath || !fs.existsSync(iconPath)) return null
-    const ext = path.extname(iconPath).toLowerCase().replace('.', '')
+    const iconsRoot = fs.realpathSync(store.getIconsDir()) + path.sep
+    const resolved = fs.realpathSync(iconPath)
+    if (!resolved.startsWith(iconsRoot)) return null
+    const ext = path.extname(resolved).toLowerCase()
     const mime =
-      ext === 'jpg' || ext === 'jpeg'
+      ext === '.jpg' || ext === '.jpeg'
         ? 'image/jpeg'
-        : ext === 'webp'
+        : ext === '.webp'
           ? 'image/webp'
-          : ext === 'gif'
+          : ext === '.gif'
             ? 'image/gif'
-            : 'image/png'
-    const buf = fs.readFileSync(iconPath)
+            : ext === '.png'
+              ? 'image/png'
+              : null
+    if (!mime) return null // not a renderable icon type — never a raw file read
+    const buf = fs.readFileSync(resolved)
     return `data:${mime};base64,${buf.toString('base64')}`
   })
 
@@ -731,20 +763,6 @@ function registerIpc(): void {
 
 if (gotLock) {
   app.whenReady().then(() => {
-    protocol.handle('shelf-icon', async (request) => {
-      try {
-        const parsed = new URL(request.url)
-        const filePath = parsed.searchParams.get('path')
-        if (!filePath || !fs.existsSync(filePath)) {
-          return new Response('Icon not found', { status: 404 })
-        }
-        return net.fetch(pathToFileURL(filePath).href)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        return new Response(message, { status: 500 })
-      }
-    })
-
     prefs = new PrefsStore()
     store = new LibraryStore()
     receipts = new ReceiptStore()

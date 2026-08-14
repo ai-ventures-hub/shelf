@@ -14,9 +14,14 @@ const MAX_LOG_LINES = 3000
 
 export type ProcessEventSink = (channel: string, payload: unknown) => void
 
+/** Cap for a held partial line — a no-newline stream must not grow it forever. */
+const MAX_RESIDUAL_CHARS = 8192
+
 export class ProcessRuntimeSupport {
   private readonly states = new Map<string, ToolRuntimeState>()
   private readonly logs = new Map<string, LogLine[]>()
+  /** Trailing partial line per toolId+stream, held until its newline arrives. */
+  private readonly residual = new Map<string, string>()
 
   constructor(
     private readonly onEvent?: ProcessEventSink,
@@ -46,12 +51,61 @@ export class ProcessRuntimeSupport {
   }
 
   appendLog(toolId: string, stream: LogLine['stream'], chunk: string): void {
-    const lines = chunk.replace(/\r\n/g, '\n').split('\n')
+    // Child pipes deliver arbitrary chunk boundaries: masking each fragment
+    // independently lets a secret split across chunks slip through. Hold the
+    // trailing partial line until its newline arrives and mask only whole
+    // lines. 'system' messages are authored line-complete without trailing
+    // newlines — buffering would swallow them, so they commit directly.
+    if (stream === 'system') {
+      this.commitLines(toolId, stream, chunk.replace(/\r\n?/g, '\n').split('\n'))
+      return
+    }
+    const key = `${toolId}\u0000${stream}`
+    // Bare \r is a line break too: spinner-style CLIs rewrite their ready
+    // line with \r, and holding it as 'partial' would blind the ready-URL
+    // sniffer until process exit.
+    const combined = (this.residual.get(key) || '') + chunk.replace(/\r\n?/g, '\n')
+    const lines = combined.split('\n')
+    const partial = lines.pop() ?? ''
+    if (partial.length > MAX_RESIDUAL_CHARS) {
+      // Pathological no-newline stream: commit the oversized residue. Known
+      // limitation: a KEY=value straddling this forced boundary is masked as
+      // two independent fragments (requires a single >8KB line mid-secret).
+      lines.push(partial)
+      this.residual.delete(key)
+    } else if (partial) {
+      this.residual.set(key, partial)
+    } else {
+      this.residual.delete(key)
+    }
+    this.commitLines(toolId, stream, lines)
+  }
+
+  /** Commit any held partial lines — call when the process exits/stops. */
+  flushLogs(toolId: string): void {
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const key = `${toolId}\u0000${stream}`
+      const partial = this.residual.get(key)
+      if (!partial) continue
+      this.residual.delete(key)
+      this.commitLines(toolId, stream, [partial])
+    }
+  }
+
+  /** Drop everything held for a tool — call when its record is deleted. */
+  forget(toolId: string): void {
+    this.flushLogs(toolId)
+    this.states.delete(toolId)
+    this.logs.delete(toolId)
+    for (const stream of ['stdout', 'stderr'] as const) {
+      this.residual.delete(`${toolId}\u0000${stream}`)
+    }
+  }
+
+  private commitLines(toolId: string, stream: LogLine['stream'], lines: string[]): void {
     const bucket = this.logs.get(toolId) || []
     const at = new Date().toISOString()
-
     for (const text of lines) {
-      if (!text && lines.length > 1) continue
       if (!text) continue
       const entry: LogLine = {
         toolId,
@@ -62,7 +116,6 @@ export class ProcessRuntimeSupport {
       bucket.push(entry)
       this.emit('logs:line', entry)
     }
-
     while (bucket.length > MAX_LOG_LINES) bucket.shift()
     this.logs.set(toolId, bucket)
   }

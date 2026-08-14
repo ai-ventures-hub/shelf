@@ -1,9 +1,9 @@
 name: Release
 
-# Tag push (v*) → build, package, sign + notarize (when credentials exist),
-# publish DMG + zip to the GitHub Release. Without signing secrets,
-# electron-builder skips signing/notarization with a warning and publishes
-# unsigned artifacts — the workflow still succeeds end to end.
+# Tag push (v*) → smoke gate, build, package, sign + notarize, publish DMG +
+# zip to the GitHub Release. FAILS CLOSED: missing signing secrets abort the
+# job before packaging — an unsigned artifact must never reach the
+# auto-update channel.
 # Publishing uses `gh release` rather than electron-builder's publisher:
 # its parallel upload tasks race to create the release and die on 422
 # already_exists when releaseType is "release" (drafts break releases/latest).
@@ -34,7 +34,14 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match package.json $pkg" >&2
             exit 1
           fi
+      - name: Require signing credentials (fail closed)
+        if: env.HAS_SIGNING_CERT != 'true'
+        run: |
+          echo "MAC_CSC_LINK is not set — refusing to build an unsigned release." >&2
+          exit 1
       - run: npm run typecheck
+      # The artifact that ships must clear at least the gate PRs clear.
+      - run: npm run smoke:all
       - run: npm run build
       - name: Package, sign, notarize
         run: npx electron-builder --mac --publish never
@@ -44,8 +51,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Gatekeeper verification (signed builds only)
-        if: env.HAS_SIGNING_CERT == 'true'
+      - name: Gatekeeper verification
         run: |
           app="release/mac-arm64/Shelf.app"
           codesign --verify --deep --strict "$app"

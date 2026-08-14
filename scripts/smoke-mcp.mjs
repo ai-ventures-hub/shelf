@@ -64,12 +64,50 @@ async function main() {
       url: 'http://127.0.0.1:8766',
       port: 8766,
       notes: 'Created by smoke-mcp. Safe to remove.',
-      env: { SMOKE_SECRET_TOKEN: 'should-be-masked' },
+      env: {
+        SMOKE_SECRET_TOKEN: 'should-be-masked',
+        // Not a "secret-looking" key name — ALL values must mask regardless.
+        DATABASE_URL: 'postgres://user:hunter2@localhost/db',
+      },
     })
     console.log('upsert', upserted.action, upserted.tool.id)
     if (upserted.tool.env?.SMOKE_SECRET_TOKEN !== '***') {
       throw new Error('Expected secret env value to be masked in MCP output')
     }
+    if (upserted.tool.env?.DATABASE_URL !== '***') {
+      throw new Error('Every env value must be masked in MCP output, not just secret-named keys')
+    }
+    if (JSON.stringify(upserted).includes('hunter2')) {
+      throw new Error('Raw env value leaked somewhere in the upsert response')
+    }
+
+    // Round-trip guard: echoing the MASKED read back through upsert must
+    // restore the stored values, never persist '***' placeholders.
+    const echoed = await callTool(client, 'shelf_upsert_tool', {
+      id: upserted.tool.id,
+      name: upserted.tool.name,
+      launchCommand: upserted.tool.launchCommand,
+      env: upserted.tool.env,
+      notes: 'Round-trip touched only this field.',
+    })
+    const { LibraryStore: SmokeLibraryStore } = requireCjs(
+      '../dist-electron/shared/library-store.js',
+    )
+    const rawStore = new SmokeLibraryStore(smokeDataRoot)
+    const rawTool = rawStore.get(echoed.tool.id)
+    if (rawTool.env?.SMOKE_SECRET_TOKEN !== 'should-be-masked') {
+      throw new Error('Masked env round-trip clobbered the stored secret value')
+    }
+    if (rawTool.env?.DATABASE_URL !== 'postgres://user:hunter2@localhost/db') {
+      throw new Error('Masked env round-trip clobbered DATABASE_URL')
+    }
+    if (rawTool.launchCommand !== 'PORT=8766 node server.mjs') {
+      throw new Error('Masked launchCommand round-trip clobbered the stored command')
+    }
+    if (rawTool.notes !== 'Round-trip touched only this field.') {
+      throw new Error('Round-trip guard must not block genuinely new values')
+    }
+    console.log('OK: masked read → upsert round-trip restores real values')
 
     const free = await callTool(client, 'shelf_find_free_port', {
       preferred: 8766,
