@@ -229,6 +229,57 @@ try {
   const promoted = store.setDefault(beta.id)
   assert.equal(promoted.isDefault, true, 'a survivor can be promoted afterwards')
 
+  // --- upsertFromAgent: ownership policy enforced inside the store lock ---
+  const draft = store.upsertFromAgent({ name: 'Extracted', direction: 'Bold.' })
+  assert.equal(draft.action, 'created')
+  assert.equal(draft.profile.origin, 'agent')
+  assert.equal(draft.profile.isDefault, false, 'agent draft never claims the default')
+  const redraft = store.upsertFromAgent({ name: 'extracted', direction: 'Bolder.' })
+  assert.equal(redraft.action, 'updated', 're-extraction matches names case-insensitively')
+  assert.equal(redraft.profile.id, draft.profile.id)
+  assert.throws(
+    () => store.upsertFromAgent({ name: 'Beta' }),
+    /user-owned/,
+    'agent cannot claim a user profile by name',
+  )
+  assert.throws(
+    () => store.upsertFromAgent({ id: beta.id, name: 'Beta' }),
+    /user-owned/,
+    'agent cannot claim a user profile by id',
+  )
+  assert.throws(
+    () => store.upsertFromAgent({ id: draft.profile.id, name: 'Beta' }),
+    /already exists/,
+    'rename-by-id onto a user profile name is refused',
+  )
+  store.save({ id: draft.profile.id, name: 'Extracted', origin: 'user' })
+  assert.throws(
+    () => store.upsertFromAgent({ id: draft.profile.id, name: 'Extracted' }),
+    /user-owned/,
+    'a GUI save locks the agent out of its old draft',
+  )
+  store.delete(draft.profile.id)
+
+  // --- Bare vendor tokens (no KEY= assignment) are masked in briefs ---
+  const bareToken = `ghp_${'a'.repeat(36)}`
+  const leaky = store.save({ name: 'Leaky', direction: `CI uses ${bareToken} today.` })
+  assert.ok(
+    !buildDesignBrief(leaky).includes(bareToken),
+    'bare vendor tokens are masked in briefs',
+  )
+  store.delete(leaky.id)
+  // Mid-text PEM headers must mask too (a \b boundary once required a word
+  // char before the dashes, so anything after a space/newline slipped by).
+  const pem = store.save({
+    name: 'Pem',
+    direction: 'key follows:\n-----BEGIN RSA PRIVATE KEY-----\nMIIabc',
+  })
+  assert.ok(
+    !buildDesignBrief(pem).includes('BEGIN RSA PRIVATE KEY'),
+    'mid-text PEM headers are masked in briefs',
+  )
+  store.delete(pem.id)
+
   // --- Corrupt-backup-reset (last: it wipes the store) ---
   fs.writeFileSync(path.join(root, 'design-profiles.json'), '{not json')
   const recovered = new DesignProfileStore(root)

@@ -474,3 +474,28 @@
     flex-basis: 100%;
   }
 }
+
+/* Import-from-project dialog (Phase 3 assist) */
+.import-tokens {
+  width: min(560px, 100%);
+}
+
+.import-tokens-sources {
+  max-height: min(300px, 40vh);
+  overflow: auto;
+  padding: .25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--input);
+}
+
+.import-tokens-files {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.import-tokens-files code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

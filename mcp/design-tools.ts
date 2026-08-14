@@ -27,6 +27,12 @@ function isTokenGroup(value: unknown): value is DesignTokenGroup {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+// Agent-draft size caps (the GUI is uncapped — the user owns their own file).
+const MAX_NAME_CHARS = 120
+const MAX_DIRECTION_CHARS = 20_000
+const MAX_SOURCE_NOTE_CHARS = 1_000
+const MAX_TOKENS_JSON_BYTES = 128 * 1024
+
 interface DesignToolHost {
   server: McpServer
   store: LibraryStore
@@ -145,6 +151,25 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
         ) {
           return errorResult('tokens and modes must be objects of DTCG token groups.')
         }
+        // Size caps: profiles are brand summaries that flow into every brief,
+        // not document storage. Generous for real brands, refuses runaways.
+        if (name.length > MAX_NAME_CHARS) {
+          return errorResult(`name exceeds ${MAX_NAME_CHARS} characters.`)
+        }
+        if (direction && direction.length > MAX_DIRECTION_CHARS) {
+          return errorResult(
+            `direction exceeds ${MAX_DIRECTION_CHARS.toLocaleString('en-US')} characters. Keep it a distilled brief — trim boilerplate and long excerpts.`,
+          )
+        }
+        if (sourceNote && sourceNote.length > MAX_SOURCE_NOTE_CHARS) {
+          return errorResult(`sourceNote exceeds ${MAX_SOURCE_NOTE_CHARS} characters. A URL or one-line description is enough.`)
+        }
+        const tokensBytes = Buffer.byteLength(JSON.stringify({ tokens, modes }), 'utf8')
+        if (tokensBytes > MAX_TOKENS_JSON_BYTES) {
+          return errorResult(
+            `tokens + modes serialize to ${Math.ceil(tokensBytes / 1024)} KB (max ${MAX_TOKENS_JSON_BYTES / 1024} KB). Send the distilled token set, not a full extracted stylesheet.`,
+          )
+        }
         // Everything here reaches other agents through briefs — refuse
         // credential-looking content in ANY field outright rather than
         // relying on masking (name and token values included).
@@ -161,36 +186,11 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
           }
         }
 
-        // Resolve the write target under the ownership policy: agents own
-        // only what agents created, and any GUI edit transfers ownership.
-        let target = id ? profiles.get(id) : undefined
-        if (id && !target) return errorResult(`Design profile not found: ${id}`)
-        if (!target) {
-          const sameName = profiles.findByName(name)
-          if (sameName?.origin === 'agent') target = sameName // idempotent re-extraction
-          else if (sameName) {
-            return errorResult(
-              `A user-owned profile named "${sameName.name}" already exists. The user edits it in Shelf — save your extraction under a different name instead.`,
-            )
-          }
-        } else if (target.origin !== 'agent') {
-          return errorResult(
-            `Profile "${target.name}" is user-owned. Agents cannot modify it — the user edits it in Shelf's Design section. Create a new profile instead.`,
-          )
-        } else {
-          // Rename-by-id must respect the same collision guard as create —
-          // otherwise an agent draft can masquerade under a user profile's name.
-          const collision = profiles.findByName(name)
-          if (collision && collision.id !== target.id) {
-            return errorResult(
-              `A profile named "${collision.name}" already exists. Pick a different name.`,
-            )
-          }
-        }
-
-        const action = target ? 'updated' : 'created'
-        const saved = profiles.save({
-          id: target?.id,
+        // Ownership policy (agents own only what agents created; any GUI
+        // edit transfers ownership) is enforced by the store INSIDE its
+        // write lock — checking it here would race a concurrent GUI save.
+        const { action, profile: saved } = profiles.upsertFromAgent({
+          id,
           name,
           tokens: tokens as DesignTokenGroup | undefined,
           modes: modes as
@@ -198,10 +198,6 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
             | undefined,
           direction,
           sourceNote,
-          origin: 'agent',
-          // isDefault deliberately never passed: an agent draft cannot claim
-          // or move the default. (The store still auto-defaults the very
-          // first profile in an empty library so zero-arg resolution works.)
         })
         return textResult({
           action,

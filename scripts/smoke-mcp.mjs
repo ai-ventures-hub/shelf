@@ -340,6 +340,44 @@ async function main() {
     }
     console.log('OK: design profiles (list, default, collection, tool)')
 
+    // --- shelf_get_collection: one-call stack context ---
+    const collectionCtx = await callTool(client, 'shelf_get_collection', {
+      name: 'design smoke collection', // case-insensitive name lookup
+    })
+    if (collectionCtx.collection.id !== designCollection.id) {
+      throw new Error('shelf_get_collection name lookup returned the wrong collection')
+    }
+    const member = collectionCtx.members.find((m) => m.id === toolId)
+    if (!member || !member.readiness || typeof member.status !== 'string') {
+      throw new Error('Collection member missing readiness/runtime state')
+    }
+    if (
+      collectionCtx.designProfile?.id !== seededProfile.id ||
+      collectionCtx.designProfile.resolvedVia !== 'collection' ||
+      !collectionCtx.designProfile.summary
+    ) {
+      throw new Error('shelf_get_collection must resolve the bound design profile')
+    }
+    let unknownCollectionRejected = false
+    try {
+      await callTool(client, 'shelf_get_collection', { id: 'nope' })
+    } catch (err) {
+      unknownCollectionRejected = /shelf_list_collections/.test(String(err.message || err))
+    }
+    if (!unknownCollectionRejected) {
+      throw new Error('Unknown collection must error with list guidance')
+    }
+    let arglessRejected = false
+    try {
+      await callTool(client, 'shelf_get_collection', {})
+    } catch {
+      arglessRejected = true
+    }
+    if (!arglessRejected) {
+      throw new Error('shelf_get_collection without id or name must error')
+    }
+    console.log('OK: collection context (members, runtime, brand)')
+
     // Resource: markdown brief on hit, JSON found:false on miss.
     const resource = await client.readResource({
       uri: `shelf://design/profiles/${seededProfile.id}`,
@@ -408,13 +446,32 @@ async function main() {
       throw new Error('Upsert must refuse an explicit user-owned profile id')
     }
 
-    // Credential-looking content is refused in EVERY field, not masked.
+    // Credential-looking content is refused in EVERY field, not masked —
+    // including bare vendor tokens with no KEY= assignment.
     const secretPayloads = [
       { name: 'Leaky Brand', direction: 'Use API_KEY=abc123 everywhere.' },
       { name: 'Leaky Brand', sourceNote: 'from https://x.test?ACCESS_KEY=abc123' },
       {
         name: 'Leaky Brand',
         tokens: { color: { sneaky: { $value: 'AWS_SECRET=abc123', $type: 'color' } } },
+      },
+      { name: 'Leaky Brand', direction: `Deploy key ghp_${'a'.repeat(36)} lives here.` },
+      { name: 'Leaky Brand', sourceNote: 'sk-a1b2cdefghijklmnop34qr' },
+      // Mid-text PEM: \b never matched a leading '-', so this once slipped by.
+      {
+        name: 'Leaky Brand',
+        direction: 'key follows:\n-----BEGIN RSA PRIVATE KEY-----\nMIIabc',
+      },
+      {
+        name: 'Leaky Brand',
+        tokens: {
+          color: {
+            sneaky: {
+              $value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghij_klm',
+              $type: 'color',
+            },
+          },
+        },
       },
     ]
     for (const payload of secretPayloads) {
@@ -427,6 +484,43 @@ async function main() {
       if (!secretRejected) {
         throw new Error(
           `Upsert must refuse credential-like content in ${Object.keys(payload).join('/')}`,
+        )
+      }
+    }
+
+    // Design-system vocabulary must NOT read as credentials: sk-/xox kebab
+    // identifiers without digits are legitimate content (audit regression).
+    const benign = await callTool(client, 'shelf_upsert_design_profile', {
+      name: 'Kebab Brand',
+      direction: 'Use sk-primary-button-large for CTAs; avoid xoxb-like-token-names.',
+      tokens: {
+        color: { 'sk-brand': { $value: 'var(--sk-color-brand-primary)', $type: 'color' } },
+      },
+    })
+    if (benign.action !== 'created') {
+      throw new Error('Kebab-case sk-/xox names must not be refused as secrets')
+    }
+
+    // Size caps: agent drafts are brand summaries, not document storage.
+    const oversizePayloads = [
+      { name: 'Cap Brand', direction: 'x'.repeat(20_001) },
+      { name: 'Cap Brand', sourceNote: 'y'.repeat(1_001) },
+      {
+        name: 'Cap Brand',
+        tokens: { blob: { big: { $value: 'z'.repeat(140 * 1024), $type: 'other' } } },
+      },
+      { name: 'N'.repeat(121) },
+    ]
+    for (const payload of oversizePayloads) {
+      let oversizeRejected = false
+      try {
+        await callTool(client, 'shelf_upsert_design_profile', payload)
+      } catch (err) {
+        oversizeRejected = /exceeds|max/i.test(String(err.message || err))
+      }
+      if (!oversizeRejected) {
+        throw new Error(
+          `Upsert must refuse oversized ${Object.keys(payload).join('/')} with a size message`,
         )
       }
     }
@@ -467,7 +561,7 @@ async function main() {
     // The default never moved through any of the above.
     const afterUpserts = await callTool(client, 'shelf_list_design_profiles')
     const stillDefault = afterUpserts.profiles.find((p) => p.isDefault)
-    if (afterUpserts.count !== 2 || stillDefault?.id !== seededProfile.id) {
+    if (afterUpserts.count !== 3 || stillDefault?.id !== seededProfile.id) {
       throw new Error('Agent writes must never move the default profile')
     }
     console.log('OK: agent upsert (draft-only, ownership, secret refusal)')

@@ -168,7 +168,7 @@ export const BRAND_PRESETS = [
     swatches: ['#f4f0e6', '#fdfbf4', '#2d4a34', '#b4552d', '#5a5348'],
     fontLabel: 'Georgia · serif / roman',
     voiceLine: 'Slow growth is still growth.',
-    source: 'agent-extracted from a site you loved — you approved the draft',
+    source: 'seeded from the CSS variables your project already declares — nothing guessed',
     cssVars: {
       '--be-bg': '#f4f0e6',
       '--be-surface': '#fdfbf4',

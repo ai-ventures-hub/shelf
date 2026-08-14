@@ -6,6 +6,7 @@ export type {
   Tool,
   Collection,
   ToolRuntimeState,
+  ToolHealth,
   LogLine,
   LibraryFile,
   UiPrefs,
@@ -62,6 +63,7 @@ export type {
 } from '../shared/collection-launch'
 export type { GapResolveSuggestion } from '../shared/gap-suggest'
 export type { SaveDesignProfileInput } from '../shared/design-profile-store'
+export type { ExtractedTokens } from '../shared/design-extract'
 export type { ShortcutStatus } from '../shared/global-shortcut'
 export {
   DEFAULT_GLOBAL_SHORTCUT,

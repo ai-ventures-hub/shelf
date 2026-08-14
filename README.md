@@ -33,8 +33,9 @@ query what you've built, launch it, and honestly record what's missing.
   Shelf writes it down instead of improvising. Plans, not silent failures.
 - **Your brand, in every agent.** Design profiles hold your colors, type, voice, and logo assets —
   edited with a live preview, served over MCP. Say "build it with my branding" in any connected
-  agent and it pulls your tokens and a paste-ready brand brief. Show an agent a site you love and
-  it can save the extracted brand back as a draft you review.
+  agent and it pulls your tokens and a paste-ready brand brief. Seed a profile straight from a
+  project's own CSS variables and Tailwind config — deterministically, nothing guessed — or show
+  an agent a site you love and it saves the extracted brand back as a draft you review.
 - **Quick Open** (`⌘K`), menu bar mode, and a `shelf://` URL scheme.
 
 ## Install
@@ -114,7 +115,7 @@ Example prompts:
 `shelf_update_capability_gap`, `shelf_find_free_port`, `shelf_inspect_project`,
 `shelf_register_project`, `shelf_upsert_tool`, `shelf_remove_tool`, `shelf_launch_tool`,
 `shelf_stop_tool`, `shelf_get_status`, `shelf_get_logs`, `shelf_list_receipts`,
-`shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_design_md`,
+`shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_collection`, `shelf_get_design_md`,
 `shelf_list_design_profiles`, `shelf_get_design_profile`, `shelf_upsert_design_profile`.
 
 Resources: `shelf://tools/{id}/design-md`, `shelf://design/profiles/{id}`.

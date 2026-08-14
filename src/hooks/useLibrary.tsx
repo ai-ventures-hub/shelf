@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -13,6 +14,7 @@ import type {
   LogLine,
   StartOptions,
   Tool,
+  ToolHealth,
   ToolRuntimeState,
 } from '../types'
 
@@ -20,6 +22,7 @@ interface LibraryContextValue {
   tools: Tool[]
   collections: Collection[]
   states: Record<string, ToolRuntimeState>
+  health: Record<string, ToolHealth>
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -45,8 +48,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [tools, setTools] = useState<Tool[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [states, setStates] = useState<Record<string, ToolRuntimeState>>({})
+  const [health, setHealth] = useState<Record<string, ToolHealth>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const healthTimerRef = useRef<number | null>(null)
+
+  const refreshHealth = useCallback(async () => {
+    if (!window.shelf?.getToolHealth) return
+    try {
+      const list = await window.shelf.getToolHealth()
+      setHealth(Object.fromEntries(list.map((h) => [h.toolId, h])))
+    } catch {
+      // Glyphs are advisory — a failed scan must never break the library view.
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!hasShelfApi()) {
@@ -64,12 +79,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setCollections(nextCollections)
       setStates(Object.fromEntries(nextStates.map((s) => [s.toolId, s])))
       setError(null)
+      void refreshHealth()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [refreshHealth])
 
   // Agents add/edit tools through the MCP server (a separate process); the
   // main process watches the shared store and tells us to re-read.
@@ -86,9 +102,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
     const offRuntime = window.shelf.onRuntimeUpdate((state) => {
       setStates((prev) => ({ ...prev, [state.toolId]: state }))
+      // Start/stop changes what counts as a port conflict — refresh the
+      // launchability glyphs, debounced across bursts of updates.
+      if (healthTimerRef.current !== null) window.clearTimeout(healthTimerRef.current)
+      healthTimerRef.current = window.setTimeout(() => {
+        healthTimerRef.current = null
+        void refreshHealth()
+      }, 400)
     })
-    return () => offRuntime()
-  }, [refresh])
+    return () => {
+      offRuntime()
+      if (healthTimerRef.current !== null) window.clearTimeout(healthTimerRef.current)
+    }
+  }, [refresh, refreshHealth])
 
   const saveTool = useCallback(
     async (tool: Tool) => {
@@ -166,6 +192,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       tools,
       collections,
       states,
+      health,
       loading,
       error,
       refresh,
@@ -183,6 +210,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       tools,
       collections,
       states,
+      health,
       loading,
       error,
       refresh,

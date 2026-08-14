@@ -96,8 +96,12 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
 - **v1.0 — Design Engine** (shipped 2026-08-12): Shelf as the local source
   of truth for brand/design context; "build this using my branding" over
   MCP, GUI editor with live preview, and agent-extracted draft profiles.
-  See [`DESIGN-ENGINE.md`](DESIGN-ENGINE.md). Phase 3 (binding UI polish +
-  deterministic token extraction) follows post-1.0.
+  See [`DESIGN-ENGINE.md`](DESIGN-ENGINE.md).
+- **v1.1 — Project roots** (shipped 2026-08-13): deterministic token
+  extraction from a project's CSS variables / Tailwind config, the
+  new-profile wizard (blank vs project-seeded), imported fonts in the
+  live preview, `shelf_get_collection` stack context, launch-health
+  chips on library cards, and agent write-path hardening.
 
 ## Later Community enhancements
 

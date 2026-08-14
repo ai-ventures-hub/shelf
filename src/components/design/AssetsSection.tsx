@@ -9,10 +9,17 @@ import type { DesignAsset, DesignAssetKind } from '../../types'
 
 const KINDS: DesignAssetKind[] = ['logo', 'wordmark', 'icon', 'other']
 
-function AssetThumb({ asset }: { asset: DesignAsset }) {
+const IMAGE_EXT = /\.(svg|png|jpe?g|webp|gif|ico)$/i
+
+function AssetThumb({ asset, refreshKey }: { asset: DesignAsset; refreshKey: string }) {
+  const isImage = IMAGE_EXT.test(asset.path)
   const [src, setSrc] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
+    if (!isImage) {
+      setSrc(null)
+      return
+    }
     window.shelf?.designAssetDataUrl?.(asset.path)
       .then((url) => {
         if (!cancelled) setSrc(url)
@@ -23,7 +30,9 @@ function AssetThumb({ asset }: { asset: DesignAsset }) {
     return () => {
       cancelled = true
     }
-  }, [asset.path])
+    // refreshKey: re-importing the same basename overwrites the file at the
+    // same path — the profile's updatedAt is what actually changes.
+  }, [asset.path, isImage, refreshKey])
 
   if (src) return <img src={src} alt="" />
   // Non-previewable (pdf, fonts): file-extension glyph.
@@ -33,6 +42,9 @@ function AssetThumb({ asset }: { asset: DesignAsset }) {
 
 interface AssetsSectionProps {
   assets: DesignAsset[]
+  /** Changes on asset operations only — busts stale thumbnails without
+      re-fetching on every token/direction auto-save. */
+  refreshKey: string
   busy: boolean
   onPick: () => void
   onDropPaths: (paths: string[]) => void
@@ -42,6 +54,7 @@ interface AssetsSectionProps {
 
 export function AssetsSection({
   assets,
+  refreshKey,
   busy,
   onPick,
   onDropPaths,
@@ -98,7 +111,7 @@ export function AssetsSection({
                 >
                   ×
                 </button>
-                <AssetThumb asset={asset} />
+                <AssetThumb asset={asset} refreshKey={refreshKey} />
                 <span className="asset-tile-name" title={asset.path}>
                   {basename}
                 </span>

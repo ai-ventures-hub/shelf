@@ -7,6 +7,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { resolveDesignMd } from '../shared/design-md'
+import { resolveDesignProfile } from '../shared/design-resolve'
+import { summarizeDesignProfile } from '../shared/design-brief'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
 import { DesignProfileStore } from '../shared/design-profile-store'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
@@ -400,11 +402,74 @@ registerDesignTools({ server, store, profiles: designProfiles })
 server.registerTool(
   'shelf_list_collections',
   {
-    description: 'List curated Shelf collections and their tool membership.',
+    description:
+      'List curated Shelf collections and their tool membership. Use shelf_get_collection for one collection\'s full context (member states, brand profile).',
   },
   async () => {
     const collections = store.listCollections()
     return textResult({ count: collections.length, collections })
+  },
+)
+
+server.registerTool(
+  'shelf_get_collection',
+  {
+    description:
+      "One collection's full working context in a single call: members with readiness and live runtime state, plus the design/brand profile the collection resolves to. Use when working on a stack ('the client project', 'my blog setup') so you know what runs, what's broken, and which brand applies before touching anything. Accepts id or exact name.",
+    inputSchema: {
+      id: z.string().optional().describe('Collection id'),
+      name: z.string().optional().describe('Exact collection name (case-insensitive)'),
+    },
+  },
+  async ({ id, name }) => {
+    if (!id && !name) return errorResult('Pass a collection id or name.')
+    const collections = store.listCollections()
+    const collection = id
+      ? collections.find((c) => c.id === id)
+      : collections.find((c) => c.name.toLowerCase() === name!.trim().toLowerCase())
+    if (!collection) {
+      return errorResult(
+        `Collection not found: ${id || name}. Call shelf_list_collections to see what exists.`,
+      )
+    }
+
+    const members = await Promise.all(
+      collection.toolIds.map(async (toolId) => {
+        const tool = store.get(toolId)
+        if (!tool) return { id: toolId, missing: true as const }
+        const state = await processes.getState(toolId)
+        return {
+          id: tool.id,
+          name: tool.name,
+          capabilities: tool.capabilities,
+          accessKinds: Array.from(new Set(tool.agentAccess.map((access) => access.kind))),
+          readiness: deriveToolReadiness(tool),
+          projectPath: tool.projectPath,
+          port: tool.port,
+          url: tool.url,
+          status: state.status,
+          message: state.message,
+        }
+      }),
+    )
+
+    const brand = resolveDesignProfile(designProfiles.list(), collections, {
+      collectionId: collection.id,
+    })
+    return textResult({
+      collection: { id: collection.id, name: collection.name },
+      members,
+      running: members.filter((m) => 'status' in m && m.status === 'running').length,
+      designProfile: brand.profile
+        ? {
+            id: brand.profile.id,
+            name: brand.profile.name,
+            resolvedVia: brand.via,
+            summary: summarizeDesignProfile(brand.profile),
+            note: 'Call shelf_get_design_profile with this id for tokens and the full brand brief.',
+          }
+        : null,
+    })
   },
 )
 

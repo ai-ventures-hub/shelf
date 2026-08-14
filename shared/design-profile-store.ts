@@ -49,9 +49,19 @@ export interface SaveDesignProfileInput {
   /**
    * 'agent' marks/keeps the profile agent-owned; 'user' transfers ownership
    * to the user (any GUI save passes this); omitted preserves the current
-   * owner. Ownership policy (who may write what) lives in the callers.
+   * owner. GUI/seed callers use save(); the agent write path must go through
+   * upsertFromAgent(), which enforces the ownership policy under the lock.
    */
   origin?: 'agent' | 'user'
+  sourceNote?: string
+}
+
+export interface AgentUpsertInput {
+  id?: string
+  name: string
+  tokens?: DesignTokenGroup
+  modes?: { light?: DesignTokenGroup; dark?: DesignTokenGroup }
+  direction?: string
   sourceNote?: string
 }
 
@@ -100,15 +110,8 @@ export class DesignProfileStore {
     return this.read().profiles.find((profile) => profile.id === id)
   }
 
-  /**
-   * Case-insensitive, NFC-normalized name lookup — idempotent seeding, and
-   * the ownership guard must not be dodged by a Unicode doppelganger.
-   */
   findByName(name: string): DesignProfile | undefined {
-    const needle = name.normalize('NFC').trim().toLowerCase()
-    return this.read().profiles.find(
-      (profile) => profile.name.normalize('NFC').toLowerCase() === needle,
-    )
+    return findByNameIn(this.read().profiles, name)
   }
 
   getDefault(): DesignProfile | undefined {
@@ -120,57 +123,114 @@ export class DesignProfileStore {
    * isDefault on a later profile clears the flag everywhere else.
    */
   save(input: SaveDesignProfileInput): DesignProfile {
-    const name = input.name.trim()
-    if (!name) throw new Error('Profile name is required.')
-
     return withFileLockSync(this.filePath, () => {
       const data = this.read()
-      const now = new Date().toISOString()
-      const index = input.id ? data.profiles.findIndex((p) => p.id === input.id) : -1
-      const existing = index >= 0 ? data.profiles[index] : undefined
-      if (input.id && !existing) throw new Error(`Design profile not found: ${input.id}`)
-
-      const makeDefault =
-        input.isDefault ?? existing?.isDefault ?? data.profiles.length === 0
-
-      const origin =
-        input.origin === 'agent'
-          ? ('agent' as const)
-          : input.origin === 'user'
-            ? undefined
-            : existing?.origin
-      const sourceNote =
-        input.sourceNote !== undefined
-          ? input.sourceNote.trim() || undefined
-          : existing?.sourceNote
-
-      const profile: DesignProfile = {
-        id: existing?.id || randomUUID(),
-        name,
-        isDefault: makeDefault,
-        tokens: input.tokens ?? existing?.tokens ?? {},
-        modes: {
-          light: input.modes?.light ?? existing?.modes.light ?? {},
-          dark: input.modes?.dark ?? existing?.modes.dark ?? {},
-        },
-        direction: input.direction ?? existing?.direction ?? '',
-        assets: input.assets ?? existing?.assets ?? [],
-        ...(origin ? { origin } : {}),
-        ...(sourceNote ? { sourceNote } : {}),
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
-      }
-
-      if (makeDefault) {
-        for (const other of data.profiles) {
-          if (other.id !== profile.id) other.isDefault = false
-        }
-      }
-      if (existing) data.profiles[index] = profile
-      else data.profiles.push(profile)
+      const profile = this.applySave(data, input)
       this.write(data)
       return profile
     })
+  }
+
+  /**
+   * The agent write path (shelf_upsert_design_profile). Target resolution and
+   * the ownership policy run inside the SAME lock acquisition as the write —
+   * a GUI save that transfers ownership can land before or after this call,
+   * never between the check and the write. Throws agent-readable messages.
+   */
+  upsertFromAgent(input: AgentUpsertInput): { action: 'created' | 'updated'; profile: DesignProfile } {
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      let target = input.id ? data.profiles.find((p) => p.id === input.id) : undefined
+      if (input.id && !target) throw new Error(`Design profile not found: ${input.id}`)
+      if (!target) {
+        const sameName = findByNameIn(data.profiles, input.name)
+        if (sameName?.origin === 'agent') {
+          target = sameName // idempotent re-extraction updates the earlier draft
+        } else if (sameName) {
+          throw new Error(
+            `A user-owned profile named "${sameName.name}" already exists. The user edits it in Shelf — save your extraction under a different name instead.`,
+          )
+        }
+      } else if (target.origin !== 'agent') {
+        throw new Error(
+          `Profile "${target.name}" is user-owned. Agents cannot modify it — the user edits it in Shelf's Design section. Create a new profile instead.`,
+        )
+      } else {
+        // Rename-by-id must respect the same collision guard as create —
+        // otherwise an agent draft can masquerade under a user profile's name.
+        const collision = findByNameIn(data.profiles, input.name)
+        if (collision && collision.id !== target.id) {
+          throw new Error(`A profile named "${collision.name}" already exists. Pick a different name.`)
+        }
+      }
+
+      const action = target ? ('updated' as const) : ('created' as const)
+      const profile = this.applySave(data, {
+        id: target?.id,
+        name: input.name,
+        tokens: input.tokens,
+        modes: input.modes,
+        direction: input.direction,
+        sourceNote: input.sourceNote,
+        origin: 'agent',
+        // isDefault deliberately never passed: an agent draft cannot claim or
+        // move the default. (applySave still auto-defaults the very first
+        // profile in an empty library so zero-arg resolution works.)
+      })
+      this.write(data)
+      return { action, profile }
+    })
+  }
+
+  /** Core upsert, mutating `data` in place. Caller holds the lock and writes. */
+  private applySave(data: DesignProfilesFile, input: SaveDesignProfileInput): DesignProfile {
+    const name = input.name.trim()
+    if (!name) throw new Error('Profile name is required.')
+
+    const now = new Date().toISOString()
+    const index = input.id ? data.profiles.findIndex((p) => p.id === input.id) : -1
+    const existing = index >= 0 ? data.profiles[index] : undefined
+    if (input.id && !existing) throw new Error(`Design profile not found: ${input.id}`)
+
+    const makeDefault =
+      input.isDefault ?? existing?.isDefault ?? data.profiles.length === 0
+
+    const origin =
+      input.origin === 'agent'
+        ? ('agent' as const)
+        : input.origin === 'user'
+          ? undefined
+          : existing?.origin
+    const sourceNote =
+      input.sourceNote !== undefined
+        ? input.sourceNote.trim() || undefined
+        : existing?.sourceNote
+
+    const profile: DesignProfile = {
+      id: existing?.id || randomUUID(),
+      name,
+      isDefault: makeDefault,
+      tokens: input.tokens ?? existing?.tokens ?? {},
+      modes: {
+        light: input.modes?.light ?? existing?.modes.light ?? {},
+        dark: input.modes?.dark ?? existing?.modes.dark ?? {},
+      },
+      direction: input.direction ?? existing?.direction ?? '',
+      assets: input.assets ?? existing?.assets ?? [],
+      ...(origin ? { origin } : {}),
+      ...(sourceNote ? { sourceNote } : {}),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    }
+
+    if (makeDefault) {
+      for (const other of data.profiles) {
+        if (other.id !== profile.id) other.isDefault = false
+      }
+    }
+    if (existing) data.profiles[index] = profile
+    else data.profiles.push(profile)
+    return profile
   }
 
   setDefault(id: string): DesignProfile {
@@ -285,6 +345,17 @@ export class DesignProfileStore {
   private write(data: DesignProfilesFile): void {
     atomicWriteFileSync(this.filePath, JSON.stringify(data, null, 2))
   }
+}
+
+/**
+ * Case-insensitive, NFC-normalized name lookup — idempotent seeding, and
+ * the ownership guard must not be dodged by a Unicode doppelganger.
+ */
+function findByNameIn(profiles: DesignProfile[], name: string): DesignProfile | undefined {
+  const needle = name.normalize('NFC').trim().toLowerCase()
+  return profiles.find(
+    (profile) => profile.name.normalize('NFC').toLowerCase() === needle,
+  )
 }
 
 function isTokenGroup(value: unknown): value is DesignTokenGroup {

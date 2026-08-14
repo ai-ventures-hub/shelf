@@ -21,6 +21,7 @@ import type {
   DesignAssetKind,
   DesignMdResult,
   DesignProfile,
+  ExtractedTokens,
   GapResolveSuggestion,
   SaveDesignProfileInput,
   LogLine,
@@ -30,6 +31,7 @@ import type {
   RunReceipt,
   ShortcutStatus,
   Tool,
+  ToolHealth,
   ToolReadiness,
   ToolRuntimeState,
   UiPrefs,
@@ -41,6 +43,8 @@ import type {
  */
 const api = {
   listTools: (): Promise<Tool[]> => ipcRenderer.invoke('tools:list'),
+  /** Launchability snapshot for every tool — one batched port scan. */
+  getToolHealth: (): Promise<ToolHealth[]> => ipcRenderer.invoke('tools:health'),
   saveTool: (tool: Tool): Promise<Tool> => ipcRenderer.invoke('tools:save', tool),
   deleteTool: (id: string): Promise<void> => ipcRenderer.invoke('tools:delete', id),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('tools:pickFolder'),
@@ -101,6 +105,9 @@ const api = {
   /** Preview data-url for a brand asset; null for non-image assets. */
   designAssetDataUrl: (assetPath: string): Promise<string | null> =>
     ipcRenderer.invoke('designProfiles:assetDataUrl', assetPath),
+  /** Deterministic token extraction from a project folder (Phase 3 assist). */
+  extractDesignTokens: (projectPath: string): Promise<ExtractedTokens> =>
+    ipcRenderer.invoke('designProfiles:extractTokens', projectPath),
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (

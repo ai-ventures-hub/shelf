@@ -14,6 +14,8 @@ import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
+import { extractProjectTokens } from '../shared/design-extract'
+import { deriveLibraryHealth } from '../shared/tool-health'
 import { buildDesignBrief } from '../shared/design-brief'
 import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
@@ -492,6 +494,11 @@ function registerIpc(): void {
     const profile = designProfiles.get(id)
     return profile ? buildDesignBrief(profile) : null
   })
+  // Phase 3 assist: deterministic parse of the project's CSS custom
+  // properties / Tailwind literals. Read-only — applying is a GUI save.
+  ipcMain.handle('designProfiles:extractTokens', (_e, projectPath: string) =>
+    extractProjectTokens(projectPath),
+  )
   // Data-url previews for the editor. Restricted to the brand-assets root so
   // the renderer cannot read arbitrary files through this channel.
   ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {
@@ -515,8 +522,16 @@ function registerIpc(): void {
                 ? 'image/x-icon'
                 : ext === '.png'
                   ? 'image/png'
-                  : null
-    if (!mime) return null // non-previewable (pdf/fonts) — renderer shows a glyph tile
+                  : ext === '.woff2'
+                    ? 'font/woff2'
+                    : ext === '.woff'
+                      ? 'font/woff'
+                      : ext === '.ttf'
+                        ? 'font/ttf'
+                        : ext === '.otf'
+                          ? 'font/otf'
+                          : null
+    if (!mime) return null // non-previewable (pdf) — renderer shows a glyph tile
     const buf = fs.readFileSync(resolved)
     return `data:${mime};base64,${buf.toString('base64')}`
   })
@@ -629,6 +644,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('process:states', () => processes.getStates())
+  // Launchability glyphs for library cards — one lsof call for all tools.
+  ipcMain.handle('tools:health', async () =>
+    deriveLibraryHealth(store.list(), await processes.getStates()),
+  )
   ipcMain.handle('process:start', (_e, id: string, options?: StartOptions) =>
     processes.start(id, options),
   )

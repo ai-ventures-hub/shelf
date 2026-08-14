@@ -238,7 +238,11 @@ export function AppShowcase() {
                           className="pill"
                           data-tone={preset.id === 'shelf' ? 'accent' : 'muted'}
                         >
-                          {preset.id === 'shelf' ? 'Default' : 'From agent'}
+                          {preset.id === 'shelf'
+                            ? 'Default'
+                            : preset.id === 'verdant'
+                              ? 'From project'
+                              : 'From agent'}
                         </span>
                       </div>
                     ))}

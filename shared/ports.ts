@@ -77,6 +77,26 @@ export async function processBelongsToGroup(pid: number, pgid: number): Promise<
   return (await findProcessGroupId(pid)) === pgid
 }
 
+/**
+ * Every TCP port with a LISTEN socket, from ONE lsof call — the batch
+ * primitive for health checks over a whole library (per-tool lsof calls
+ * multiply a ~50ms subprocess by N tools).
+ */
+export async function listListeningPorts(): Promise<Set<number>> {
+  const ports = new Set<number>()
+  try {
+    const { stdout } = await execFileAsync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN'])
+    for (const line of stdout.split('\n')) {
+      const match = /:(\d+)\s+\(LISTEN\)/.exec(line)
+      if (match) ports.add(Number(match[1]))
+    }
+  } catch {
+    // lsof unavailable or zero results (lsof exits 1) — report none rather
+    // than guessing; callers treat this as "no conflicts detected".
+  }
+  return ports
+}
+
 /** True when nothing is listening on the port. */
 export async function isPortFree(port: number): Promise<boolean> {
   const occupant = await findPortOccupant(port)

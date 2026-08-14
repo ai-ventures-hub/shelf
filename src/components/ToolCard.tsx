@@ -1,10 +1,26 @@
-import { ExternalLink, Play, Square, Star } from 'lucide-react'
+import { ExternalLink, Play, Square, Star, TriangleAlert } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
-import type { Tool, ToolRuntimeState } from '../types'
+import type { Tool, ToolHealth, ToolRuntimeState } from '../types'
 import { StatusPill } from './StatusPill'
 import { ToolIcon } from './ToolIcon'
+
+/**
+ * Launchability warning (triage E). Readiness (agent setup) and launchability
+ * are different facts — this chip only reports "Launch will not work right
+ * now" blockers, and shows nothing when the tool is healthy or live.
+ */
+function HealthChip({ health, live }: { health?: ToolHealth; live: boolean }) {
+  if (!health || health.launchable || live) return null
+  const [first] = health.problems
+  return (
+    <span className="meta-chip health-chip" title={health.problems.join(' ')}>
+      <TriangleAlert size={11} aria-hidden />
+      {first.replace(/\s*—.*$/, '').replace(/\.$/, '')}
+    </span>
+  )
+}
 
 /**
  * "Who started this?" — shown in BOTH ui modes on live cards; provenance is
@@ -39,6 +55,7 @@ function formatRelative(iso?: string): string {
 export function ToolCard({
   tool,
   state,
+  health,
   hideChips = false,
   onLaunch,
   onStop,
@@ -47,6 +64,7 @@ export function ToolCard({
 }: {
   tool: Tool
   state?: ToolRuntimeState
+  health?: ToolHealth
   /** Simple mode: no port/time/tag chips — icon, name, status, controls. */
   hideChips?: boolean
   onLaunch?: () => void
@@ -93,6 +111,9 @@ export function ToolCard({
       <div className="tool-card-footer">
         <div className="tool-meta">
           <OriginChip state={state} />
+          {/* Health matters in BOTH ui modes — a broken Launch is a
+              Simple-mode problem too (the origin-chip precedent). */}
+          <HealthChip health={health} live={live} />
           {!hideChips ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
@@ -175,11 +196,13 @@ export function ToolCard({
 export function ToolListRow({
   tool,
   state,
+  health,
   onLaunch,
   onStop,
 }: {
   tool: Tool
   state?: ToolRuntimeState
+  health?: ToolHealth
   onLaunch?: () => void
   onStop?: () => void
 }) {
@@ -217,6 +240,7 @@ export function ToolListRow({
         <div className="tool-list-status">
           <StatusPill status={status} />
           <OriginChip state={state} />
+          <HealthChip health={health} live={canStop} />
         </div>
       </td>
       <td className="tabular">{tool.port ? `:${tool.port}` : '—'}</td>

@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.1.0 — 2026-08-13
+
+The Design Engine grows project roots: your brand can now come straight
+out of your own code — plus stack context for agents and honest launch
+health on every card.
+
+- **Extract tokens from your project**: Shelf deterministically parses
+  the design tokens a project already declares — CSS custom properties
+  (including Tailwind v4 `@theme`, `.dark`/`[data-theme]` scopes, and
+  `prefers-color-scheme` blocks, mapped to light/dark modes) and Tailwind
+  config literals. Nothing is guessed: component-scoped and computed
+  values are skipped and reported, `var()` references resolve against the
+  final cascade, and identical input always produces identical output.
+- **New profile wizard**: creating a profile now asks where to start —
+  Blank (the starter palette) or From a project, which seeds the profile
+  with only the extracted tokens, so an imported brand never carries
+  starter leftovers. In the editor, **Import from project** stays
+  additive by design: resync a profile without losing hand-set tokens.
+- **The preview wears your real fonts**: font files imported as brand
+  assets now render in the live preview via `@font-face`, matched to
+  your declared families by filename — registered under preview-only
+  names so they can never shadow the app's own fonts. Asset thumbnails
+  also refresh correctly when you re-import the same filename.
+- **`shelf_get_collection`**: one MCP call gives an agent a stack's full
+  working context — members with readiness and live runtime state, and
+  the brand profile the collection resolves to.
+- **Launch health on every card**: an amber chip warns when Launch won't
+  work right now — project folder missing, no launch command, or the
+  tool's port taken by another process. One batched port scan covers the
+  whole library; healthy tools show nothing (no decorative green).
+- **Agent write path hardened**: profile ownership is now checked inside
+  the store's write lock (no check-then-write race with GUI saves),
+  agent drafts have size caps, and bare vendor credentials (`ghp_…`,
+  `sk-…`, AWS keys, JWTs, private-key blocks) are refused on write and
+  masked in logs and briefs — no `KEY=` needed.
+
 ## 1.0.0 — 2026-08-12
 
 The Design Engine: Shelf becomes the local source of truth for how your
