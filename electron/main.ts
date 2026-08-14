@@ -108,6 +108,18 @@ if (!gotLock) {
   app.quit()
 }
 
+// The renderer never legitimately navigates away or opens windows: prod is a
+// local file, dev is the Vite origin. Deny everything else at the source —
+// external links go through the validated shell.openExternal IPC instead.
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  contents.on('will-navigate', (event, url) => {
+    const isDevOrigin =
+      process.env.SHELF_DEV === '1' && url.startsWith('http://127.0.0.1:5173')
+    if (!isDevOrigin && !url.startsWith('file://')) event.preventDefault()
+  })
+})
+
 // macOS may deliver open-url before ready — queue until host exists.
 app.on('open-url', (event, url) => {
   event.preventDefault()
@@ -188,7 +200,9 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // The preload requires only 'electron' (verified in the compiled
+      // output), so the full renderer sandbox costs nothing.
+      sandbox: true,
     },
   })
 
