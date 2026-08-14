@@ -76,4 +76,33 @@ assert.ok(report.includes("Cannot find module 'react'"))
 assert.ok(!report.includes('Launch: npm run dev\n'), 'system lines excluded from tail')
 console.log('OK: error report content')
 
+// Regression (1.1.1 audit): frameworks binding `localhost` often listen on
+// ::1 only on macOS (Vite 6 default). waitForPort must detect an IPv6-only
+// listener within a couple of seconds — an IPv4-only probe sat in Starting
+// for the full 60s timeout while the app was already serving.
+{
+  const net = await import('node:net')
+  const { waitForPort } = require('../dist-electron/shared/process-lifecycle')
+
+  const v6only = net.createServer()
+  await new Promise((resolve) => v6only.listen(0, '::1', resolve))
+  const started = Date.now()
+  const ready = await waitForPort(v6only.address().port, 5_000, () => true)
+  const elapsed = Date.now() - started
+  assert.equal(ready, true, 'IPv6-only listener must be detected')
+  assert.ok(elapsed < 2_000, `IPv6-only detection took ${elapsed}ms (must be fast, not a timeout)`)
+  await new Promise((resolve) => v6only.close(resolve))
+
+  const v4only = net.createServer()
+  await new Promise((resolve) => v4only.listen(0, '127.0.0.1', resolve))
+  assert.equal(await waitForPort(v4only.address().port, 5_000, () => true), true, 'IPv4 listener still detected')
+  await new Promise((resolve) => v4only.close(resolve))
+
+  const closedStart = Date.now()
+  assert.equal(await waitForPort(1, 1_200, () => true), false, 'nothing listening must still time out')
+  assert.ok(Date.now() - closedStart >= 1_200, 'timeout honored when neither stack accepts')
+  assert.equal(await waitForPort(1, 5_000, () => false), false, 'dead process resolves false immediately')
+  console.log('OK: waitForPort dual-stack (IPv6-only listener detected)')
+}
+
 console.log('OK: diagnostics smoke passed')

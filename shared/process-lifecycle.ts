@@ -124,30 +124,58 @@ export function waitForExit(child: ChildProcess, ms: number): Promise<void> {
   })
 }
 
+/**
+ * Poll until something accepts TCP on the port. Probes BOTH loopback stacks
+ * each tick: frameworks that bind `localhost` (Vite 6 default) often listen
+ * on ::1 only on macOS, where an IPv4-only probe never connects and the
+ * launch sat in Starting for the full timeout despite the app serving.
+ * On machines without IPv6 the ::1 attempt fails instantly and the IPv4
+ * probe carries the tick alone.
+ */
 export function waitForPort(
   port: number,
   timeoutMs: number,
   stillRunning: () => boolean,
 ): Promise<boolean> {
   const started = Date.now()
+  const hosts = ['127.0.0.1', '::1']
   return new Promise((resolve) => {
     const tick = () => {
       if (!stillRunning()) {
         resolve(false)
         return
       }
-      const socket = net.connect({ host: '127.0.0.1', port }, () => {
-        socket.end()
-        resolve(true)
-      })
-      socket.on('error', () => {
-        socket.destroy()
+      let pendingProbes = hosts.length
+      let settled = false
+      const sockets: net.Socket[] = []
+      const probeDone = (connected: boolean) => {
+        if (settled) return
+        if (connected) {
+          settled = true
+          for (const socket of sockets) socket.destroy()
+          resolve(true)
+          return
+        }
+        pendingProbes -= 1
+        if (pendingProbes > 0) return // the other stack may still connect
         if (Date.now() - started >= timeoutMs) {
+          settled = true
           resolve(false)
           return
         }
         setTimeout(tick, PORT_POLL_MS)
-      })
+      }
+      for (const host of hosts) {
+        const socket = net.connect({ host, port }, () => {
+          socket.end()
+          probeDone(true)
+        })
+        socket.on('error', () => {
+          socket.destroy()
+          probeDone(false)
+        })
+        sockets.push(socket)
+      }
     }
     tick()
   })
