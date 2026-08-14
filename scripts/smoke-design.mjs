@@ -289,6 +289,38 @@ try {
     'corrupt file is backed up before reset',
   )
 
+  // --- Traversal-shaped ids: healed on read, refused at the filesystem ---
+  fs.writeFileSync(
+    path.join(root, 'design-profiles.json'),
+    JSON.stringify({
+      version: 1,
+      profiles: [{ id: '../../evil-escape', name: 'Traversal' }],
+    }),
+  )
+  const traversalStore = new DesignProfileStore(root)
+  const healed = traversalStore.findByName('Traversal')
+  assert.ok(healed, 'traversal profile still loads')
+  assert.ok(
+    /^[0-9a-f-]{36}$/.test(healed.id),
+    `planted traversal id is healed to a UUID (${healed.id})`,
+  )
+  assert.throws(
+    () => traversalStore.importAsset('../../evil-escape', assetSource, 'logo'),
+    /Invalid design profile id/,
+    'importAsset refuses traversal ids before touching the filesystem',
+  )
+  assert.throws(
+    () => traversalStore.importAsset(healed.id + '-nope', assetSource, 'logo'),
+    /not found/,
+    'importAsset checks existence before any write',
+  )
+  assert.throws(
+    () => traversalStore.delete('../../evil-escape'),
+    /Invalid design profile id/,
+    'delete refuses traversal ids before deriving an rm target',
+  )
+  traversalStore.delete(healed.id)
+
   // --- Hand-edited profile with missing fields must degrade, not crash ---
   fs.writeFileSync(
     path.join(root, 'design-profiles.json'),

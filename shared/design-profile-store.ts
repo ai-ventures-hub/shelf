@@ -251,6 +251,9 @@ export class DesignProfileStore {
 
   /** Removes the profile and its brand-assets dir. Never touches library.json. */
   delete(id: string): void {
+    // Validate BEFORE the recursive rm target is derived — an unsafe id
+    // cannot exist post-normalization, so it is simply not found.
+    const assetsDir = this.getAssetsDir(id)
     withFileLockSync(this.filePath, () => {
       const data = this.read()
       const before = data.profiles.length
@@ -258,7 +261,7 @@ export class DesignProfileStore {
       if (data.profiles.length === before) throw new Error(`Design profile not found: ${id}`)
       this.write(data)
     })
-    fs.rmSync(path.join(this.assetsRoot, id), { recursive: true, force: true })
+    fs.rmSync(assetsDir, { recursive: true, force: true })
   }
 
   /**
@@ -268,8 +271,12 @@ export class DesignProfileStore {
    * concurrent reader of assets[].path never sees torn bytes.
    */
   importAsset(profileId: string, sourcePath: string, kind: DesignAssetKind): DesignAsset {
+    // Validate the id and confirm the profile exists BEFORE any filesystem
+    // write — the copy previously landed on disk even for unknown ids, and
+    // an unvalidated id turned this into an arbitrary-destination copy.
+    const dir = this.getAssetsDir(profileId)
+    if (!this.get(profileId)) throw new Error(`Design profile not found: ${profileId}`)
     if (!fs.existsSync(sourcePath)) throw new Error(`Asset file not found: ${sourcePath}`)
-    const dir = path.join(this.assetsRoot, profileId)
     fs.mkdirSync(dir, { recursive: true })
     const basename = path.basename(sourcePath)
     const destPath = path.join(dir, basename)
@@ -324,6 +331,11 @@ export class DesignProfileStore {
   }
 
   getAssetsDir(profileId: string): string {
+    // Every filesystem path under brand-assets derives from here — an
+    // invalid id must throw rather than widen the containment root.
+    if (!isSafeProfileId(profileId)) {
+      throw new Error(`Invalid design profile id: ${profileId}`)
+    }
     return path.join(this.assetsRoot, profileId)
   }
 
@@ -345,6 +357,16 @@ export class DesignProfileStore {
   private write(data: DesignProfilesFile): void {
     atomicWriteFileSync(this.filePath, JSON.stringify(data, null, 2))
   }
+}
+
+/**
+ * Filesystem-safe profile id. Brand-asset paths are DERIVED from the id
+ * (mkdir/copy/rmSync targets), so a traversal-shaped id from a hand-edited
+ * design-profiles.json or a hostile renderer must never reach the
+ * filesystem. UUIDs and benign slugs pass; separators and dot-runs do not.
+ */
+export function isSafeProfileId(id: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && !id.includes('..')
 }
 
 /**
@@ -372,7 +394,13 @@ function normalizeProfile(input: Partial<DesignProfile>): DesignProfile {
   const str = (value: unknown, fallback: string): string =>
     typeof value === 'string' && value.trim() ? value.trim() : fallback
   return {
-    id: str(input.id, randomUUID()),
+    // Unsafe (traversal-shaped) ids are healed to a UUID, not preserved:
+    // the constructor persists the normalized form, so a planted id is
+    // neutralized on first read.
+    id:
+      typeof input.id === 'string' && isSafeProfileId(input.id.trim())
+        ? input.id.trim()
+        : randomUUID(),
     name: str(input.name, 'Untitled'),
     isDefault: input.isDefault === true,
     tokens: isTokenGroup(input.tokens) ? input.tokens : {},

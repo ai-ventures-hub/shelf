@@ -10,6 +10,7 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
+import { maskSecrets } from './types'
 
 export interface LaunchFailureClassification {
   code: LaunchErrorCode
@@ -120,7 +121,9 @@ export function buildErrorReport(
     '## Shelf launch report',
     `Tool: ${tool.name}`,
     tool.projectPath ? `Project folder: ${tool.projectPath}` : null,
-    `Launch command: ${tool.launchCommand}`,
+    // Masked like receipt-store does at write time: this payload is pasted
+    // into agents verbatim, and launch commands carry inline KEY=value env.
+    `Launch command: ${maskSecrets(tool.launchCommand)}`,
     tool.port ? `Expected port: ${tool.port}` : null,
     tool.url ? `Expected URL: ${tool.url}` : null,
     `Status: ${state.status}${state.code ? ` (${state.code})` : ''}`,

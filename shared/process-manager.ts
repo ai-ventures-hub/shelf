@@ -326,6 +326,8 @@ export class ProcessManager {
       })
 
       child.on('exit', (code, signal) => {
+        // Commit any held partial log line before classifying the exit.
+        this.runtime.flushLogs(toolId)
         const open = this.processes.get(toolId)
         const wasManaged = this.processes.delete(toolId)
         if (!wasManaged) return
@@ -573,10 +575,29 @@ export class ProcessManager {
       pid: managed?.child.pid || externalOwner?.ownerPid || externalReceipt?.pid || undefined,
     })
 
-    try {
-      if (tool?.stopCommand?.trim()) {
-        this.runtime.appendLog(toolId, 'system', `Stop command: ${tool.stopCommand}`)
+    // A failing custom stop command must never abort the kill below — it is
+    // a graceful-shutdown courtesy, not the mechanism of record. (This
+    // previously threw past terminateProcess and left a live child behind.)
+    let stopCommandError: string | null = null
+    if (tool?.stopCommand?.trim()) {
+      this.runtime.appendLog(toolId, 'system', `Stop command: ${tool.stopCommand}`)
+      try {
         await runOnce(tool.stopCommand, tool.projectPath, tool.env)
+      } catch (err) {
+        stopCommandError = err instanceof Error ? err.message : String(err)
+        this.runtime.appendLog(
+          toolId,
+          'system',
+          `Stop command failed (continuing to terminate): ${stopCommandError}`,
+        )
+      }
+    }
+
+    try {
+      // stopCommand was the ONLY lever for this tool and it failed — there is
+      // nothing to terminate, so report the failure instead of claiming stopped.
+      if (stopCommandError && !managed && !externalOwner && !externalReceipt) {
+        throw new Error(stopCommandError)
       }
 
       if (managed) {
@@ -649,6 +670,16 @@ export class ProcessManager {
   async restart(toolId: string, options: StartOptions = {}): Promise<ToolRuntimeState> {
     await this.stop(toolId)
     return this.start(toolId, options)
+  }
+
+  /**
+   * Drop runtime state + logs for a tool whose record was deleted — without
+   * this, listKnownStates() re-emits the ghost entry for the process
+   * lifetime. Refuses while a child is still supervised.
+   */
+  forget(toolId: string): void {
+    if (this.processes.has(toolId)) return
+    this.runtime.forget(toolId)
   }
 
   /**

@@ -3,6 +3,7 @@
  * Log only to stderr; stdout is reserved for MCP JSON-RPC.
  */
 import { randomUUID } from 'node:crypto'
+import pkg from '../package.json'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -49,7 +50,9 @@ const processes = new ProcessManager(store, {
 
 const server = new McpServer({
   name: 'shelf',
-  version: '0.1.0',
+  // The app version — clients see what's actually installed (this sat at a
+  // hardcoded 0.1.0 through the 1.0 release).
+  version: pkg.version,
 })
 
 const agentAccessSchema = z.object({
@@ -301,8 +304,17 @@ server.registerTool(
   },
   async ({ id }) => {
     if (!store.get(id)) return errorResult(`Tool not found: ${id}`)
-    await processes.stop(id, 'Removed via MCP.')
+    const state = await processes.stop(id, 'Removed via MCP.')
+    if (state.status === 'error') {
+      // Deleting the record anyway would permanently orphan the child: the
+      // MCP process has no quit-time stopAll, and reconcile only walks
+      // tools that still exist in the library.
+      return errorResult(
+        `Could not stop the running tool: ${state.message} The tool was NOT removed — stop it first (shelf_stop_tool) or fix its stop command, then remove again.`,
+      )
+    }
     store.delete(id)
+    processes.forget(id)
     return textResult({ removed: id })
   },
 )

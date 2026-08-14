@@ -28,6 +28,7 @@
     "smoke:design": "tsc -p tsconfig.electron.json && node scripts/smoke-design.mjs",
     "smoke:design-extract": "tsc -p tsconfig.electron.json && node scripts/smoke-design-extract.mjs",
     "smoke:health": "tsc -p tsconfig.electron.json && node scripts/smoke-health.mjs",
+    "smoke:hardening": "tsc -p tsconfig.electron.json && node scripts/smoke-hardening.mjs",
     "smoke:design-stress": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-design-stress.mjs",
     "seed:design": "tsc -p tsconfig.electron.json && node scripts/seed-design-profile.mjs",
     "smoke:library-safety": "tsc -p tsconfig.electron.json && node scripts/smoke-library-safety.mjs",

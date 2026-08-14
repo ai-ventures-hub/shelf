@@ -504,12 +504,17 @@ export function maskSecrets(text: string): string {
     .replace(new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
 }
 
-/** Strip secret env values from a tool record for safe MCP/UI serialization. */
+/**
+ * Strip env values from a tool record for agent-facing serialization.
+ * ALL values are masked, not just secret-looking keys: a key-name
+ * allowlist misses DATABASE_URL=postgres://user:pass@host and friends,
+ * and agents never need the values — the keys say what is configured,
+ * and tool.port/url carry the operational facts. The GUI editor reads
+ * the raw record over its own IPC (same-machine owner) and is unaffected.
+ */
 export function sanitizeToolForOutput(tool: Tool): Tool {
   if (!tool.env) return tool
   const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(tool.env)) {
-    env[key] = /TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY/i.test(key) ? '***' : value
-  }
+  for (const key of Object.keys(tool.env)) env[key] = '***'
   return { ...tool, env }
 }

@@ -5,12 +5,9 @@ import {
   dialog,
   globalShortcut,
   ipcMain,
-  net,
-  protocol,
 } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { pathToFileURL } from 'node:url'
 import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { resolveDesignMd } from '../shared/design-md'
@@ -110,20 +107,6 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 }
-
-// Must register before app ready so <img src="shelf-icon://…"> can load local icons.
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'shelf-icon',
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      bypassCSP: true,
-      stream: true,
-    },
-  },
-])
 
 // macOS may deliver open-url before ready — queue until host exists.
 app.on('open-url', (event, url) => {
@@ -367,9 +350,19 @@ function resolveMcpServerPath(): string {
 function registerIpc(): void {
   ipcMain.handle('tools:list', () => store.list())
   ipcMain.handle('tools:save', (_e, tool: Tool) => store.save(tool))
-  ipcMain.handle('tools:delete', (_e, id: string) => {
-    void processes.stop(id)
+  ipcMain.handle('tools:delete', async (_e, id: string) => {
+    // Stop must complete AND succeed before the record goes: deleting first
+    // would orphan a child that a failed stop left running, with nothing in
+    // the library to represent it.
+    const tool = store.get(id)
+    const state = await processes.stop(id)
+    if (state.status === 'error') {
+      throw new Error(
+        `Could not stop “${tool?.name || id}”: ${state.message} The tool was not removed.`,
+      )
+    }
     store.delete(id)
+    processes.forget(id)
   })
   ipcMain.handle('tools:readiness', (_e, id: string) => {
     const tool = store.get(id)
@@ -628,18 +621,27 @@ function registerIpc(): void {
     return dest
   })
 
+  // Same containment stance as designProfiles:assetDataUrl: this channel
+  // reads ONLY inside the icons dir (realpath on both sides — a planted
+  // symlink must not escape, and a symlinked data root must still match).
   ipcMain.handle('tools:iconDataUrl', (_e, iconPath: string) => {
     if (!iconPath || !fs.existsSync(iconPath)) return null
-    const ext = path.extname(iconPath).toLowerCase().replace('.', '')
+    const iconsRoot = fs.realpathSync(store.getIconsDir()) + path.sep
+    const resolved = fs.realpathSync(iconPath)
+    if (!resolved.startsWith(iconsRoot)) return null
+    const ext = path.extname(resolved).toLowerCase()
     const mime =
-      ext === 'jpg' || ext === 'jpeg'
+      ext === '.jpg' || ext === '.jpeg'
         ? 'image/jpeg'
-        : ext === 'webp'
+        : ext === '.webp'
           ? 'image/webp'
-          : ext === 'gif'
+          : ext === '.gif'
             ? 'image/gif'
-            : 'image/png'
-    const buf = fs.readFileSync(iconPath)
+            : ext === '.png'
+              ? 'image/png'
+              : null
+    if (!mime) return null // not a renderable icon type — never a raw file read
+    const buf = fs.readFileSync(resolved)
     return `data:${mime};base64,${buf.toString('base64')}`
   })
 
@@ -731,20 +733,6 @@ function registerIpc(): void {
 
 if (gotLock) {
   app.whenReady().then(() => {
-    protocol.handle('shelf-icon', async (request) => {
-      try {
-        const parsed = new URL(request.url)
-        const filePath = parsed.searchParams.get('path')
-        if (!filePath || !fs.existsSync(filePath)) {
-          return new Response('Icon not found', { status: 404 })
-        }
-        return net.fetch(pathToFileURL(filePath).href)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        return new Response(message, { status: 500 })
-      }
-    })
-
     prefs = new PrefsStore()
     store = new LibraryStore()
     receipts = new ReceiptStore()

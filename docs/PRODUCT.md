@@ -102,6 +102,13 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   new-profile wizard (blank vs project-seeded), imported fonts in the
   live preview, `shelf_get_collection` stack context, launch-health
   chips on library cards, and agent write-path hardening.
+- **v1.2 candidate — `shelf_upsert_collection`**: make "create a
+  collection named X and build these N tools into it" work end-to-end
+  over MCP. Ownership mirrors design profiles (agents draft, you
+  decide): agent-created collections stay agent-editable until any GUI
+  edit adopts them; agents may only add tools they registered
+  themselves, and never bind or unbind a design profile on a
+  user-owned collection.
 
 ## Later Community enhancements
 
