@@ -9,8 +9,11 @@ the audit missed that our verification found.
 - **No env values reach agents, period.** Tool env vars were masked by
   key name (`*_TOKEN`, `*_SECRET`, …), which let secrets under other
   names — `DATABASE_URL=postgres://user:password@host` — through MCP
-  output verbatim. Every env value is now `***` for agents; keys stay
-  visible, and the in-app editor still shows your real values.
+  output verbatim. Every env value is now `***` for agents, inline
+  `KEY=value` prefixes in launch/stop commands and notes mask too, and
+  an agent echoing a masked read back through upsert restores your real
+  values instead of saving placeholders. Keys stay visible, and the
+  in-app editor still shows your real values.
 - **Log masking survives chunk boundaries.** Child output is masked per
   assembled line, with partial lines held until their newline arrives —
   a secret split across two pipe chunks used to evade redaction. The
