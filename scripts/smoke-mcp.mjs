@@ -340,6 +340,44 @@ async function main() {
     }
     console.log('OK: design profiles (list, default, collection, tool)')
 
+    // --- shelf_get_collection: one-call stack context ---
+    const collectionCtx = await callTool(client, 'shelf_get_collection', {
+      name: 'design smoke collection', // case-insensitive name lookup
+    })
+    if (collectionCtx.collection.id !== designCollection.id) {
+      throw new Error('shelf_get_collection name lookup returned the wrong collection')
+    }
+    const member = collectionCtx.members.find((m) => m.id === toolId)
+    if (!member || !member.readiness || typeof member.status !== 'string') {
+      throw new Error('Collection member missing readiness/runtime state')
+    }
+    if (
+      collectionCtx.designProfile?.id !== seededProfile.id ||
+      collectionCtx.designProfile.resolvedVia !== 'collection' ||
+      !collectionCtx.designProfile.summary
+    ) {
+      throw new Error('shelf_get_collection must resolve the bound design profile')
+    }
+    let unknownCollectionRejected = false
+    try {
+      await callTool(client, 'shelf_get_collection', { id: 'nope' })
+    } catch (err) {
+      unknownCollectionRejected = /shelf_list_collections/.test(String(err.message || err))
+    }
+    if (!unknownCollectionRejected) {
+      throw new Error('Unknown collection must error with list guidance')
+    }
+    let arglessRejected = false
+    try {
+      await callTool(client, 'shelf_get_collection', {})
+    } catch {
+      arglessRejected = true
+    }
+    if (!arglessRejected) {
+      throw new Error('shelf_get_collection without id or name must error')
+    }
+    console.log('OK: collection context (members, runtime, brand)')
+
     // Resource: markdown brief on hit, JSON found:false on miss.
     const resource = await client.readResource({
       uri: `shelf://design/profiles/${seededProfile.id}`,
