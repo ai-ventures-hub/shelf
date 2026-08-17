@@ -109,6 +109,13 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   edit adopts them; agents may only add tools they registered
   themselves, and never bind or unbind a design profile on a
   user-owned collection.
+- **v1.2 candidate — Tool Sharing (portable tools + catalogs)**: a
+  working tool travels to a coworker's Shelf in two clicks — `shelf.json`
+  manifest in the project, `shelf://add` link, one consent sheet into the
+  existing register/bootstrap pipeline; team = a catalog repo, never a
+  Shelf-operated service ("No cloud. No account." holds). See
+  [`SHARING.md`](SHARING.md). Gate before building: one hand-written
+  manifest + one coworker trial.
 
 ## Later Community enhancements
 
