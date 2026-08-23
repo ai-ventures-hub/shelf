@@ -169,7 +169,7 @@ async function requireGit(): Promise<string> {
   return git
 }
 
-let cachedGh: string | null | undefined
+let cachedGh: string | null = null
 
 /**
  * Locate the GitHub CLI if the user has it. gh holds their GitHub auth; when
@@ -177,19 +177,14 @@ let cachedGh: string | null | undefined
  * sees or stores the token, and nothing is written to their global config.
  */
 export async function resolveGhBinary(): Promise<string | null> {
-  if (cachedGh !== undefined) return cachedGh
+  // Cache only a HIT: a miss must be re-probed, so installing gh after an
+  // auth_required card and retrying Fetch works without restarting Shelf.
+  if (cachedGh) return cachedGh
   const override = process.env.SHELF_GH_BINARY?.trim()
-  if (override) {
-    cachedGh = fileExists(override) ? override : null
-    return cachedGh
-  }
+  if (override) return fileExists(override) ? (cachedGh = override) : null
   for (const candidate of ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']) {
-    if (fileExists(candidate)) {
-      cachedGh = candidate
-      return cachedGh
-    }
+    if (fileExists(candidate)) return (cachedGh = candidate)
   }
-  cachedGh = null
   return null
 }
 
@@ -203,7 +198,7 @@ function isGithubHost(host: string): boolean {
  * host — scoped to the single command, keychain still tried first, public
  * repos unaffected. Empty when the URL isn't https or gh isn't installed.
  */
-function githubHelperArgs(url: string, gh: string | null): string[] {
+export function githubHelperArgs(url: string, gh: string | null): string[] {
   if (!gh) return []
   let host: string
   try {
@@ -211,10 +206,13 @@ function githubHelperArgs(url: string, gh: string | null): string[] {
     if (parsed.protocol !== 'https:') return []
     host = parsed.hostname
   } catch {
-    return []
+    return [] // scp-like (git@host:path) and non-URLs: no https credential context
   }
-  // gh answers only for hosts it is authenticated to; for others it returns
-  // nothing and git falls through to its normal credential path.
+  // Registered for any https host on purpose — this also covers self-hosted
+  // GitHub Enterprise, whose domain we can't enumerate. gh answers ONLY for
+  // hosts it is signed in to; for every other host it returns nothing and git
+  // falls through to its normal credential path (keychain, then fail). The
+  // token never reaches Shelf — git talks to gh over the helper's own pipe.
   return ['-c', `credential.https://${host}.helper=!${gh} auth git-credential`]
 }
 

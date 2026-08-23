@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 — 2026-08-23
 
 - **Private repos share cleanly.** When you Add a tool from a private
   GitHub repo, Shelf now borrows the GitHub CLI’s sign-in for that one

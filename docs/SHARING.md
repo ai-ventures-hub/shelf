@@ -230,8 +230,12 @@ Decisions made while building that the concept above left open:
   work without holding any secret: for an `https://` GitHub host, if the
   GitHub CLI (`gh`) is installed it adds a per-clone
   `credential.https://<host>.helper=!gh auth git-credential` — scoped to
-  that one command, keychain still tried first, public repos and non-git
-  hosts unaffected, and the token never reaches Shelf. Same helper on the
+  that one command, keychain still tried first, and the token never
+  reaches Shelf (git talks to gh over the helper's own pipe). The helper
+  is registered for any https host on purpose (it also covers self-hosted
+  GitHub Enterprise), but `gh` returns a credential ONLY for a host you're
+  signed in to; every other host — and every public repo — falls through
+  to git's normal path unchanged. Same helper on the
   `fetch` behind "Check for updates". When it still fails,
   `classifyCloneFailure` maps git's stderr to `auth_required` /
   `repo_not_found` and the sheet shows a real remedy (a copy-able
