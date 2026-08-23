@@ -63,6 +63,151 @@ export interface Tool {
   updatedAt: string
   /** When capabilities last actually changed (drives resolve suggestions). */
   capabilitiesUpdatedAt?: string
+  /** Provenance for tools added from a shared repo/bundle (mirror of shared/types.ts). */
+  source?: ToolSource
+}
+
+export interface ToolSource {
+  kind: 'git' | 'bundle'
+  repo?: string
+  ref?: string
+  addedAt: string
+  updatedAt?: string
+}
+
+// ---- Tool Sharing (1.2) — mirrors of shared/tool-manifest.ts + tool-share.ts ----
+
+export interface ToolManifest {
+  shelfManifest: 1
+  name: string
+  description?: string
+  launchCommand: string
+  port?: number
+  url?: string
+  tags: string[]
+  capabilities: string[]
+  agentAccess: AgentAccess[]
+  /** Setup commands shown verbatim on the consent sheet. */
+  bootstrap: string[]
+  /** Env SCHEMA: key → hint. Never a value. */
+  env: Record<string, string>
+  notes?: string
+  exportedBy?: string
+  exportedAt?: string
+  extra?: Record<string, unknown>
+}
+
+export type ShareSource =
+  | { kind: 'git'; repo: string }
+  | { kind: 'bundle'; bundlePath: string }
+
+export type ShareErrorCode =
+  | 'git_missing'
+  | 'invalid_repo'
+  | 'clone_failed'
+  | 'bundle_invalid'
+  | 'manifest_invalid'
+  | 'destination_invalid'
+  | 'stage_missing'
+  | 'export_refused'
+  | 'folder_missing'
+
+export interface ShareFailure {
+  ok: false
+  code: ShareErrorCode | 'unknown'
+  message: string
+  remedy?: string
+}
+
+/** What the consent sheet shows (stagePath never leaves the main process). */
+export interface StagedShareView {
+  stageId: string
+  source: ShareSource
+  manifestFound: boolean
+  manifest: ToolManifest
+  warnings: string[]
+  destination: string
+  setupSteps: BootstrapStep[]
+  ref?: string
+}
+
+export interface ConfirmShareInput {
+  destination: string
+  env: Record<string, string>
+  runSetup: boolean
+  launch?: boolean
+}
+
+export interface ConfirmShareResult extends RegisterProjectResult {
+  destination: string
+}
+
+export interface ManifestFieldDiff {
+  field: string
+  before?: string
+  after?: string
+}
+
+export interface UpdateCommit {
+  sha: string
+  subject: string
+}
+
+export type UpdateCheck =
+  | { state: 'not_shared' }
+  | { state: 'folder_missing' }
+  | { state: 'git_missing'; message: string; remedy: string }
+  | { state: 'not_git' }
+  | { state: 'no_remote' }
+  | { state: 'no_target_branch'; remote: string }
+  | { state: 'fetch_failed'; message: string }
+  | { state: 'up_to_date'; ref: string; remote: string; dirty: boolean }
+  | {
+      state: 'updates_available'
+      ref: string
+      remoteRef: string
+      target: string
+      behind: number
+      commits: UpdateCommit[]
+      manifestDiff: ManifestFieldDiff[]
+      newBootstrap: string[]
+      depsChanged: boolean
+      newEnvKeys: string[]
+      remote: string
+    }
+  | {
+      state: 'diverged'
+      ref: string
+      remoteRef: string
+      target: string
+      ahead: number
+      behind: number
+      dirty: boolean
+      commits: UpdateCommit[]
+      manifestDiff: ManifestFieldDiff[]
+      newBootstrap: string[]
+      depsChanged: boolean
+      newEnvKeys: string[]
+      remote: string
+    }
+
+export interface ApplyUpdateInput {
+  mode: 'fast_forward' | 'take_theirs'
+  target: string
+  runSetup?: boolean
+  setupCommands?: string[]
+}
+
+export interface ApplyUpdateResult {
+  ok: boolean
+  message: string
+  tool?: Tool
+  ref?: string
+  applied: string[]
+  skipped: { field: string; reason: string }[]
+  missingEnvKeys: string[]
+  setup?: { command: string; ok: boolean }[]
+  running: boolean
 }
 
 export interface Collection {
@@ -540,6 +685,30 @@ export interface ShelfApi {
     options?: StartOptions,
   ) => Promise<CollectionActionResult>
   stopCollection: (id: string) => Promise<CollectionActionResult>
+  exportToolManifest: (id: string) => Promise<{
+    manifestPath: string
+    remote?: string
+    link?: string
+    linkNote?: string
+    copied: boolean
+    envKeys: string[]
+  }>
+  exportToolBundle: (id: string) => Promise<{ saved: boolean; path?: string; bytes?: number }>
+  stageSharedTool: (
+    source: ShareSource,
+  ) => Promise<{ ok: true; stage: StagedShareView } | ShareFailure>
+  pickShareBundle: () => Promise<string | null>
+  pickShareDestination: (
+    stageId: string,
+  ) => Promise<{ ok: true; destination: string | null } | ShareFailure>
+  confirmSharedTool: (
+    stageId: string,
+    input: ConfirmShareInput,
+  ) => Promise<{ ok: true; result: ConfirmShareResult } | ShareFailure>
+  discardSharedTool: (stageId: string) => Promise<void>
+  checkToolUpdates: (id: string) => Promise<UpdateCheck>
+  applyToolUpdate: (id: string, input: ApplyUpdateInput) => Promise<ApplyUpdateResult>
+  onAddShared: (cb: (info: { repo: string }) => void) => () => void
   getPrefs: () => Promise<UiPrefs>
   updatePrefs: (
     patch: Partial<UiPrefs>,

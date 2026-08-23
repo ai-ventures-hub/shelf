@@ -24,6 +24,7 @@ import {
 import { inspectProject } from '../shared/project-import'
 import { registerProject } from '../shared/register-project'
 import { ReceiptStore } from '../shared/receipt-store'
+import { exportToolManifest, ShareError } from '../shared/tool-share'
 import {
   sanitizeToolForOutput,
   type AgentAccess,
@@ -303,6 +304,9 @@ server.registerTool(
       iconColor: args.iconColor ?? existing?.iconColor,
       iconBackground: args.iconBackground ?? existing?.iconBackground,
       lastLaunchedAt: existing?.lastLaunchedAt,
+      // Provenance is not an agent-editable field; carry it or an agent
+      // tweak would silently un-share the tool (save literal rule).
+      source: existing?.source,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     })
@@ -579,6 +583,40 @@ server.registerTool(
         tool: result.tool ? sanitizeToolForOutput(result.tool) : undefined,
       })
     } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
+  },
+)
+
+// Tool Sharing (1.2): send side only. There is deliberately no
+// shelf_add_shared_tool — an agent installing a coworker's code unattended
+// would skip the consent sheet by construction; the GUI is the only receive
+// surface. Values-stripping is structural (see shared/tool-manifest.ts).
+server.registerTool(
+  'shelf_export_tool',
+  {
+    description:
+      "Share a Shelf tool: writes/updates shelf.json in the tool's project folder (launch command, port, tags, capabilities, agent access, setup steps, and env KEY NAMES only — values are never written) and returns the manifest path plus a shelf://add link when the project has a git remote. Refuses if any free-text field looks like a credential. Receiving is GUI-only (the coworker opens the link and approves one consent sheet).",
+    inputSchema: {
+      id: z.string().describe('Tool id'),
+    },
+  },
+  async ({ id }) => {
+    const tool = store.get(id)
+    if (!tool) return errorResult(`Tool not found: ${id}`)
+    try {
+      const result = await exportToolManifest(tool, { appVersion: pkg.version })
+      return textResult({
+        manifestPath: result.manifestPath,
+        remote: result.remote,
+        link: result.link,
+        manifest: result.manifest,
+        note: result.link
+          ? 'Paste the link to a coworker; Shelf shows them a consent sheet before anything runs.'
+          : 'No git remote found — commit and push the project, or use Export bundle in the Shelf app.',
+      })
+    } catch (err) {
+      if (err instanceof ShareError) return errorResult(err.message)
       return errorResult(err instanceof Error ? err.message : String(err))
     }
   },

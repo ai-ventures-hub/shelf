@@ -3023,3 +3023,160 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     padding: 0 10px;
   }
 }
+
+
+/* —— #share · Tool Sharing (1.2) —— */
+/* Copy left, a static consent-sheet mock right — zigzags against #dev above
+   and the final CTA below. The sheet is a picture of the receive flow, not a
+   control: the promise it renders (secrets never travel, nothing runs before
+   approval) is the section's whole point. */
+.share-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+
+.share-copy .sec-h2 {
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.05;
+}
+
+.share-copy .sec-lead {
+  margin-top: 16px;
+}
+
+.share-copy .sec-lead code {
+  font-family: var(--av-font-mono);
+  font-size: 0.9em;
+  color: var(--av-text-primary);
+}
+
+.share-window {
+  display: grid;
+  gap: 14px;
+}
+
+.share-link-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.share-link-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--av-text-tertiary);
+}
+
+.share-link-chip {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgb(120 149 255 / 30%);
+  border-radius: var(--av-radius-md);
+  background: var(--av-accent-quiet);
+  font-family: var(--av-font-mono);
+  font-size: 13px;
+  color: var(--av-text-primary);
+}
+
+.share-sheet {
+  box-shadow: 0 30px 90px rgb(0 0 0 / 35%);
+}
+
+.share-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--av-border-default);
+  background: var(--av-bg-raised);
+}
+
+.share-sheet-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--av-text-primary);
+}
+
+.share-sheet-body {
+  padding: 6px 18px 18px;
+}
+
+.share-sheet-row {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 14px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--av-border-subtle, rgb(255 255 255 / 6%));
+}
+
+.share-sheet-key {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--av-text-tertiary);
+}
+
+.share-sheet-row[data-kind='env'] .share-sheet-key {
+  font-family: var(--av-font-mono);
+  color: var(--av-text-secondary);
+}
+
+.share-sheet-val {
+  font-size: 13.5px;
+  color: var(--av-text-primary);
+  word-break: break-word;
+}
+
+.share-sheet-row[data-kind='cmd'] .share-sheet-val {
+  font-family: var(--av-font-mono);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--av-bg-well);
+  border: 1px solid var(--av-border-default);
+  color: var(--av-accent-soft, #9badff);
+}
+
+.share-sheet-input {
+  font-size: 12.5px;
+  color: var(--av-text-tertiary);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--av-border-strong);
+  background: transparent;
+}
+
+.share-sheet-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 16px;
+}
+
+.share-sheet-note {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12px;
+  color: var(--av-text-tertiary);
+}
+
+@media (max-width: 1000px) {
+  /* Base .share-grid is defined below the mid-file stack query, so its
+     responsive override must live here (later source order) to win. */
+  .share-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .share-sheet-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

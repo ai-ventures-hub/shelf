@@ -21,7 +21,26 @@ import {
   type PreflightIssue,
 } from './launch-preflight'
 import type { PortConflictPolicy, ProcessManager } from './process-manager'
-import type { ProjectImportSuggestion, Tool, ToolRuntimeState } from './types'
+import type { AgentAccess, ProjectImportSuggestion, Tool, ToolRuntimeState, ToolSource } from './types'
+
+/**
+ * Fields seeded from a shared manifest (Tool Sharing, 1.2). Applied on top
+ * of inspection for NEW entries; an existing entry for the same folder keeps
+ * its own values (mergeIntoExisting rules). `env` here is the receiver's
+ * own typed values — a manifest never carries values.
+ */
+export interface RegisterOverrides {
+  name?: string
+  description?: string
+  launchCommand?: string
+  port?: number
+  url?: string
+  tags?: string[]
+  capabilities?: string[]
+  agentAccess?: AgentAccess[]
+  notes?: string
+  env?: Record<string, string>
+}
 
 export type RegisterOutcome =
   /** Saved and running; url (when known) is on the tool. */
@@ -57,6 +76,16 @@ export interface RegisterProjectOptions {
   toolDefaults?: Partial<
     Pick<Tool, 'iconLucide' | 'iconColor' | 'iconBackground'>
   >
+  /** Manifest-seeded fields (shared tools). */
+  overrides?: RegisterOverrides
+  /**
+   * Exactly the setup steps to run when `runSetup` is true — replaces
+   * detection so what a consent sheet showed is what executes. An empty
+   * array means "run nothing".
+   */
+  setupSteps?: BootstrapStep[]
+  /** Provenance recorded on the saved tool (shared tools). */
+  source?: ToolSource
 }
 
 export interface RegisterProjectDeps {
@@ -138,24 +167,33 @@ function newToolFrom(
   suggestion: ProjectImportSuggestion,
   resolved: string,
   defaults: RegisterProjectOptions['toolDefaults'],
+  overrides: RegisterOverrides = {},
+  source?: ToolSource,
 ): Tool {
   const now = new Date().toISOString()
+  const launchCommand = overrides.launchCommand || suggestion.launchCommand || ''
+  // A manifest port wins; its url is a loopback template the launch path
+  // port-rewrites if the port gets healed.
+  const port = overrides.port ?? suggestion.port
+  const url = overrides.url || suggestion.url
   return {
     id: '',
-    name: suggestion.name?.trim() || path.basename(resolved),
-    description: suggestion.description,
+    name: overrides.name?.trim() || suggestion.name?.trim() || path.basename(resolved),
+    description: overrides.description || suggestion.description,
     iconLucide: defaults?.iconLucide,
     iconColor: defaults?.iconColor,
     iconBackground: defaults?.iconBackground,
-    tags: suggestion.tags,
-    capabilities: [],
-    agentAccess: suggestion.agentAccess,
+    tags: overrides.tags?.length ? overrides.tags : suggestion.tags,
+    capabilities: overrides.capabilities || [],
+    agentAccess: overrides.agentAccess?.length ? overrides.agentAccess : suggestion.agentAccess,
     favorite: false,
     projectPath: resolved,
-    launchCommand: suggestion.launchCommand || '',
-    url: suggestion.url,
-    port: suggestion.port,
-    notes: suggestion.notesHint,
+    launchCommand,
+    url,
+    port,
+    env: overrides.env,
+    notes: overrides.notes || suggestion.notesHint,
+    source,
     createdAt: now,
     updatedAt: now,
   }
@@ -194,16 +232,22 @@ export async function registerProject(
 
   const suggestion = await inspectProject(resolved)
   const existing = deps.store.findByProjectPath(resolved)
+  const overrides = options.overrides
   const gateResult = existing?.launchCommand
     ? {
         autoRunnable: true,
         reason: 'Already registered with a saved launch command.',
       }
-    : gate(suggestion)
+    : overrides?.launchCommand
+      ? {
+          autoRunnable: true,
+          reason: 'Launch command provided by the shared manifest.',
+        }
+      : gate(suggestion)
 
-  const setupNeeds = detectBootstrapNeeds(resolved)
+  const setupNeeds = options.setupSteps ?? detectBootstrapNeeds(resolved)
   const launchCommand =
-    existing?.launchCommand || suggestion.launchCommand || ''
+    existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
   const issues: PreflightIssue[] = preflightProject(resolved, launchCommand)
   if (usesDocker(launchCommand)) {
     const docker = await checkDockerDaemon()
@@ -224,8 +268,11 @@ export async function registerProject(
 
   const tool = deps.store.save(
     existing
-      ? mergeIntoExisting(existing, suggestion)
-      : newToolFrom(suggestion, resolved, options.toolDefaults),
+      ? {
+          ...mergeIntoExisting(existing, suggestion),
+          ...(options.source ? { source: existing.source || options.source } : {}),
+        }
+      : newToolFrom(suggestion, resolved, options.toolDefaults, overrides, options.source),
   )
   const base = {
     tool,

@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.2.0 — 2026-08-23
+
+If a tool works on your Shelf, a coworker gets it working on theirs in
+two clicks — and no part of it runs on a server Shelf operates.
+
+- **Share this tool.** On a tool's page, **Share** writes a `shelf.json`
+  manifest into the project (launch command, port, tags, capabilities,
+  agent access, setup steps, and env **names**) and, when the project has
+  a git remote, copies a `shelf://add?repo=…` link to the clipboard. Env
+  values are stripped structurally — the manifest is built from your
+  env *keys* only, and there is no code path that can write a value.
+  Share refuses when a free-text field looks like a credential. **Export
+  bundle** (⋯ menu) zips the project with the manifest inside, minus
+  `node_modules`, `.git`, and `.env*` files. Over MCP: `shelf_export_tool`.
+- **Add from a link, URL, or bundle.** Opening a `shelf://add` link shows
+  the source and waits for you to click **Fetch** — a link alone never
+  downloads anything. Fetch (also from **Add from…** in the Library)
+  pulls the project into a scratch folder and shows **one consent sheet**: the full source, the destination
+  (default `~/Shelf Tools/<name>`, changeable), the exact setup and
+  launch commands verbatim, the sender's notes, and an empty input per
+  env key. Nothing runs or persists until you approve; approval runs the
+  existing register → consented setup → launch pipeline with port
+  healing. Repo URLs are allow-listed (https/ssh/git/`git@host:path`),
+  manifest URLs must be localhost, and a manifest can never pick a
+  folder outside the destination. If git is missing, Shelf points you at
+  the Command Line Tools installer instead of failing silently.
+- **Provenance and explicit updates.** Shared tools remember where they
+  came from (`Shared from …` on the tool page). **Check for updates**
+  fetches and shows the incoming commits and the manifest diff — nothing
+  changes until you click **Update**, and manifest metadata only updates
+  fields you hadn't edited locally. A diverged copy is said plainly:
+  keep yours, or take theirs. Never automatic.
+- **Deliberately not built:** an agent-driven receive (`shelf_add_shared_tool`)
+  — it would skip the consent sheet by construction. The GUI is the only
+  receive surface.
+
+## 1.1.2 — 2026-08-16
+
+One fix, a common one: launches no longer sit in **Starting** for 60
+seconds when the app is already serving.
+
+- **IPv6-only listeners are detected immediately.** Frameworks that bind
+  `localhost` — Vite's default — often listen on IPv6 loopback (`::1`)
+  only on macOS. Shelf's readiness probe only checked IPv4, so the card
+  stalled in Starting for the full 60-second timeout (then recovered via
+  log sniffing as "Running · port N (from logs)") while the app worked
+  fine in your browser the whole time. The probe now checks both loopback
+  stacks and flips to Running within about half a second of the
+  framework's ready line. Machines without IPv6 are unaffected, and a
+  regression test pins the fix.
+
 ## 1.1.1 — 2026-08-13
 
 A security and hardening release. An external audit was independently

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { resolveAppDataRoot, resolveShelfDataRoot } from './paths'
-import type { Collection, LibraryFile, Tool } from './types'
+import type { Collection, LibraryFile, Tool, ToolSource } from './types'
 
 /**
  * Persists the tool library under a stable Application Support root.
@@ -115,6 +115,7 @@ export class LibraryStore {
         iconLucide: input.iconLucide?.trim() || undefined,
         iconColor: input.iconColor?.trim() || undefined,
         iconBackground: input.iconBackground?.trim() || undefined,
+        source: normalizeSource(input.source),
         updatedAt: now,
         createdAt: previous ? previous.createdAt : input.createdAt || now,
         capabilitiesUpdatedAt: capabilitiesChanged
@@ -311,6 +312,21 @@ function normalizeTool(input: Partial<Tool>): Tool {
     // Fail closed for pre-0.9 records: createdAt, never "now" — a normalize
     // pass must not make every old tool look freshly capable.
     capabilitiesUpdatedAt: input.capabilitiesUpdatedAt || input.createdAt || undefined,
+    source: normalizeSource(input.source),
+  }
+}
+
+/** Provenance is data about a tool, never executed — keep only known fields. */
+function normalizeSource(input: Partial<ToolSource> | undefined): ToolSource | undefined {
+  if (!input || (input.kind !== 'git' && input.kind !== 'bundle')) return undefined
+  const repo = typeof input.repo === 'string' ? input.repo.trim() : ''
+  const ref = typeof input.ref === 'string' ? input.ref.trim() : ''
+  return {
+    kind: input.kind,
+    repo: repo || undefined,
+    ref: ref || undefined,
+    addedAt: typeof input.addedAt === 'string' && input.addedAt ? input.addedAt : new Date().toISOString(),
+    updatedAt: typeof input.updatedAt === 'string' && input.updatedAt ? input.updatedAt : undefined,
   }
 }
 

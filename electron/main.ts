@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   Menu,
+  clipboard,
   dialog,
   globalShortcut,
   ipcMain,
@@ -37,6 +38,25 @@ import {
   type ReceiptFilterOpts,
 } from '../shared/receipt-export'
 import { ReceiptStore } from '../shared/receipt-store'
+import {
+  applyToolUpdate,
+  checkToolUpdates,
+  cleanStagingRoot,
+  confirmStagedShare,
+  discardStagedShare,
+  exportToolBundle,
+  exportToolManifest,
+  ShareError,
+  stageSharedTool,
+  uniqueDestination,
+  validateDestination,
+  type ApplyUpdateInput,
+  type ConfirmShareInput,
+  type ShareFailure,
+  type ShareSource,
+  type StagedShare,
+} from '../shared/tool-share'
+import { folderNameFor } from '../shared/tool-manifest'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -77,6 +97,8 @@ let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let isQuitting = false
+/** Staged (fetched, not yet approved) shared-tool adds, by stageId. */
+const stagedShares = new Map<string, StagedShare>()
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
 let externalReconcileTimer: ReturnType<typeof setInterval> | null = null
@@ -733,6 +755,138 @@ function registerIpc(): void {
     },
   )
 
+  // ---- Tool Sharing (1.2) ------------------------------------------------
+  // Send: write shelf.json (env values structurally stripped) + share link.
+  ipcMain.handle('share:exportManifest', async (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    const result = await exportToolManifest(tool, { appVersion: app.getVersion() })
+    if (result.link) clipboard.writeText(result.link)
+    return {
+      manifestPath: result.manifestPath,
+      remote: result.remote,
+      link: result.link,
+      linkNote: result.linkNote,
+      copied: Boolean(result.link),
+      envKeys: Object.keys(result.manifest.env),
+    }
+  })
+  ipcMain.handle('share:exportBundle', async (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    const saveOpts: Electron.SaveDialogOptions = {
+      title: 'Export tool bundle',
+      defaultPath: `${folderNameFor(tool.name)}.zip`,
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+    }
+    const result = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, saveOpts)
+      : await dialog.showSaveDialog(saveOpts)
+    if (result.canceled || !result.filePath) return { saved: false }
+    const bundle = await exportToolBundle(tool, result.filePath, { appVersion: app.getVersion() })
+    return { saved: true, path: bundle.bundlePath, bytes: bundle.bytes }
+  })
+  // Receive: stage (clone/unzip into scratch; runs nothing, persists nothing).
+  // ShareError carries code + remedy; IPC would flatten a thrown error to
+  // its message, so these handlers return discriminated results instead.
+  const shareFailure = (err: unknown): ShareFailure => ({
+    ok: false,
+    code: err instanceof ShareError ? err.code : 'unknown',
+    message: err instanceof Error ? err.message : String(err),
+    remedy: err instanceof ShareError ? err.remedy : undefined,
+  })
+  ipcMain.handle('share:stage', async (_e, source: ShareSource) => {
+    try {
+      const stage = await stageSharedTool(source, {
+        isTaken: (candidate) => Boolean(store.findByProjectPath(candidate)),
+      })
+      stagedShares.set(stage.stageId, stage)
+      // The renderer gets the description only — stagePath stays in main.
+      const { stagePath: _stagePath, ...description } = stage
+      return { ok: true, stage: description }
+    } catch (err) {
+      return shareFailure(err)
+    }
+  })
+  ipcMain.handle('share:pickBundle', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Add from bundle',
+      properties: ['openFile'],
+      filters: [{ name: 'Shelf tool bundle', extensions: ['zip'] }],
+    })
+    return result.canceled ? null : result.filePaths[0] || null
+  })
+  // The user picks a PARENT folder; the sanitized manifest name is appended.
+  ipcMain.handle('share:pickDestination', async (_e, stageId: string) => {
+    const stage = stagedShares.get(stageId)
+    if (!stage) {
+      return shareFailure(new ShareError('stage_missing', 'The fetched files are gone. Fetch again.'))
+    }
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Choose where to put this tool',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (result.canceled || !result.filePaths[0]) return { ok: true, destination: null }
+    // Re-derive the folder name under the new parent (the proposed one may
+    // already carry a "-2" suffix from the default parent).
+    const candidate = uniqueDestination(
+      result.filePaths[0],
+      folderNameFor(stage.manifest.name || path.basename(stage.destination)),
+      (p) => Boolean(store.findByProjectPath(p)),
+    )
+    const valid = validateDestination(candidate, stage)
+    if (!valid.ok) return shareFailure(new ShareError('destination_invalid', valid.reason))
+    return { ok: true, destination: valid.destination }
+  })
+  // The approval. Everything executable happens after this call, never before.
+  ipcMain.handle(
+    'share:confirm',
+    async (_e, stageId: string, input: ConfirmShareInput) => {
+      const stage = stagedShares.get(stageId)
+      if (!stage) {
+        return shareFailure(new ShareError('stage_missing', 'The fetched files are gone. Fetch again.'))
+      }
+      const uiPrefs = prefs.get()
+      try {
+        const result = await confirmStagedShare(stage, input, {
+          store,
+          processes,
+          toolDefaults: {
+            iconLucide: uiPrefs.defaultIconLucide,
+            iconColor: uiPrefs.defaultIconColor,
+            iconBackground: uiPrefs.defaultIconBackground,
+          },
+        })
+        stagedShares.delete(stageId)
+        return { ok: true, result }
+      } catch (err) {
+        // Destination problems keep the stage alive so the user can fix the
+        // folder; anything after the move is gone either way.
+        if (!(err instanceof ShareError && err.code === 'destination_invalid')) {
+          stagedShares.delete(stageId)
+        }
+        return shareFailure(err)
+      }
+    },
+  )
+  ipcMain.handle('share:discard', (_e, stageId: string) => {
+    const stage = stagedShares.get(stageId)
+    if (!stage) return
+    stagedShares.delete(stageId)
+    discardStagedShare(stage)
+  })
+  // Updates: check is read-only (fetch + summary); apply is user-confirmed.
+  ipcMain.handle('share:checkUpdates', (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    return checkToolUpdates(tool)
+  })
+  ipcMain.handle('share:applyUpdate', (_e, id: string, input: ApplyUpdateInput) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    return applyToolUpdate(tool, input, { store, processes })
+  })
+
   ipcMain.handle('system:openUrl', (_e, url: string) => system.openUrl(url))
   ipcMain.handle('system:openPath', (_e, target: string) => system.openPath(target))
   ipcMain.handle('system:openEditor', (_e, projectPath: string) =>
@@ -768,6 +922,8 @@ if (gotLock) {
     receipts = new ReceiptStore()
     capabilityGaps = new CapabilityGapStore()
     designProfiles = new DesignProfileStore()
+    // Scratch clones from adds that never reached approve/cancel.
+    cleanStagingRoot(store.getRoot())
     processes = new ProcessManager(store, {
       receipts,
       defaultOrigin: () => ({ kind: 'gui' }),

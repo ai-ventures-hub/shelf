@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "description": "Local tool library for macOS — launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",
@@ -39,6 +39,7 @@
     "smoke:receipt-export": "tsc -p tsconfig.electron.json && node scripts/smoke-receipt-export.mjs",
     "smoke:electron": "tsc -p tsconfig.electron.json && env -u ELECTRON_RUN_AS_NODE electron scripts/smoke-electron.cjs",
     "smoke:mcp": "npm run mcp:build && node scripts/smoke-mcp.mjs",
+    "smoke:sharing": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-sharing.mjs",
     "smoke:all": "node scripts/smoke-all.mjs",
     "icon": "python3 scripts/generate-icon.py",
     "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",

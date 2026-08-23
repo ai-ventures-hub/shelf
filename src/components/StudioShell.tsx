@@ -9,6 +9,8 @@ import { usePrefs } from '../hooks/usePrefs'
 import { useUiMode } from '../hooks/useUiMode'
 import { NamePromptDialog } from './NamePromptDialog'
 import { QuickOpen } from './QuickOpen'
+import { AddSharedToolDialog } from './sharing/AddSharedToolDialog'
+import { onAddSharedRequest, type AddSharedRequest } from '../lib/sharingEvents'
 import { ShelfMark } from './ShelfMark'
 import { UpdateBanner } from './UpdateBanner'
 
@@ -138,6 +140,9 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const [designPromptOpen, setDesignPromptOpen] = useState(false)
   // Status line while a dropped folder is being registered/launched.
   const [dropBusy, setDropBusy] = useState<string | null>(null)
+  // Add-shared-tool sheet (Tool Sharing): opened by the Library page buttons
+  // or a shelf://add link; hosted here so it works from every route.
+  const [addShared, setAddShared] = useState<AddSharedRequest | null>(null)
   // Highlight the window as a drop target while files are dragged over it.
   // Counter, not boolean: dragenter/dragleave fire per child element.
   const dragDepth = useRef(0)
@@ -152,6 +157,17 @@ export function StudioShell({ children }: { children: ReactNode }) {
     const offNav = window.shelf.onNavigate((route) => navigate(route))
     return () => offNav()
   }, [navigate])
+
+  useEffect(() => {
+    const offLocal = onAddSharedRequest((detail) => setAddShared({ ...detail }))
+    const offLink = window.shelf?.onAddShared
+      ? window.shelf.onAddShared((info) => setAddShared({ repo: info.repo }))
+      : () => {}
+    return () => {
+      offLocal()
+      offLink()
+    }
+  }, [])
 
   function onResizeStart(e: React.MouseEvent) {
     if (collapsed) return
@@ -443,6 +459,13 @@ export function StudioShell({ children }: { children: ReactNode }) {
       <QuickOpen
         onRequestNewCollection={() => setCollectionPromptOpen(true)}
         onRequestNewDesignProfile={() => setDesignPromptOpen(true)}
+      />
+
+      <AddSharedToolDialog
+        open={addShared !== null}
+        initialRepo={addShared?.repo}
+        initialBundlePath={addShared?.bundlePath}
+        onClose={() => setAddShared(null)}
       />
 
       <NamePromptDialog
