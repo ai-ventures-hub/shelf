@@ -471,6 +471,15 @@ export async function handleShelfUrl(
     return
   }
 
+  // shelf://add?repo=… — a link from chat is a lure shape. Main only hands
+  // the repo URL to the renderer's Add-from-URL flow; the consent sheet
+  // (full URL, folder, commands, env inputs) is the only way anything runs.
+  if (parsed.action === 'add' && parsed.repo) {
+    host.navigate('/')
+    host.sendToRenderer('app:add-shared', { repo: parsed.repo })
+    return
+  }
+
   let toolId = parsed.toolId
   if (!toolId && parsed.toolName) {
     toolId = host.store.findByName(parsed.toolName)?.id

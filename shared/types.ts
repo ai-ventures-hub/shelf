@@ -104,6 +104,24 @@ export interface Tool {
    * would re-qualify old tools a gap already deemed insufficient.
    */
   capabilitiesUpdatedAt?: string
+  /**
+   * Where an added tool came from (Tool Sharing, 1.2); absent = locally
+   * created. Additive optional — no library version bump. Both normalizeTool
+   * and the save literal must carry it or it is silently dropped.
+   */
+  source?: ToolSource
+}
+
+/** Provenance for a tool added from a shared repo or bundle. */
+export interface ToolSource {
+  kind: 'git' | 'bundle'
+  /** Clone URL as pasted (git). */
+  repo?: string
+  /** Commit sha recorded at add/update time (git). */
+  ref?: string
+  addedAt: string
+  /** Last user-confirmed "Get updates" pull. */
+  updatedAt?: string
 }
 
 /**

@@ -120,8 +120,8 @@ Flow on click:
    URL, destination folder, the exact bootstrap commands, manifest notes,
    and inputs for each env key. Nothing runs before approval — the same
    gate the 0.7 register flow uses, with the same wording discipline.
-3. `registerProject(path, { overrides: manifest, consent })` — existing
-   pipeline: save → bootstrap → launch → readiness. Port busy? The
+3. `registerProject(path, { overrides, setupSteps, runSetup, source })` —
+   existing pipeline: save → bootstrap → launch → readiness. Port busy? The
    existing conflict policy heals it and rewrites the url template.
 4. Record `source` provenance; receipt provenance (`startedBy`) is
    unchanged.
@@ -161,6 +161,72 @@ updates, catalogs. Per the standing rule, none of it gets paywalled
 later. A hosted registry / org dashboards / signed packages could become
 a paid **Teams** service next to Profiles someday; do not build any of it
 until Stages 1–2 prove people share tools at all.
+
+## Implementation notes (v1.2, built 2026-08-23)
+
+Decisions made while building that the concept above left open:
+
+- **Repo URL allow-list.** `shelf://add?repo=` and Add-from-URL accept
+  `https://`, `ssh://`, `git://`, and scp-like `git@host:path` only — no
+  `file://`, no `ext::`, no local paths, nothing starting with `-`. The
+  URL is always passed after `--`, git runs with
+  `GIT_TERMINAL_PROMPT=0`, `protocol.ext/file.allow=never`, and
+  `core.hooksPath=/dev/null`, and clone/fetch have hard timeouts.
+- **Manifest `url` must be loopback.** `onReadyUrl` opens the tool URL in
+  the browser after launch, so a non-localhost URL in a manifest would be
+  a phishing primitive. It is dropped with a visible warning on the sheet.
+- **Folder name.** The destination is `<tools root>/<folderNameFor(name)>`
+  — letters/digits/space/`._-` only, `..` collapsed, no leading dots —
+  suffixed `-2`, `-3` when taken. "Change…" picks a *parent*; the
+  sanitized name is always appended. The user-chosen destination must be
+  new or empty and never inside Shelf's scratch area.
+- **Staging.** Fetch goes to `<data root>/staging/<id>`; the sheet reads
+  from there; approve moves it to the destination; cancel deletes it;
+  app start sweeps leftovers. `stagePath` never leaves the main process.
+- **What runs is what was shown.** The sheet lists the manifest's
+  `bootstrap` commands plus any detected need the manifest omitted
+  (deduped); that exact list is passed to `registerProject` as
+  `setupSteps`, replacing detection. Env inputs always start empty — a
+  hint is never a value, and a hint that looks like a credential (or, on
+  a secret-named key, a single bare token) is discarded with a warning.
+- **Bundles** are written and read by Shelf's own zip code
+  (`shared/zip.ts`): export excludes `node_modules`, `.git`, `.venv`, and
+  every `.env*` except `.env.example`; extraction refuses absolute paths,
+  `..`, backslashes, symlink entries, encrypted entries, zip64, and
+  anything resolving outside the destination. Bundle-sourced tools have
+  no remote, so "Check for updates" is not offered for them.
+- **Updates apply metadata conservatively.** After a confirmed pull, a
+  manifest field is applied to the tool only if the tool's current value
+  still equals what the *old* manifest said (local edits win). Port/url
+  follow the same rule, so a healed port is kept. New env keys are
+  reported, never filled; new `bootstrap` commands run only if the
+  checkbox on the update sheet was ticked. A diverged copy (local
+  commits or uncommitted tracked changes) refuses fast-forward; "Take
+  theirs" is `git reset --hard` after an explicit confirm.
+- **Provenance over IPC.** `Tool.source` is carried by both `normalizeTool`
+  and the save literal (no library bump); `shelf_upsert_tool` preserves
+  it on agent updates.
+- **Fetch-on-click, consent-before-anything-else.** Opening a
+  `shelf://add` link clones into the scratch area immediately (the spec's
+  step 1; it is what keeps the receive flow at two clicks). A clone is a
+  read — equivalent to opening a link in a browser — and the sheet shows the
+  full source URL while it runs. Everything that writes outside scratch or
+  executes waits for approval. Staged trees are capped at 2 GB and refused
+  if they contain a symlink pointing outside the folder.
+- **Pre-commit adversarial pass (2026-08-23)** found, and the build fixed:
+  bundles could plant a `.git/` (fsmonitor/hooks) — `.git` entries are now
+  refused on extract; manifest `port`/`url` could disagree (url opened on a
+  different loopback port) — they are reconciled on read; a tool in a repo
+  subfolder produced a link to the wrong folder — no link, explained; a
+  stale library entry at the destination silently swallowed the typed env —
+  refused; "diverged" was reported for local edits with nothing incoming —
+  now up to date; updates skipped silently after a healed port — re-pinned
+  and `skipped` reported; invalid `shelf.json` was overwritten — refused;
+  credential files beyond `.env*` rode along in bundles — excluded.
+- **git missing.** Detection uses `xcode-select -p` first (calling the
+  `/usr/bin/git` shim would pop the CLT installer), then Homebrew paths;
+  the result is a coded `git_missing` with the "run `xcode-select
+  --install`" remedy and a copy button — the runtime-missing precedent.
 
 ## Phasing
 

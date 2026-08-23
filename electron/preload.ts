@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type {
+  ApplyUpdateInput,
+  ApplyUpdateResult,
+  ConfirmShareInput,
+  ConfirmShareResult,
+  ShareFailure,
+  ShareSource,
+  StagedShare,
+  UpdateCheck,
   RegisterProjectOptions,
   RegisterProjectResult,
   StartOptions,
@@ -108,6 +116,48 @@ const api = {
   /** Deterministic token extraction from a project folder (Phase 3 assist). */
   extractDesignTokens: (projectPath: string): Promise<ExtractedTokens> =>
     ipcRenderer.invoke('designProfiles:extractTokens', projectPath),
+
+  /** Tool Sharing (1.2) — send side. Writes shelf.json, copies the link when a remote exists. */
+  exportToolManifest: (
+    id: string,
+  ): Promise<{
+    manifestPath: string
+    remote?: string
+    link?: string
+    linkNote?: string
+    copied: boolean
+    envKeys: string[]
+  }> => ipcRenderer.invoke('share:exportManifest', id),
+  exportToolBundle: (id: string): Promise<{ saved: boolean; path?: string; bytes?: number }> =>
+    ipcRenderer.invoke('share:exportBundle', id),
+  /** Receive: fetch into scratch and describe for the consent sheet (runs nothing). */
+  stageSharedTool: (
+    source: ShareSource,
+  ): Promise<{ ok: true; stage: Omit<StagedShare, 'stagePath'> } | ShareFailure> =>
+    ipcRenderer.invoke('share:stage', source),
+  pickShareBundle: (): Promise<string | null> => ipcRenderer.invoke('share:pickBundle'),
+  pickShareDestination: (
+    stageId: string,
+  ): Promise<{ ok: true; destination: string | null } | ShareFailure> =>
+    ipcRenderer.invoke('share:pickDestination', stageId),
+  /** The approval: move, save, consented setup, launch. */
+  confirmSharedTool: (
+    stageId: string,
+    input: ConfirmShareInput,
+  ): Promise<{ ok: true; result: ConfirmShareResult } | ShareFailure> =>
+    ipcRenderer.invoke('share:confirm', stageId, input),
+  discardSharedTool: (stageId: string): Promise<void> =>
+    ipcRenderer.invoke('share:discard', stageId),
+  checkToolUpdates: (id: string): Promise<UpdateCheck> =>
+    ipcRenderer.invoke('share:checkUpdates', id),
+  applyToolUpdate: (id: string, input: ApplyUpdateInput): Promise<ApplyUpdateResult> =>
+    ipcRenderer.invoke('share:applyUpdate', id, input),
+  /** A shelf://add link arrived — renderer opens the Add-from-URL sheet. */
+  onAddShared: (cb: (info: { repo: string }) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, info: { repo: string }) => cb(info)
+    ipcRenderer.on('app:add-shared', listener)
+    return () => ipcRenderer.removeListener('app:add-shared', listener)
+  },
 
   getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
   updatePrefs: (

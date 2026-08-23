@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
+import { OverflowMenu } from '../components/OverflowMenu'
+import { requestAddShared } from '../lib/sharingEvents'
 import {
   ReceiptHistory,
   outcomesForFilter,
@@ -268,7 +270,29 @@ export function LibraryPage({
             {collection?.description ? ` · ${collection.description}` : ''}
           </p>
         </div>
-        <AddToolButton />
+        <div className="action-row" style={{ margin: 0, alignItems: 'center' }}>
+          <OverflowMenu
+            triggerLabel="Add from…"
+            label="Add a shared tool"
+            items={[
+              {
+                id: 'url',
+                label: 'Shared link or git URL…',
+                onSelect: () => requestAddShared({}),
+              },
+              {
+                id: 'bundle',
+                label: 'Bundle (.zip)…',
+                onSelect: () => {
+                  void window.shelf.pickShareBundle().then((bundlePath) => {
+                    if (bundlePath) requestAddShared({ bundlePath })
+                  })
+                },
+              },
+            ]}
+          />
+          <AddToolButton />
+        </div>
       </header>
 
       {error ? (

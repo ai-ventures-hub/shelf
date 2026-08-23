@@ -8,6 +8,11 @@
  * - shelf://tools/{id}/launch
  * - shelf://tools/{id}/stop
  * - shelf://launch?name=Image%20Prepper
+ * - shelf://add?repo=https%3A%2F%2Fgithub.com%2Forg%2Ftool   (Tool Sharing)
+ *
+ * `add` carries ONLY the repo URL. There is deliberately no parameter that
+ * could pre-fill consent (folder, env, "run setup") — the sheet the GUI
+ * shows is the only place those are decided.
  */
 
 export type ShelfUrlAction =
@@ -17,6 +22,7 @@ export type ShelfUrlAction =
   | 'launch'
   | 'stop'
   | 'restart'
+  | 'add'
   | 'unknown'
 
 export interface ParsedShelfUrl {
@@ -24,6 +30,8 @@ export interface ParsedShelfUrl {
   route?: string
   toolId?: string
   toolName?: string
+  /** Repository URL for `add` (unvalidated here; the share engine allow-lists it). */
+  repo?: string
 }
 
 export function parseShelfUrl(raw: string): ParsedShelfUrl {
@@ -62,6 +70,12 @@ export function parseShelfUrl(raw: string): ParsedShelfUrl {
       toolId: url.searchParams.get('id') || undefined,
       toolName: url.searchParams.get('name') || undefined,
     }
+  }
+
+  // shelf://add?repo=… — open the Add-from-URL consent flow (never auto-confirms).
+  if (host === 'add') {
+    const repo = (url.searchParams.get('repo') || '').trim()
+    return repo ? { action: 'add', repo, route: '/' } : { action: 'open', route: '/' }
   }
 
   // shelf://tools/{id}[/launch|stop|restart]

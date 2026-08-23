@@ -62,6 +62,20 @@ export type {
   CollectionToolResult,
 } from '../shared/collection-launch'
 export type { GapResolveSuggestion } from '../shared/gap-suggest'
+export type { ToolSource } from '../shared/types'
+export type {
+  ApplyUpdateInput,
+  ApplyUpdateResult,
+  ConfirmShareInput,
+  ConfirmShareResult,
+  ShareErrorCode,
+  ShareFailure,
+  ShareSource,
+  StagedShare,
+  UpdateCheck,
+  UpdateCommit,
+} from '../shared/tool-share'
+export type { ManifestFieldDiff, ToolManifest } from '../shared/tool-manifest'
 export type { SaveDesignProfileInput } from '../shared/design-profile-store'
 export type { ExtractedTokens } from '../shared/design-extract'
 export type { ShortcutStatus } from '../shared/global-shortcut'

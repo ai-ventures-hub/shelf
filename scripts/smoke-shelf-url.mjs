@@ -31,6 +31,13 @@ const pathLed = parseShelfUrl('shelf:///tools/xyz/restart')
 assert.equal(pathLed.action, 'restart')
 assert.equal(pathLed.toolId, 'xyz')
 
+// Tool Sharing: shelf://add carries the repo only — nothing consent-shaped.
+const add = parseShelfUrl('shelf://add?repo=git%40github.com%3Aorg%2Ftool.git&confirm=1&env=K%3DV')
+assert.equal(add.action, 'add')
+assert.equal(add.repo, 'git@github.com:org/tool.git')
+assert.deepEqual(Object.keys(add).sort(), ['action', 'repo', 'route'])
+assert.equal(parseShelfUrl('shelf://add').action, 'open')
+
 assert.equal(parseShelfUrl('https://example.com').action, 'unknown')
 
 console.log('OK: shelf:// URL parse smoke passed')

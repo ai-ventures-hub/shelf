@@ -5,12 +5,13 @@ import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
 import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
+import { UpdateSheet } from '../components/sharing/UpdateSheet'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
 import { friendlyLaunchError } from '../lib/launchErrorCopy'
-import { Sparkles, Star } from 'lucide-react'
+import { Share2, Sparkles, Star } from 'lucide-react'
 import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
 
 function formatRelative(iso?: string): string {
@@ -51,6 +52,14 @@ export function ToolDetailPage() {
   const [reportCopied, setReportCopied] = useState(false)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
   const [readiness, setReadiness] = useState<ToolReadiness | null>(null)
+  // Tool Sharing: result line after "Share" and the updates sheet.
+  const [shareStatus, setShareStatus] = useState<
+    | { kind: 'copied'; link: string; envKeys: string[] }
+    | { kind: 'written'; manifestPath: string; envKeys: string[]; linkNote?: string }
+    | { kind: 'bundle'; path: string }
+    | null
+  >(null)
+  const [updatesOpen, setUpdatesOpen] = useState(false)
   const { receipts, clear: clearReceipts } = useReceipts({
     toolId: id,
     limit: 25,
@@ -132,6 +141,33 @@ export function ToolDetailPage() {
     }
   }
 
+  // Share: write shelf.json (env values stripped structurally) and copy the
+  // shelf://add link when the project has a git remote — one click.
+  function share() {
+    setShareStatus(null)
+    void run(async () => {
+      const result = await window.shelf.exportToolManifest(toolId)
+      setShareStatus(
+        result.link
+          ? { kind: 'copied', link: result.link, envKeys: result.envKeys }
+          : {
+              kind: 'written',
+              manifestPath: result.manifestPath,
+              envKeys: result.envKeys,
+              linkNote: result.linkNote,
+            },
+      )
+    })
+  }
+
+  function exportBundle() {
+    setShareStatus(null)
+    void run(async () => {
+      const result = await window.shelf.exportToolBundle(toolId)
+      if (result.saved && result.path) setShareStatus({ kind: 'bundle', path: result.path })
+    })
+  }
+
   function confirmRemove() {
     if (
       !window.confirm(
@@ -182,6 +218,26 @@ export function ToolDetailPage() {
       disabled: busy,
       onSelect: () => void run(() => restartTool(toolId)),
     },
+    ...(current.projectPath
+      ? [
+          {
+            id: 'bundle',
+            label: 'Export bundle (.zip)…',
+            disabled: busy,
+            onSelect: exportBundle,
+          },
+        ]
+      : []),
+    ...(current.source?.kind === 'git'
+      ? [
+          {
+            id: 'updates',
+            label: 'Check for updates…',
+            disabled: busy,
+            onSelect: () => setUpdatesOpen(true),
+          },
+        ]
+      : []),
     {
       id: 'remove',
       label: 'Remove',
@@ -201,9 +257,22 @@ export function ToolDetailPage() {
             {current.description || 'No description yet. Edit this tool to document what it does.'}
           </p>
         </div>
-        <Link className="btn btn-quiet" to={`/tools/${toolId}/edit`}>
-          Edit
-        </Link>
+        <div className="action-row" style={{ margin: 0, alignItems: 'center' }}>
+          {current.projectPath ? (
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={busy}
+              title="Write shelf.json and copy a link a coworker can open in Shelf"
+              onClick={share}
+            >
+              <Share2 size={15} aria-hidden /> Share
+            </button>
+          ) : null}
+          <Link className="btn btn-quiet" to={`/tools/${toolId}/edit`}>
+            Edit
+          </Link>
+        </div>
       </header>
 
       <div className="detail-hero">
@@ -246,6 +315,33 @@ export function ToolDetailPage() {
       {actionError ? (
         <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
           {actionError}
+        </div>
+      ) : null}
+
+      {shareStatus?.kind === 'copied' ? (
+        <div className="share-status" role="status">
+          <strong>Link copied.</strong> Paste it to a coworker — Shelf shows them a consent
+          sheet before anything runs. <code style={{ fontSize: '0.85em' }}>{shareStatus.link}</code>
+          {shareStatus.envKeys.length > 0
+            ? ` They’ll be asked for their own ${shareStatus.envKeys.join(', ')}; your values were not included.`
+            : ''}{' '}
+          Commit <code>shelf.json</code> and push so the link has the manifest.
+        </div>
+      ) : null}
+      {shareStatus?.kind === 'written' ? (
+        <div className="share-status" role="status">
+          <strong>shelf.json written</strong> at{' '}
+          <code style={{ fontSize: '0.85em' }}>{shareStatus.manifestPath}</code>
+          {shareStatus.envKeys.length > 0 ? ' (env names only, no values)' : ''}.{' '}
+          {shareStatus.linkNote ||
+            'This project has no git remote, so there’s no link to copy — push it to a remote and share again, or use Export bundle from the ⋯ menu.'}
+        </div>
+      ) : null}
+      {shareStatus?.kind === 'bundle' ? (
+        <div className="share-status" role="status">
+          <strong>Bundle saved</strong> to{' '}
+          <code style={{ fontSize: '0.85em' }}>{shareStatus.path}</code>. It contains{' '}
+          <code>shelf.json</code> (no env values) and the project without node_modules, .git, or .env files.
         </div>
       ) : null}
 
@@ -495,6 +591,34 @@ export function ToolDetailPage() {
               )}
             </div>
             ) : null}
+            {tool.source ? (
+              <div>
+                <div className="field-label">Shared from</div>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--muted)', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
+                  {tool.source.kind === 'git' ? (
+                    <code style={{ fontSize: '0.85em' }}>{tool.source.repo}</code>
+                  ) : (
+                    'A bundle (.zip)'
+                  )}
+                </p>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--subtle)', fontSize: '0.8rem' }}>
+                  Added {formatRelative(tool.source.addedAt)}
+                  {tool.source.updatedAt ? ` · updated ${formatRelative(tool.source.updatedAt)}` : ''}
+                  {tool.source.ref ? ` · ${tool.source.ref.slice(0, 10)}` : ''}
+                </p>
+                {tool.source.kind === 'git' ? (
+                  <button
+                    type="button"
+                    className="btn btn-quiet btn-sm"
+                    style={{ marginTop: '0.5rem' }}
+                    disabled={busy}
+                    onClick={() => setUpdatesOpen(true)}
+                  >
+                    Check for updates
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {tool.url ? (
               <div>
                 <div className="field-label">Local URL</div>
@@ -520,6 +644,8 @@ export function ToolDetailPage() {
           </div>
         </section>
       </div>
+
+      <UpdateSheet tool={current} open={updatesOpen} onClose={() => setUpdatesOpen(false)} />
 
       <section className="panel" style={{ marginTop: '1rem' }}>
         <div className="panel-header">
