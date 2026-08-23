@@ -206,13 +206,15 @@ Decisions made while building that the concept above left open:
 - **Provenance over IPC.** `Tool.source` is carried by both `normalizeTool`
   and the save literal (no library bump); `shelf_upsert_tool` preserves
   it on agent updates.
-- **Fetch-on-click, consent-before-anything-else.** Opening a
-  `shelf://add` link clones into the scratch area immediately (the spec's
-  step 1; it is what keeps the receive flow at two clicks). A clone is a
-  read — equivalent to opening a link in a browser — and the sheet shows the
-  full source URL while it runs. Everything that writes outside scratch or
-  executes waits for approval. Staged trees are capped at 2 GB and refused
-  if they contain a symlink pointing outside the folder.
+- **Explicit Fetch for links.** Opening a `shelf://add` link only opens the
+  sheet with the URL filled in; nothing — not even the clone — happens
+  until the receiver clicks **Fetch** (three clicks total: link, Fetch,
+  Add). Decided 2026-08-23 after the adversarial pass flagged
+  clone-on-click as the flow's weakest point: a lure link must not cause
+  an outbound fetch by itself. Add-from-bundle fetches straight away — the
+  file picker was already the user's explicit choice. Staged trees are
+  capped at 2 GB and refused if they contain a symlink pointing outside
+  the folder.
 - **Pre-commit adversarial pass (2026-08-23)** found, and the build fixed:
   bundles could plant a `.git/` (fsmonitor/hooks) — `.git` entries are now
   refused on extract; manifest `port`/`url` could disagree (url opened on a
@@ -257,10 +259,11 @@ surface); replacing the team's code host.
 
 - Sender: Share on a working tool → link in clipboard in one click;
   `shelf.json` contains no env values even when the tool has secrets.
-- Receiver: click the link in Slack → one consent sheet (folder,
+- Receiver: click the link in Slack → Fetch → one consent sheet (folder,
   commands, env inputs) → tool running and visible in the Library with
-  correct capabilities/agent access; total interaction ≤ two clicks plus
-  env values.
+  correct capabilities/agent access; total interaction ≤ three clicks
+  plus env values (was two; the extra click is the explicit Fetch, see
+  implementation notes).
 - A hand-tampered manifest (injected command in `name`, value smuggled
   into `env`, path traversal in any field) renders inert on the consent
   sheet and cannot execute or persist anything without approval.

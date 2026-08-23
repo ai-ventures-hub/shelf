@@ -14,9 +14,10 @@ two clicks — and no part of it runs on a server Shelf operates.
   Share refuses when a free-text field looks like a credential. **Export
   bundle** (⋯ menu) zips the project with the manifest inside, minus
   `node_modules`, `.git`, and `.env*` files. Over MCP: `shelf_export_tool`.
-- **Add from a link, URL, or bundle.** Opening a `shelf://add` link (or
-  **Add from…** in the Library) fetches the project into a scratch folder
-  and shows **one consent sheet**: the full source, the destination
+- **Add from a link, URL, or bundle.** Opening a `shelf://add` link shows
+  the source and waits for you to click **Fetch** — a link alone never
+  downloads anything. Fetch (also from **Add from…** in the Library)
+  pulls the project into a scratch folder and shows **one consent sheet**: the full source, the destination
   (default `~/Shelf Tools/<name>`, changeable), the exact setup and
   launch commands verbatim, the sender's notes, and an empty input per
   env key. Nothing runs or persists until you approve; approval runs the

@@ -2,8 +2,9 @@
  * Add a shared tool (Tool Sharing, 1.2) — "Add from URL" / "Add from bundle"
  * / shelf://add. One sheet, two phases:
  *
- *   1. Source: paste a repo URL (or pick a bundle). Fetching clones/unzips
- *      into Shelf's scratch area and runs NOTHING.
+ *   1. Source: paste a repo URL (or pick a bundle); a shelf://add link only
+ *      pre-fills the field. Fetch — always an explicit click for links —
+ *      clones/unzips into Shelf's scratch area and runs NOTHING.
  *   2. Consent: the full source, the destination folder, the exact setup
  *      commands and launch command verbatim, manifest notes, and an input
  *      per env key. Nothing runs or persists until "Add to my Shelf".
@@ -49,6 +50,7 @@ export function AddSharedToolDialog({
   const [error, setError] = useState<ShareFailure | null>(null)
   const [env, setEnv] = useState<Record<string, string>>({})
   const inputRef = useRef<HTMLInputElement>(null)
+  const fetchButtonRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<string | null>(null)
 
@@ -62,8 +64,10 @@ export function AddSharedToolDialog({
     return () => window.clearTimeout(id)
   }, [open, phase.kind])
 
-  // Reset on open; a link-driven open starts fetching immediately (the
-  // sheet still gates everything that matters).
+  // Reset on open. A link-driven open shows the URL and waits for an
+  // explicit Fetch click — a shelf:// link from chat must not cause even a
+  // clone on its own. A bundle picked through the file dialog is already
+  // the user's explicit choice, so it opens straight away.
   useEffect(() => {
     if (!open) return
     // A second link while a stage is live must not leak the first scratch clone.
@@ -74,8 +78,8 @@ export function AddSharedToolDialog({
     setEnv({})
     setRepo(initialRepo || '')
     setPhase({ kind: 'source' })
-    if (initialRepo) void fetchSource({ kind: 'git', repo: initialRepo })
-    else if (initialBundlePath) void fetchSource({ kind: 'bundle', bundlePath: initialBundlePath })
+    if (initialBundlePath) void fetchSource({ kind: 'bundle', bundlePath: initialBundlePath })
+    else if (initialRepo) window.setTimeout(() => fetchButtonRef.current?.focus(), 0)
     else window.setTimeout(() => inputRef.current?.focus(), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialRepo, initialBundlePath])
@@ -201,8 +205,9 @@ export function AddSharedToolDialog({
               Add a shared tool
             </h2>
             <p className="consent-lede">
-              Paste a link a coworker shared from Shelf, or a git repository URL.
-              You’ll review exactly what it does before anything runs.
+              {initialRepo
+                ? 'This link came from outside Shelf. Fetch downloads the project into a scratch folder so you can review exactly what it does — nothing runs until you approve.'
+                : 'Paste a link a coworker shared from Shelf, or a git repository URL. You’ll review exactly what it does before anything runs.'}
             </p>
             <label className="field">
               <span className="field-label">Repository URL or shelf:// link</span>
@@ -235,7 +240,12 @@ export function AddSharedToolDialog({
               <button type="button" className="btn btn-quiet" disabled={busy} onClick={onClose}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary" disabled={busy || !repo.trim()}>
+              <button
+                ref={fetchButtonRef}
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || !repo.trim()}
+              >
                 {phase.kind === 'fetching' ? 'Fetching…' : 'Fetch'}
               </button>
             </div>
