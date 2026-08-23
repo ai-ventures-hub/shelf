@@ -6,7 +6,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { LibraryStore } = require('../dist-electron/shared/library-store.js')
+const { LibraryStore, adoptCollection } = require('../dist-electron/shared/library-store.js')
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-library-safety-'))
 const libraryPath = path.join(root, 'library.json')
 
@@ -29,6 +29,117 @@ try {
   assert.equal(fs.readFileSync(libraryPath, 'utf8'), '{ damaged-later')
 
   console.log('OK: corrupt library is backed up and never silently overwritten')
+
+  // --- Collection ownership (shelf_upsert_collection write path) ---
+  const owned = new LibraryStore(root)
+  const tool = owned.save({
+    id: '', name: 'Asset Engine', tags: [], capabilities: [], agentAccess: [],
+    favorite: false, launchCommand: 'node x.mjs', createdAt: '', updatedAt: '',
+  })
+
+  const draft = owned.upsertCollectionFromAgent({ name: 'Movie Studio', toolIds: [tool.id] })
+  assert.equal(draft.action, 'created')
+  assert.equal(draft.collection.origin, 'agent', 'agent draft is marked')
+
+  // The Tool.source lesson: ownership must survive a normalize-on-read cycle,
+  // not just the in-memory return value.
+  const reread = new LibraryStore(root).getCollection(draft.collection.id)
+  assert.equal(reread.origin, 'agent', 'origin survives normalizeCollection')
+  const onDisk = JSON.parse(fs.readFileSync(libraryPath, 'utf8'))
+  assert.equal(onDisk.collections[0].origin, 'agent', 'origin is persisted')
+
+  // A GUI save adopts it; agents are then locked out.
+  owned.saveCollection(adoptCollection(reread))
+  assert.equal(owned.getCollection(draft.collection.id).origin, undefined, 'GUI save adopts')
+  assert.throws(
+    () => owned.upsertCollectionFromAgent({ id: draft.collection.id, name: 'Movie Studio' }),
+    /user-owned/i,
+    'agents cannot edit an adopted collection',
+  )
+  assert.throws(
+    () => owned.upsertCollectionFromAgent({ name: 'MOVIE STUDIO' }),
+    /user owns it/i,
+    'agents cannot hijack a user collection by name (case-insensitive)',
+  )
+
+  // An omitted origin preserves what is stored (neither adopts nor re-drafts).
+  const userOwned = owned.getCollection(draft.collection.id)
+  owned.saveCollection({ ...userOwned, name: 'Movie Studio', origin: 'preserve' })
+  assert.equal(owned.getCollection(draft.collection.id).origin, undefined)
+
+  // Agents never bind a design profile, even on their own draft.
+  const bound = owned.upsertCollectionFromAgent({ name: 'Render Bay', designProfileId: 'p1' })
+  assert.equal(bound.collection.designProfileId, undefined, 'agent cannot bind a brand')
+  // The REACHABLE invariant: binding a brand happens in the GUI, which
+  // adopts the collection, so a bound collection is always user-owned and
+  // the agent is refused outright on its next edit.
+  owned.saveCollection(adoptCollection({ ...owned.getCollection(bound.collection.id), designProfileId: 'p1' }))
+  const boundNow = owned.getCollection(bound.collection.id)
+  assert.equal(boundNow.designProfileId, 'p1')
+  assert.equal(boundNow.origin, undefined, 'binding a brand in the GUI adopts the collection')
+  assert.throws(
+    () => owned.upsertCollectionFromAgent({ id: bound.collection.id, name: 'Render Bay', addToolIds: [tool.id] }),
+    /user-owned/i,
+    'a brand-bound collection is user-owned and refuses agents',
+  )
+  assert.equal(owned.getCollection(bound.collection.id).designProfileId, 'p1', 'brand binding intact')
+
+  // --- Look-alike names cannot slip past the ownership guard (audit HIGH) ---
+  const userOwn = owned.saveCollection({
+    id: '', name: 'Client Prod', toolIds: [tool.id], origin: 'user',
+  })
+  for (const twin of [
+    'Client Prod\u200B',        // zero-width space
+    'Client\u200D Prod',        // zero-width joiner
+    'Client  Prod',             // double space
+    'client prod',              // case
+    ' Client Prod ',            // padding
+    'Cliént Prod'.normalize('NFD'), // decomposed accent
+    'CLIENT\u0000 PROD',        // NUL
+  ]) {
+    assert.throws(
+      () => owned.upsertCollectionFromAgent({ name: twin }),
+      /user owns it/i,
+      `look-alike must be refused: ${JSON.stringify(twin)}`,
+    )
+  }
+  // A genuinely different name still works.
+  const distinct = owned.upsertCollectionFromAgent({ name: 'Client Staging' })
+  assert.equal(distinct.action, 'created')
+  // Invisible characters never reach the stored name either.
+  const weird = owned.upsertCollectionFromAgent({ name: 'Render\u200BBay Two' })
+  assert.equal(weird.collection.name, 'RenderBay Two', 'invisibles stripped before storing')
+
+  // Description: absent preserves, '' clears (audit LOW).
+  const described = owned.upsertCollectionFromAgent({ name: 'Client Staging', description: 'temp' })
+  assert.equal(described.collection.description, 'temp')
+  assert.equal(
+    owned.upsertCollectionFromAgent({ name: 'Client Staging' }).collection.description,
+    'temp',
+    'omitted description preserves',
+  )
+  assert.equal(
+    owned.upsertCollectionFromAgent({ name: 'Client Staging', description: '' }).collection.description,
+    undefined,
+    "explicit '' clears the description",
+  )
+
+  // Removing an id whose tool is already gone is cleanup, not a bad id.
+  const gone = owned.upsertCollectionFromAgent({ name: 'Client Staging', removeToolIds: ['deleted-tool-id'] })
+  assert.deepEqual(gone.unknownToolIds, [], 'removeToolIds never reports unknown ids')
+
+  // The GUI adoption helper is the ownership mechanism; assert it directly.
+  assert.equal(adoptCollection({ name: 'x', origin: 'agent' }).origin, 'user', 'adoptCollection always adopts')
+
+  // Input guards: credential-looking text and runaway length are refused.
+  assert.throws(
+    () => owned.upsertCollectionFromAgent({ name: 'sk-live-1234567890abcdefghijklmnop' }),
+    /credential/i,
+  )
+  assert.throws(() => owned.upsertCollectionFromAgent({ name: 'x'.repeat(81) }), /too long/i)
+  assert.throws(() => owned.upsertCollectionFromAgent({ name: '   ' }), /required/i)
+  assert.throws(() => owned.upsertCollectionFromAgent({ id: 'nope', name: 'Ghost' }), /not found/i)
+  console.log('OK: collection ownership (draft, persistence, adoption, brand + input guards)')
 } finally {
   fs.rmSync(root, { recursive: true, force: true })
 }

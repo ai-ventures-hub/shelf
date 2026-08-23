@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Agents can build collections now.** `shelf_upsert_collection` lets a
+  connected agent create a collection and put tools in it, so "make a
+  Movie Studio shelf with these three tools" works without you opening
+  the app. It follows the same draft-and-adopt rule as design profiles:
+  what an agent creates is marked **From agent** in Shelf, you can keep
+  editing it there, and the moment you do it becomes yours and agents
+  can no longer change it. Agents never bind a design profile to a
+  collection, and never edit one you own. (Removing a tool from your
+  library still removes it from every collection, as it always has.)
+
 ## 1.2.1 — 2026-08-23
 
 - **Private repos share cleanly.** When you Add a tool from a private

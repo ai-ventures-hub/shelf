@@ -504,7 +504,13 @@ server.registerTool(
       collectionId: collection.id,
     })
     return textResult({
-      collection: { id: collection.id, name: collection.name },
+      collection: {
+        id: collection.id,
+        name: collection.name,
+        // So an agent can tell before writing whether shelf_upsert_collection
+        // will be refused, instead of finding out by failing.
+        editableByAgent: collection.origin === 'agent',
+      },
       members,
       running: members.filter((m) => 'status' in m && m.status === 'running').length,
       designProfile: brand.profile
@@ -517,6 +523,63 @@ server.registerTool(
           }
         : null,
     })
+  },
+)
+
+server.registerTool(
+  'shelf_upsert_collection',
+  {
+    description:
+      "Create a collection and put tools in it (\"make a Movie Studio shelf with these three tools\"). Pass id to update that collection (name is still required and renames it), or name alone to update your own draft with that name / create it when missing. toolIds REPLACES the member set; addToolIds appends and removeToolIds drops (remove wins for an id in both), so you can build a collection up across several calls. Ownership: you may only edit collections YOU created. Once the user edits one in Shelf it becomes theirs, and both updating it by id and reusing its name are refused — pick a different name and tell the user. Binding a design profile is always the user's call and is never changed here.",
+    inputSchema: {
+      id: z.string().optional().describe('Existing collection id (optional)'),
+      name: z.string().min(1).max(80).describe('Display name'),
+      description: z.string().max(500).optional().describe("Pass '' to clear it"),
+      toolIds: z
+        .array(z.string())
+        .max(200)
+        .optional()
+        .describe('Replaces the whole member set. Omit to leave members alone.'),
+      addToolIds: z.array(z.string()).max(200).optional().describe('Tool ids to add'),
+      removeToolIds: z.array(z.string()).max(200).optional().describe('Tool ids to remove'),
+    },
+  },
+  async (args) => {
+    try {
+      const { action, collection, unknownToolIds } = store.upsertCollectionFromAgent({
+        id: args.id,
+        name: args.name,
+        description: args.description,
+        toolIds: args.toolIds,
+        addToolIds: args.addToolIds,
+        removeToolIds: args.removeToolIds,
+      })
+      const members = collection.toolIds.map((toolId) => {
+        const tool = store.get(toolId)
+        return { id: toolId, name: tool?.name }
+      })
+      return textResult({
+        action,
+        collection: {
+          id: collection.id,
+          name: collection.name,
+          description: collection.description,
+          toolIds: collection.toolIds,
+          designProfileId: collection.designProfileId,
+        },
+        members,
+        warnings: unknownToolIds.length
+          ? [
+              `Ignored ${unknownToolIds.length} unknown tool id(s): ${unknownToolIds
+                .slice(0, 10)
+                .join(', ')}${unknownToolIds.length > 10 ? `, and ${unknownToolIds.length - 10} more` : ''}. Call shelf_list_tools for current ids.`,
+            ]
+          : undefined,
+        note: 'Saved as your draft. It shows in Shelf as “From agent”; once the user edits it there, it becomes theirs and you can no longer change it.',
+      })
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
   },
 )
 

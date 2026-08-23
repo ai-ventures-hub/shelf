@@ -102,15 +102,22 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   new-profile wizard (blank vs project-seeded), imported fonts in the
   live preview, `shelf_get_collection` stack context, launch-health
   chips on library cards, and agent write-path hardening.
-- **v1.2 candidate — `shelf_upsert_collection`**: make "create a
-  collection named X and build these N tools into it" work end-to-end
-  over MCP. Ownership mirrors design profiles (agents draft, you
-  decide): agent-created collections stay agent-editable until any GUI
-  edit adopts them; agents may only add tools they registered
-  themselves, and never bind or unbind a design profile on a
-  user-owned collection.
-- **v1.2 — Tool Sharing, stage 1: portable tools** (built 2026-08-23 on
-  v2, unreleased): `shelf.json` manifest (env names only, values
+- **`shelf_upsert_collection`** (built 2026-08-23 on v2, unreleased):
+  "create a collection named X and build these N tools into it" works
+  end-to-end over MCP. Ownership mirrors design profiles (agents draft,
+  you decide): agent-created collections carry `origin: 'agent'` and stay
+  agent-editable until any GUI edit adopts them, after which agents are
+  refused by id AND by name. Agents never bind or unbind a design
+  profile. **Deviation from the original spec:** members may be any
+  existing tool, not only agent-registered ones. `Tool` carries no
+  creation provenance, so the original rule would have made every tool
+  already in a user's library un-addable on day one; a collection is a
+  named list that grants an agent nothing it lacks via
+  `shelf_list_tools` / `shelf_launch_tool`, and the draft is visible and
+  deletable. Approved by Carlos 2026-08-23.
+- **v1.2 — Tool Sharing, stage 1: portable tools** (released 2026-08-23,
+  `v1.2.0`; `v1.2.1` adds private-repo clones via `gh` and guided auth
+  failures): `shelf.json` manifest (env names only, values
   stripped structurally), **Share** + `shelf://add` link + Export bundle,
   Add-from-URL/bundle with one consent sheet into the existing
   register/bootstrap pipeline, provenance + explicit "Check for

@@ -220,6 +220,8 @@ export interface Collection {
   toolIds: string[]
   /** Design Engine binding (mirror of shared/types.ts). */
   designProfileId?: string
+  /** 'agent' = an agent draft awaiting your adoption; any GUI edit clears it. */
+  origin?: 'agent'
   createdAt: string
   updatedAt: string
 }

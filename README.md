@@ -115,7 +115,8 @@ Example prompts:
 `shelf_update_capability_gap`, `shelf_find_free_port`, `shelf_inspect_project`,
 `shelf_register_project`, `shelf_upsert_tool`, `shelf_remove_tool`, `shelf_launch_tool`,
 `shelf_stop_tool`, `shelf_get_status`, `shelf_get_logs`, `shelf_list_receipts`,
-`shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_collection`, `shelf_get_design_md`,
+`shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_collection`,
+`shelf_upsert_collection`, `shelf_export_tool`, `shelf_get_design_md`,
 `shelf_list_design_profiles`, `shelf_get_design_profile`, `shelf_upsert_design_profile`.
 
 Resources: `shelf://tools/{id}/design-md`, `shelf://design/profiles/{id}`.

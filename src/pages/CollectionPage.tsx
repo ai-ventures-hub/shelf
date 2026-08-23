@@ -108,6 +108,16 @@ export function CollectionPage() {
   return (
     <>
       <div className="collection-actions">
+        {collection.origin === 'agent' ? (
+          // Same "agent drafted this, you decide" cue as the Design list.
+          // Editing anything on this page adopts it (collections:save).
+          <span
+            className="tag-chip"
+            title="An agent created this collection over MCP. Edit it here and it becomes yours."
+          >
+            From agent
+          </span>
+        ) : null}
         <button
           type="button"
           className="btn btn-primary btn-sm"

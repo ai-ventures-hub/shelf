@@ -143,6 +143,13 @@ export interface Collection {
   toolIds: string[]
   /** Design Engine binding — additive optional, no library version bump. */
   designProfileId?: string
+  /**
+   * 'agent' = created over MCP and still an agent draft; agents may keep
+   * editing it. Absent = user-owned (GUI-created, or a GUI edit has since
+   * adopted it) and agents must not touch it. Mirrors DesignProfile.origin.
+   * Additive optional — no library version bump.
+   */
+  origin?: 'agent'
   createdAt: string
   updatedAt: string
 }
@@ -511,6 +518,36 @@ export const BARE_SECRET_SOURCE = [
  * custom-property references outright.
  */
 export const BARE_SECRET_BOUNDARY = '(?<![\\w-])'
+
+/**
+ * Control, zero-width, and bidi characters that can hide inside a display
+ * name. Stripped before a name is stored so nothing renders invisibly in the
+ * sidebar, and before it is folded for comparison.
+ */
+const INVISIBLE_CHARS = /[\u0000-\u001F\u007F\u200B-\u200F\u2028-\u202E\u2066-\u2069\uFEFF]/g
+
+export function stripInvisibleChars(value: string): string {
+  return value.replace(INVISIBLE_CHARS, '')
+}
+
+/**
+ * Fold a display name for OWNERSHIP comparisons (agent write paths).
+ * Case and whitespace alone are not enough: an agent could otherwise create
+ * "Client Prod\u200B" beside the user's "Client Prod" — indistinguishable in
+ * the sidebar, and one click away from launching the wrong stack. NFKC
+ * reconciles composed/decomposed forms, and dropping combining marks closes
+ * the Turkish dotless-i and accent look-alikes. Deliberately aggressive:
+ * this only ever makes an agent's create/rename fail closed with guidance,
+ * and never restricts what the user can name something in the GUI.
+ */
+export function foldDisplayName(name: string): string {
+  return stripInvisibleChars(name.normalize('NFKC'))
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 /** Redact likely secrets before returning tool/log payloads to agents or UI. */
 export function maskSecrets(text: string): string {
