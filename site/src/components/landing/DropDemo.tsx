@@ -125,7 +125,7 @@ export function DropDemo() {
           ))}
         </div>
       </div>
-      <p className="drop-note">Simulated loop — the real thing is about this fast.</p>
+      <p className="drop-note">Simulated loop. The real thing is about this fast.</p>
     </div>
   )
 }

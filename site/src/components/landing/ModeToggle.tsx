@@ -33,11 +33,11 @@ export function ModeToggle({ children }: { children: React.ReactNode }) {
             Developer
           </button>
         </div>
-        <p className="mode-foot">Switch anytime — it only changes what’s shown.</p>
+        <p className="mode-foot">Switch anytime. It only changes what’s shown.</p>
       </div>
       <div className="mock-window mode-window">
         <div className="mode-titlebar">
-          {mode === 'developer' ? 'Shelf — Developer mode' : 'Shelf — Simple mode'}
+          {mode === 'developer' ? 'Shelf · Developer mode' : 'Shelf · Simple mode'}
         </div>
         <div className="mode-rows" key={mode}>
           {MODE_ROWS[mode].map((row) => (

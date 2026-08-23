@@ -9,7 +9,7 @@ import { DOWNLOAD_DMG_URL, DOWNLOAD_ZIP_URL, RELEASES_URL } from '@/lib/download
 export const metadata: Metadata = {
   title: 'Download Shelf for macOS',
   description:
-    'Shelf is downloading — open the DMG, drag Shelf into Applications, and launch. Free, signed and notarized, Apple Silicon.',
+    'Shelf is downloading. Open the DMG, drag Shelf into Applications, and launch. Free, signed and notarized, Apple Silicon.',
 }
 
 const STEPS = [
@@ -93,8 +93,8 @@ export default function DownloadPage() {
           ))}
         </ol>
         <p className="download-fine">
-          Signed &amp; notarized — no security warnings. Requires an Apple Silicon
-          Mac (M1 or later). Free, MIT-licensed, no account.
+          Signed and notarized, so no security warnings. Requires an Apple
+          Silicon Mac (M1 or later). Free, MIT-licensed, no account.
         </p>
         <p className="download-alt">
           Prefer an archive? <a href={DOWNLOAD_ZIP_URL}>Download the .zip</a> · or
@@ -102,8 +102,8 @@ export default function DownloadPage() {
         </p>
         <p className="download-alt">
           Stuck on a step?{' '}
-          <a href="mailto:support@shelfmcp.com">support@shelfmcp.com</a> — a human
-          reads it.
+          <a href="mailto:support@shelfmcp.com">support@shelfmcp.com</a>. A
+          human reads it.
         </p>
       </main>
       <SiteFooter />

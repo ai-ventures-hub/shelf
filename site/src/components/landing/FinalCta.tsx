@@ -10,7 +10,7 @@ export function FinalCta() {
         </h2>
         <div className="final-cta-row" data-reveal>
           <Link className="btn-primary" href="/download">
-            Download — It’s free
+            Download for free
           </Link>
           <a
             className="btn-ghost"

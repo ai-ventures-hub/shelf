@@ -24,14 +24,14 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Shelf — You build the tools. Shelf keeps them.',
+  title: 'Shelf · You build the tools. Shelf keeps them.',
   description:
-    'One local library for every tool you ship — launch them in a click, share them with a coworker in two, and serve them to your agents with your brand. No cloud. No account.',
+    'One local library for every tool you ship. Launch them in a click, share them with a coworker in two, and serve them to your agents with your brand. No cloud. No account.',
   metadataBase: new URL('https://shelfmcp.com'),
   openGraph: {
-    title: 'Shelf — You build the tools. Shelf keeps them.',
+    title: 'Shelf · You build the tools. Shelf keeps them.',
     description:
-      'One local library for every tool you ship — launch them in a click, share them with a coworker in two, and serve them to your agents with your brand. No cloud. No account.',
+      'One local library for every tool you ship. Launch them in a click, share them with a coworker in two, and serve them to your agents with your brand. No cloud. No account.',
     url: 'https://shelfmcp.com',
     siteName: 'Shelf',
     type: 'website',

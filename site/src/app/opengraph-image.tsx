@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export const alt =
-  'Shelf — You build the tools. Shelf keeps them. Your tools and your brand, served locally to your agents.'
+  'Shelf. You build the tools. Shelf keeps them. Your tools and your brand, served locally to your agents.'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -86,8 +86,8 @@ export default async function Image() {
               color: '#99a3b8',
             }}
           >
-            One local library for your tools — and one source of truth for your
-            brand, served honestly to your agents.
+            One local library for your tools, and one source of truth for
+            your brand, served honestly to your agents.
           </div>
         </div>
 

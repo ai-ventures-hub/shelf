@@ -30,7 +30,7 @@ export const HERO_FILENAMES = [
   'npm run dev … which port?',
   'csv-de-duper.py',
   '~/Downloads/client-resizer-v1',
-  'docker compose up — which folder?',
+  'docker compose up … which folder?',
   'source .venv/bin/activate ???',
 ] as const
 
@@ -168,7 +168,7 @@ export const BRAND_PRESETS = [
     swatches: ['#f4f0e6', '#fdfbf4', '#2d4a34', '#b4552d', '#5a5348'],
     fontLabel: 'Georgia · serif / roman',
     voiceLine: 'Slow growth is still growth.',
-    source: 'seeded from the CSS variables your project already declares — nothing guessed',
+    source: 'seeded from the CSS variables your project already declares, nothing guessed',
     cssVars: {
       '--be-bg': '#f4f0e6',
       '--be-surface': '#fdfbf4',
@@ -191,7 +191,7 @@ export const BRAND_PRESETS = [
     swatches: ['#0c0d10', '#16181d', '#d8f34e', '#f2f2ef', '#7a7f8a'],
     fontLabel: 'JetBrains Mono · 700 / caps',
     voiceLine: 'Louder than your roadmap.',
-    source: 'drafted by your agent from a screenshot — reviewed, then saved',
+    source: 'drafted by your agent from a screenshot, reviewed, then saved',
     cssVars: {
       '--be-bg': '#0c0d10',
       '--be-surface': '#16181d',
@@ -222,7 +222,7 @@ export const BRAND_PRESETS = [
 export const MODE_ROWS = {
   simple: [
     { label: 'AI Connections', meta: 'Claude · Cursor connected', tone: 'success' },
-    { label: 'portfolio-site', meta: 'Running — Open', tone: 'success' },
+    { label: 'portfolio-site', meta: 'Running · Open', tone: 'success' },
     { label: 'History', meta: 'launched 2h ago', tone: 'muted' },
     { label: 'Advanced details', meta: 'tucked away, still saved', tone: 'muted', dim: true },
   ],

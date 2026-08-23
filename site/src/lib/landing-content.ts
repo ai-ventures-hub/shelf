@@ -12,17 +12,17 @@ export const HOW_CARDS = [
   {
     n: '01',
     title: 'Drop a folder',
-    body: 'Anything your AI tool built — a Next.js site, a Python script, a Docker stack.',
+    body: 'Anything your AI tool built: a Next.js site, a Python script, a Docker stack.',
   },
   {
     n: '02',
     title: 'Shelf reads the setup',
-    body: 'Launch command, packages, ports — detected, fixed when busy, remembered forever.',
+    body: 'Shelf finds the launch command, installs the packages, moves the port when it’s busy, and remembers all of it.',
   },
   {
     n: '03',
-    title: 'It runs — and stays found',
-    body: 'One click to launch, always. Your AI tools can find and use it too.',
+    title: 'It runs, and stays found',
+    body: 'One click to launch, today and next month. Your AI tools can find it too.',
   },
 ] as const
 
@@ -49,7 +49,7 @@ export const HONEST_CARDS = [
     statusTone: 'neutral',
     edge: 'neutral',
     line: ':8080 · docker compose up',
-    body: 'Starts fine when you ask. Agents cannot reach it yet — the MCP entrypoint needs setup.',
+    body: 'Starts fine when you ask. Agents can’t reach it yet, because the MCP entrypoint needs setup.',
     readiness: 'Needs setup',
     readinessTone: 'warning',
     action: 'Start · Configure',
@@ -62,7 +62,7 @@ export const HONEST_CARDS = [
     statusTone: 'neutral',
     edge: 'neutral',
     line: 'one-shot · .venv/bin/python convert.py',
-    body: 'A one-shot script with no port. Launchable by you; never advertised to agents.',
+    body: 'A one-shot script with no port. You can run it. Agents never see it.',
     readiness: 'Manual only',
     readinessTone: 'neutral',
     action: 'Run once',
@@ -90,7 +90,7 @@ export const CHAT_BUBBLES = [
   {
     role: 'agent',
     parts: [
-      { text: 'Done — ' },
+      { text: 'Done. ' },
       { text: 'portfolio-site is running', tone: 'success' },
       { text: '. Opened it in your browser.' },
     ],
@@ -98,7 +98,7 @@ export const CHAT_BUBBLES = [
   { role: 'user', parts: [{ text: 'What do I have that resizes images?' }] },
   {
     role: 'agent',
-    parts: [{ text: 'Image Prepper on your shelf does batch resizing — it’s ready to use.' }],
+    parts: [{ text: 'Image Prepper on your shelf does batch resizing, and it’s ready to use.' }],
   },
 ] as const satisfies readonly {
   role: 'user' | 'agent'
@@ -109,11 +109,11 @@ export const CHAT_BUBBLES = [
 export const DESIGN_POINTS = [
   {
     title: 'Extracted from your code.',
-    body: 'Point Shelf at a project and it reads the tokens already there — CSS variables, Tailwind config. Deterministic: nothing guessed, skips reported.',
+    body: 'Point Shelf at a project and it reads the tokens already there, from CSS variables and Tailwind config. It guesses nothing, and tells you what it skipped.',
   },
   {
     title: 'DTCG tokens.',
-    body: 'Standard design-token JSON — colors, type, radius — any agent can consume.',
+    body: 'Standard design-token JSON: colors, type, radius. Any agent can read it.',
   },
   {
     title: 'A brief agents can read.',
@@ -130,7 +130,7 @@ export const DESIGN_POINTS = [
 export const SHARE_POINTS = [
   {
     title: 'Secrets never travel.',
-    body: 'Share writes the setup — launch command, port, capabilities, even which env keys are needed. Only the names. There is no code path that can put a value in the file.',
+    body: 'Share writes the setup: launch command, port, capabilities, even which env keys the tool needs. Only the names. No code path can put a value in the file.',
   },
   {
     title: 'One consent sheet.',
@@ -138,11 +138,11 @@ export const SHARE_POINTS = [
   },
   {
     title: 'Your git host is the transport.',
-    body: 'A shelf:// link points at the repo you already use — or send a bundle. No Shelf server, no account, no registry. Same promise as everything else here.',
+    body: 'A shelf:// link points at the repo you already use. Or send a bundle. No Shelf server, no account, no registry. Same promise as everything else here.',
   },
   {
     title: 'Updates you approve.',
-    body: 'Check for updates shows the incoming commits and the manifest diff. You pull when you want; a diverged copy is said plainly. Never automatic.',
+    body: 'Check for updates shows the incoming commits and the manifest diff. You pull when you want. If your copy has drifted, Shelf says so instead of guessing. Never automatic.',
   },
 ] as const satisfies readonly { title: string; body: string }[]
 
@@ -152,7 +152,7 @@ export const SHARE_SHEET_ROWS = [
   { label: 'Folder', value: '~/Shelf Tools/Image Prepper', kind: 'path' },
   { label: 'Will run first', value: 'npm install', kind: 'cmd' },
   { label: 'Launch', value: 'npm run dev', kind: 'cmd' },
-  { label: 'OPENAI_API_KEY', value: 'you fill this in — stays on your Mac', kind: 'env' },
+  { label: 'OPENAI_API_KEY', value: 'you fill this in, stays on your Mac', kind: 'env' },
 ] as const satisfies readonly {
   label: string
   value: string

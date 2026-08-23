@@ -116,12 +116,12 @@ export function HeroScrollStage() {
           </h1>
           <p className="hero-sub">
             Apps and tools made with AI don’t come with a place to live. Shelf
-            is that place — they launch in a click and your AI tools can reach
+            is that place. They launch in a click, and your AI tools can reach
             them.
           </p>
           <div className="hero-cta">
             <Link className="btn-primary" href="/download">
-              Download — It’s free
+              Download for free
             </Link>
             <a className="btn-ghost" href="#how">
               Watch it happen ↓
@@ -166,7 +166,7 @@ export function HeroScrollStage() {
           <div className="hero-plank" aria-hidden />
           <div className="hero-glow" aria-hidden />
           <p className="hero-caption">
-            Hover a tool. One click and it’s running — today, next week, two
+            Hover a tool. One click and it’s running. Today, next week, two
             clients from now.
           </p>
         </div>

@@ -19,7 +19,7 @@ export function SiteHeader() {
             GitHub
           </a>
           <Link className="btn-primary btn--nav" href="/download">
-            Download <span className="header-download-free">— It’s free</span>
+            Download <span className="header-download-free">for free</span>
           </Link>
         </nav>
       </div>
