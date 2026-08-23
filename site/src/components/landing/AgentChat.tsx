@@ -19,8 +19,8 @@ export function AgentChat() {
           </h2>
           <p className="sec-lead">
             Connect Claude Code, Claude Desktop, Cursor, or Codex in one click.
-            They see the same library you do — launch your tools, check what’s
-            running, find the right one for a job.
+            They see the same library you do. They launch your tools, check
+            what’s running, and find the right one for a job.
           </p>
           <div className="chat-chips">
             {chips.map((client) => (

@@ -724,8 +724,11 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   color: var(--av-text-on-accent);
 }
 
+/* The nav button is a flex container, so whitespace between the label text
+   node and this span is discarded. Space it explicitly. */
 .header-download-free {
   font-weight: inherit;
+  margin-left: 5px;
 }
 
 /* —— Hero · scroll-scrubbed pinned stage ——

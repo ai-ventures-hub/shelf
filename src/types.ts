@@ -105,6 +105,8 @@ export type ShareErrorCode =
   | 'git_missing'
   | 'invalid_repo'
   | 'clone_failed'
+  | 'auth_required'
+  | 'repo_not_found'
   | 'bundle_invalid'
   | 'manifest_invalid'
   | 'destination_invalid'
@@ -117,6 +119,7 @@ export interface ShareFailure {
   code: ShareErrorCode | 'unknown'
   message: string
   remedy?: string
+  remedyCommand?: string
 }
 
 /** What the consent sheet shows (stagePath never leaves the main process). */

@@ -18,11 +18,11 @@ export function ToolSharing() {
             Works on your Shelf. Two clicks to a coworker’s.
           </h2>
           <p className="sec-lead" data-reveal>
-            The hard part of “works on my machine” was never the code — your team
-            already has GitHub. It’s the launch command, the port, the setup
-            steps, and which keys are needed. Shelf packs all of that into a
-            <code> shelf.json</code> beside your project and hands over a link.
-            Your coworker approves one sheet, and it’s running.
+            The hard part of “works on my machine” was never the code. Your
+            team already has GitHub. It’s the launch command, the port, the
+            setup steps, and the keys. Shelf packs all of that
+            into a <code>shelf.json</code> beside your project and hands over a
+            link. Your coworker approves one sheet, and it’s running.
           </p>
           <ul className="be-points" data-reveal>
             {SHARE_POINTS.map((point) => (

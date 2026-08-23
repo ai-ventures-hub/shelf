@@ -36,14 +36,14 @@ export function BrandSwitcher({ children }: { children: React.ReactNode }) {
             </button>
           ))}
         </div>
-        <p className="mode-foot">Same page every time — only the profile changes.</p>
+        <p className="mode-foot">Same page every time. Only the profile changes.</p>
       </div>
       <div
         className="mock-window be-window"
         data-reveal
         style={{ '--reveal-order': 1 } as CSSProperties}
       >
-        <div className="mode-titlebar">Shelf — Design · {active.name}</div>
+        <div className="mode-titlebar">Shelf · Design · {active.name}</div>
         <div className="be-body" style={active.cssVars as CSSProperties}>
           <div className="be-profile" key={active.id}>
             <div className="be-profile-head">

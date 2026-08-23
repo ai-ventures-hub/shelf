@@ -328,19 +328,20 @@ function ShareErrorCard({ error }: { error: ShareFailure }) {
       {error.remedy ? (
         <p style={{ margin: '0.4rem 0 0', fontSize: '0.88rem' }}>{error.remedy}</p>
       ) : null}
-      {error.code === 'git_missing' ? (
-        <div className="action-row" style={{ margin: '0.6rem 0 0' }}>
+      {error.remedyCommand ? (
+        <div className="action-row" style={{ margin: '0.6rem 0 0', alignItems: 'center' }}>
+          <code style={{ fontSize: '0.82em' }}>{error.remedyCommand}</code>
           <button
             type="button"
             className="btn btn-quiet btn-sm"
             onClick={() => {
-              void navigator.clipboard.writeText('xcode-select --install').then(() => {
+              void navigator.clipboard.writeText(error.remedyCommand!).then(() => {
                 setCopied(true)
                 window.setTimeout(() => setCopied(false), 2400)
               })
             }}
           >
-            {copied ? 'Copied' : 'Copy install command'}
+            {copied ? 'Copied' : 'Copy command'}
           </button>
         </div>
       ) : null}

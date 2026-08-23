@@ -61,6 +61,9 @@ const {
   stageSharedTool,
   validateDestination,
   validateRepoUrl,
+  classifyCloneFailure,
+  sshUrlForHttps,
+  githubHelperArgs,
 } = require('../dist-electron/shared/tool-share')
 const { bundleFolder, buildZip, extractZip, isSafeZipPath, listZip } = require('../dist-electron/shared/zip')
 
@@ -372,6 +375,35 @@ try {
     assert.equal(validateRepoUrl(bad).ok, false, `must reject: ${JSON.stringify(bad)}`)
   }
   console.log('OK: shelf://add parses repo only; repo URLs are allow-listed')
+
+  // Private-repo / missing-repo clone failures classify into actionable
+  // states, and the SSH hint is derived from the https URL.
+  assert.equal(classifyCloneFailure("fatal: could not read Username for 'https://github.com': terminal prompts disabled"), 'auth')
+  assert.equal(classifyCloneFailure('remote: Authentication failed for ...'), 'auth')
+  assert.equal(classifyCloneFailure('remote: Repository not found.\nfatal: repository not found'), 'not_found')
+  assert.equal(classifyCloneFailure('git@github.com: Permission denied (publickey).'), 'ssh_auth')
+  assert.equal(classifyCloneFailure('fatal: unable to access: Could not resolve host'), 'other')
+  assert.equal(sshUrlForHttps('https://github.com/ai-ventures-hub/lunch-time.git'), 'git@github.com:ai-ventures-hub/lunch-time.git')
+  assert.equal(sshUrlForHttps('https://gitlab.com/org/repo.git'), null, 'ssh hint is github-family only')
+  assert.equal(sshUrlForHttps('git://127.0.0.1/x.git'), null)
+  console.log('OK: clone failures classify (auth/not_found/ssh) with a derived SSH hint')
+
+  // gh credential helper: none without gh; scoped to the URL's https host with
+  // gh; never for git://, ssh://, or scp-like remotes (no https context).
+  assert.deepEqual(githubHelperArgs('https://github.com/org/repo.git', null), [], 'no gh → no helper')
+  assert.deepEqual(
+    githubHelperArgs('https://github.com/org/repo.git', '/usr/local/bin/gh'),
+    ['-c', 'credential.https://github.com.helper=!/usr/local/bin/gh auth git-credential'],
+  )
+  assert.deepEqual(
+    githubHelperArgs('https://ghe.corp.example/org/repo.git', '/usr/local/bin/gh'),
+    ['-c', 'credential.https://ghe.corp.example.helper=!/usr/local/bin/gh auth git-credential'],
+    'self-hosted GHE gets the helper too (gh no-ops if not signed in there)',
+  )
+  assert.deepEqual(githubHelperArgs('git://127.0.0.1:9418/repo.git', '/usr/local/bin/gh'), [], 'git:// → no helper')
+  assert.deepEqual(githubHelperArgs('git@github.com:org/repo.git', '/usr/local/bin/gh'), [], 'scp-like → no helper')
+  assert.deepEqual(githubHelperArgs('ssh://git@github.com/org/repo.git', '/usr/local/bin/gh'), [], 'ssh:// → no helper')
+  console.log('OK: gh credential helper is https-scoped and absent for git://ssh://scp remotes')
 
   // -------------------------------------------------------------------------
   // 6. Receive end-to-end via a local git daemon.

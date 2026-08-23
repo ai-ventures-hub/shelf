@@ -36,7 +36,7 @@ export function AppShowcase() {
           This is Shelf.
         </h2>
         <p className="sec-lead">
-          The real macOS app — the same library, gaps, and connections your
+          The real macOS app. The same library, gaps, and connections your
           agents see over MCP.
         </p>
         <div className="showcase-tabs" role="tablist" aria-label="App views">
@@ -119,8 +119,8 @@ export function AppShowcase() {
                 <div className="showcase-panel" key="mcp">
                   <h3>MCP Connections</h3>
                   <p className="showcase-panel-sub">
-                    One library, every agent — one-click config, your other
-                    servers untouched.
+                    One library, every agent. One-click config, and your
+                    other servers stay untouched.
                   </p>
                   <div className="mcp-diagram">
                     <div className="mcp-clients">
@@ -162,8 +162,8 @@ export function AppShowcase() {
                     </div>
                   </div>
                   <p className="mcp-verbs">
-                    list · register · launch · stop · logs · discover — the same
-                    verbs your desktop app uses.
+                    list · register · launch · stop · logs · discover. The
+                    same verbs your desktop app uses.
                   </p>
                 </div>
               )}
@@ -171,7 +171,8 @@ export function AppShowcase() {
                 <div className="showcase-panel" key="library">
                   <h3>Library</h3>
                   <p className="showcase-panel-sub">
-                    5 tools · 1 running — every tool on one calm home screen.
+                    Five tools, one running. Launch, stop, or open any of
+                    them from here.
                   </p>
                   <div className="lib-grid">
                     {LIB_CARDS.map((card) => (
@@ -197,8 +198,8 @@ export function AppShowcase() {
                 <div className="showcase-panel" key="gaps">
                   <h3>Capability gaps</h3>
                   <p className="showcase-panel-sub">
-                    When no tool can do a job, the unmet need is written down —
-                    a plan, not a silent failure.
+                    When no tool can do a job, Shelf writes the unmet need
+                    down. You get a plan instead of a silent failure.
                   </p>
                   <div className="gap-rows">
                     {GAP_ROWS.map((row) => (
@@ -219,7 +220,7 @@ export function AppShowcase() {
                 <div className="showcase-panel" key="design">
                   <h3>Design profiles</h3>
                   <p className="showcase-panel-sub">
-                    Your brand — colors, type, voice — served to every agent as
+                    Your colors, type, and voice, served to every agent as
                     tokens and a paste-ready brief.
                   </p>
                   <div className="design-rows">
@@ -248,8 +249,8 @@ export function AppShowcase() {
                     ))}
                   </div>
                   <p className="mcp-verbs">
-                    “build it with my branding” — resolved from the default
-                    profile, no design context from you.
+                    “build it with my branding” resolves from the default
+                    profile. You paste nothing.
                   </p>
                 </div>
               )}
@@ -285,7 +286,7 @@ export function AppShowcase() {
           </div>
         </div>
         <p className="showcase-note">
-          Every tool on one calm home screen — status and launch at a glance.
+          Every tool on one calm home screen. Status and launch at a glance.
         </p>
       </div>
     </section>

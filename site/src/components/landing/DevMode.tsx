@@ -17,7 +17,7 @@ export function DevMode() {
           <p className="sec-lead">
             One toggle. Simple hides MCP configs, capability panels, and launch
             flags behind plain language. Developer shows every wire. Same
-            engine, same files — nothing deleted, nothing dumbed down.
+            engine, same files. Nothing deleted, nothing dumbed down.
           </p>
         </ModeToggle>
       </div>

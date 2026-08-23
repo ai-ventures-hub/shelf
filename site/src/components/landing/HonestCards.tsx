@@ -10,8 +10,8 @@ export function HonestCards() {
           Every tool tells the truth twice.
         </h2>
         <p className="sec-lead">
-          Once about its process — Starting, Running, Stopped. Once about agent
-          access — ready, needs setup, or manual only. Open the URL, watch live
+          Once about its process: Starting, Running, Stopped. Once about agent
+          access: ready, needs setup, or manual only. Open the URL, watch live
           logs, stop when done.
         </p>
         <ul className="honest-grid">
@@ -39,7 +39,7 @@ export function HonestCards() {
                   className="pill"
                   data-tone={card.readinessTone}
                   data-fill={card.readinessTone === 'neutral' ? undefined : ''}
-                  title="Agent readiness — separate from process status"
+                  title="Agent readiness, separate from process status"
                 >
                   {card.readiness}
                 </span>

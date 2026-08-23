@@ -19,11 +19,11 @@ export function DesignEngine() {
             Stop pasting your hex codes.
           </h2>
           <p className="sec-lead" data-reveal>
-            Design profiles keep your colors, type, and voice in one local file —
-            seeded straight from the CSS variables and Tailwind config your
-            project already declares. Any connected agent can ask for them — and
-            build the next tool to match. Shelf serves the truth. The agent does
-            the styling.
+            Design profiles keep your colors, type, and voice in one local
+            file, seeded from the CSS variables and Tailwind config your project
+            already declares. Any connected agent can ask for them and build the
+            next tool to match. Shelf serves the truth. The agent does the
+            styling.
           </p>
           <ul className="be-points" data-reveal>
             {DESIGN_POINTS.map((point) => (
