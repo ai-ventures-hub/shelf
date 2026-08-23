@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Tool Sharing (portable tools)
+## 1.2.0 — 2026-08-23
 
 If a tool works on your Shelf, a coworker gets it working on theirs in
 two clicks — and no part of it runs on a server Shelf operates.
