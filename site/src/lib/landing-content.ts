@@ -124,3 +124,37 @@ export const DESIGN_POINTS = [
     body: 'Your agent can extract a brand it saw and save a draft. You review. Agents never set the default.',
   },
 ] as const satisfies readonly { title: string; body: string }[]
+
+
+/** #share — the Tool Sharing proof points (1.2). */
+export const SHARE_POINTS = [
+  {
+    title: 'Secrets never travel.',
+    body: 'Share writes the setup — launch command, port, capabilities, even which env keys are needed. Only the names. There is no code path that can put a value in the file.',
+  },
+  {
+    title: 'One consent sheet.',
+    body: 'Your coworker sees the exact commands, the destination folder, and an input for each key before anything happens. A link never runs anything on its own.',
+  },
+  {
+    title: 'Your git host is the transport.',
+    body: 'A shelf:// link points at the repo you already use — or send a bundle. No Shelf server, no account, no registry. Same promise as everything else here.',
+  },
+  {
+    title: 'Updates you approve.',
+    body: 'Check for updates shows the incoming commits and the manifest diff. You pull when you want; a diverged copy is said plainly. Never automatic.',
+  },
+] as const satisfies readonly { title: string; body: string }[]
+
+/** #share — rows of the static consent-sheet mock (label + value + kind). */
+export const SHARE_SHEET_ROWS = [
+  { label: 'Source', value: 'github.com/your-team/image-prepper', kind: 'path' },
+  { label: 'Folder', value: '~/Shelf Tools/Image Prepper', kind: 'path' },
+  { label: 'Will run first', value: 'npm install', kind: 'cmd' },
+  { label: 'Launch', value: 'npm run dev', kind: 'cmd' },
+  { label: 'OPENAI_API_KEY', value: 'you fill this in — stays on your Mac', kind: 'env' },
+] as const satisfies readonly {
+  label: string
+  value: string
+  kind: 'path' | 'cmd' | 'env'
+}[]

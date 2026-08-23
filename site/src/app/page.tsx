@@ -9,6 +9,7 @@ import { HowItWorks } from '@/components/landing/HowItWorks'
 import { ScrollReveals } from '@/components/landing/ScrollReveals'
 import { SiteFooter } from '@/components/landing/SiteFooter'
 import { SiteHeader } from '@/components/landing/SiteHeader'
+import { ToolSharing } from '@/components/landing/ToolSharing'
 
 /** Structured data — free macOS developer app; richer search listings. */
 const SOFTWARE_JSON_LD = {
@@ -22,7 +23,7 @@ const SOFTWARE_JSON_LD = {
   url: 'https://shelfmcp.com',
   downloadUrl: 'https://shelfmcp.com/download',
   description:
-    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, and share them honestly with your AI agents over MCP — along with design profiles so agents build in your brand. No cloud, no account.',
+    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, share them with your team as portable tools, and hand them to your AI agents over MCP — along with design profiles so agents build in your brand. No cloud, no account.',
 }
 
 /** Landing v2 — the scroll-scrubbed hero leads, the story beats follow. */
@@ -42,6 +43,7 @@ export default function HomePage() {
         <AgentChat />
         <DesignEngine />
         <DevMode />
+        <ToolSharing />
         <FinalCta />
       </main>
       <SiteFooter />
