@@ -794,6 +794,7 @@ function registerIpc(): void {
     code: err instanceof ShareError ? err.code : 'unknown',
     message: err instanceof Error ? err.message : String(err),
     remedy: err instanceof ShareError ? err.remedy : undefined,
+    remedyCommand: err instanceof ShareError ? err.remedyCommand : undefined,
   })
   ipcMain.handle('share:stage', async (_e, source: ShareSource) => {
     try {

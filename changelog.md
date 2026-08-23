@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Private repos share cleanly.** When you Add a tool from a private
+  GitHub repo, Shelf now borrows the GitHub CLI’s sign-in for that one
+  clone — the token stays with `gh`, never touches Shelf, and nothing is
+  written to your global git config. If git still can’t reach it, the old
+  raw “could not read Username… terminal prompts disabled” is replaced by
+  a plain explanation and three ways forward: sign git in to GitHub
+  (`gh auth login && gh auth setup-git`, one-click copy), use the SSH
+  address Shelf shows you, or take a bundle. Same treatment for “Check for
+  updates” on a private repo.
+
 ## 1.2.0 — 2026-08-23
 
 If a tool works on your Shelf, a coworker gets it working on theirs in

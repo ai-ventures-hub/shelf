@@ -43,6 +43,8 @@ export type ShareErrorCode =
   | 'git_missing'
   | 'invalid_repo'
   | 'clone_failed'
+  | 'auth_required'
+  | 'repo_not_found'
   | 'bundle_invalid'
   | 'manifest_invalid'
   | 'destination_invalid'
@@ -55,17 +57,23 @@ export interface ShareFailure {
   ok: false
   code: ShareErrorCode | 'unknown'
   message: string
+  /** Plain-language fix (prose). */
   remedy?: string
+  /** A shell command the fix needs, offered as a one-click copy in the UI. */
+  remedyCommand?: string
 }
 
 export class ShareError extends Error {
   code: ShareErrorCode
   /** Plain-language fix, when one exists (e.g. how to install git). */
   remedy?: string
-  constructor(code: ShareErrorCode, message: string, remedy?: string) {
+  /** A shell command the fix needs, offered as a one-click copy in the UI. */
+  remedyCommand?: string
+  constructor(code: ShareErrorCode, message: string, remedy?: string, remedyCommand?: string) {
     super(message)
     this.code = code
     this.remedy = remedy
+    this.remedyCommand = remedyCommand
   }
 }
 
@@ -155,9 +163,139 @@ async function requireGit(): Promise<string> {
       'git_missing',
       'This Mac is missing git, which Shelf needs to fetch shared tools.',
       GIT_MISSING_REMEDY,
+      'xcode-select --install',
     )
   }
   return git
+}
+
+let cachedGh: string | null | undefined
+
+/**
+ * Locate the GitHub CLI if the user has it. gh holds their GitHub auth; when
+ * present we let git borrow it for private clones over https — Shelf never
+ * sees or stores the token, and nothing is written to their global config.
+ */
+export async function resolveGhBinary(): Promise<string | null> {
+  if (cachedGh !== undefined) return cachedGh
+  const override = process.env.SHELF_GH_BINARY?.trim()
+  if (override) {
+    cachedGh = fileExists(override) ? override : null
+    return cachedGh
+  }
+  for (const candidate of ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']) {
+    if (fileExists(candidate)) {
+      cachedGh = candidate
+      return cachedGh
+    }
+  }
+  cachedGh = null
+  return null
+}
+
+/** github.com or a *.github.com host (GHE Cloud). gh + the ssh hint apply. */
+function isGithubHost(host: string): boolean {
+  return host === 'github.com' || host.endsWith('.github.com')
+}
+
+/**
+ * Per-clone git config that lets git ask gh for credentials on this URL's
+ * host — scoped to the single command, keychain still tried first, public
+ * repos unaffected. Empty when the URL isn't https or gh isn't installed.
+ */
+function githubHelperArgs(url: string, gh: string | null): string[] {
+  if (!gh) return []
+  let host: string
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return []
+    host = parsed.hostname
+  } catch {
+    return []
+  }
+  // gh answers only for hosts it is authenticated to; for others it returns
+  // nothing and git falls through to its normal credential path.
+  return ['-c', `credential.https://${host}.helper=!${gh} auth git-credential`]
+}
+
+/** SSH form of an https repo URL (github-family), for the "use SSH" hint. */
+export function sshUrlForHttps(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' || !isGithubHost(parsed.hostname)) return null
+    const repoPath = parsed.pathname.replace(/^\/+/, '')
+    if (!repoPath) return null
+    return `git@${parsed.hostname}:${repoPath}`
+  } catch {
+    return null
+  }
+}
+
+export type CloneFailureKind = 'auth' | 'not_found' | 'ssh_auth' | 'other'
+
+/** Classify git clone/fetch stderr into an actionable class. */
+export function classifyCloneFailure(text: string): CloneFailureKind {
+  const t = text.toLowerCase()
+  if (/host key verification failed|permission denied \(publickey\)/.test(t)) return 'ssh_auth'
+  if (/could not read username|authentication failed|terminal prompts disabled|invalid username or password|\b403\b/.test(t)) {
+    return 'auth'
+  }
+  if (/repository not found|remote:\s*not found|does not (?:exist|appear to be a git)|\b404\b|not found/.test(t)) {
+    return 'not_found'
+  }
+  return 'other'
+}
+
+/**
+ * Turn a failed clone into a ShareError whose message tells the receiver what
+ * to actually do — sign git in, use SSH, or take a bundle — instead of
+ * surfacing git's plumbing text.
+ */
+function cloneFailure(url: string, run: GitRun): ShareError {
+  const kind = classifyCloneFailure(`${run.stderr}\n${run.stdout}`)
+  const ssh = sshUrlForHttps(url)
+  let host = 'the server'
+  try {
+    host = new URL(url).hostname
+  } catch {
+    /* scp-like url; leave generic */
+  }
+  const github = /^https:/.test(url) && isGithubHost(host)
+
+  if (kind === 'auth') {
+    const paths = [
+      github ? 'sign git in to GitHub' : `sign git in to ${host} (set up a credential helper or token)`,
+      ssh ? `use the SSH address ${ssh}` : 'use an SSH address',
+      'or use Add from bundle below',
+    ]
+    return new ShareError(
+      'auth_required',
+      `This looks like a private repository, and git on this Mac isn’t signed in to ${host}. ${capitalize(paths[0])}, ${paths[1]}, ${paths[2]}.`,
+      github
+        ? 'Shelf clones with your own git credentials and can’t ask for a password in a dialog. Sign git in to GitHub once and try Fetch again.'
+        : 'Shelf clones with your own git credentials and can’t ask for a password in a dialog.',
+      github ? 'gh auth login && gh auth setup-git' : undefined,
+    )
+  }
+  if (kind === 'not_found') {
+    return new ShareError(
+      'repo_not_found',
+      `Shelf couldn’t find that repository on ${host}. Check the URL is right and that you have access — a private repo you’re not a member of looks the same as one that doesn’t exist.`,
+      'If it’s private, ask the owner to add you, or have them send a bundle (.zip) instead.',
+    )
+  }
+  if (kind === 'ssh_auth') {
+    return new ShareError(
+      'auth_required',
+      `git couldn’t authenticate to ${host} over SSH. Make sure your SSH key is added to your account, or use Add from bundle below.`,
+      undefined,
+    )
+  }
+  return new ShareError('clone_failed', `Couldn’t fetch that repository: ${gitFailure(run, 'git clone failed')}`)
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function runGit(git: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<GitRun> {
@@ -466,6 +604,7 @@ export async function stageSharedTool(
       if (!valid.ok) throw new ShareError('invalid_repo', valid.reason)
       source = { kind: 'git', repo: valid.url }
       const git = await requireGit()
+      const gh = await resolveGhBinary()
       const clone = await runGit(
         git,
         [
@@ -474,15 +613,15 @@ export async function stageSharedTool(
           '-c', 'protocol.ext.allow=never',
           '-c', 'protocol.file.allow=never',
           '-c', 'core.hooksPath=/dev/null',
+          // Borrow gh's GitHub auth for a private https clone (scoped here;
+          // Shelf never sees the token). No-op for public repos / non-github.
+          ...githubHelperArgs(valid.url, gh),
           'clone', '--quiet', '--', valid.url, stagePath,
         ],
         { timeoutMs: 180_000 },
       )
       if (!clone.ok) {
-        throw new ShareError(
-          'clone_failed',
-          `Couldn’t fetch that repository: ${gitFailure(clone, 'git clone failed')}`,
-        )
+        throw cloneFailure(valid.url, clone)
       }
       ref = await currentCommit(git, stagePath)
     } else {
@@ -871,7 +1010,13 @@ export async function checkToolUpdates(tool: Tool): Promise<UpdateCheck> {
 
   const fetch = await runGit(
     git,
-    ['-C', cwd, '-c', 'protocol.ext.allow=never', '-c', 'protocol.file.allow=never', 'fetch', '--prune', '--quiet', 'origin'],
+    [
+      '-C', cwd,
+      '-c', 'protocol.ext.allow=never',
+      '-c', 'protocol.file.allow=never',
+      ...githubHelperArgs(remote, await resolveGhBinary()),
+      'fetch', '--prune', '--quiet', 'origin',
+    ],
     { timeoutMs: 120_000 },
   )
   if (!fetch.ok) {
