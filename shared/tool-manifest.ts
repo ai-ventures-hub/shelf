@@ -137,9 +137,10 @@ export function folderNameFor(name: string): string {
 
 function portOfUrl(value: string): number | undefined {
   try {
+    // Only an explicit port is meaningful here — a bare loopback url means
+    // "whatever port this ends up on", not literally 80/443.
     const parsed = new URL(value)
-    if (parsed.port) return Number(parsed.port)
-    return parsed.protocol === 'https:' ? 443 : 80
+    return parsed.port ? Number(parsed.port) : undefined
   } catch {
     return undefined
   }
@@ -326,6 +327,7 @@ export function readManifest(projectPath: string): NormalizedManifest | null {
   // A symlinked shelf.json in a cloned repo could point anywhere on the
   // receiver's disk; refuse rather than read through it.
   if (stat.isSymbolicLink()) throw new Error('shelf.json is a symlink; Shelf only reads a regular file.')
+  if (stat.isDirectory()) throw new Error('shelf.json is a directory, not a file.')
   if (!stat.isFile()) return null
   if (stat.size > MAX_MANIFEST_BYTES) {
     throw new Error(`shelf.json is too large (${Math.ceil(stat.size / 1024)} KB).`)

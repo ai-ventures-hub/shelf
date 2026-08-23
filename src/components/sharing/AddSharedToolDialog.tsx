@@ -53,6 +53,9 @@ export function AddSharedToolDialog({
   const fetchButtonRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<string | null>(null)
+  // Bumped on every open/reset; async results from a superseded open (a
+  // second link arriving mid-fetch/mid-approve) are ignored.
+  const genRef = useRef(0)
 
   // Keyboard: Escape must reach the sheet even when nothing inside is
   // focused (link-driven open, consent with no env inputs).
@@ -73,6 +76,7 @@ export function AddSharedToolDialog({
     // A second link while a stage is live must not leak the first scratch clone.
     const stale = stageRef.current
     stageRef.current = null
+    genRef.current += 1
     if (stale) void window.shelf.discardSharedTool(stale).catch(() => {})
     setError(null)
     setEnv({})
@@ -85,12 +89,18 @@ export function AddSharedToolDialog({
   }, [open, initialRepo, initialBundlePath])
 
   async function fetchSource(source: { kind: 'git'; repo: string } | { kind: 'bundle'; bundlePath: string }) {
+    const gen = genRef.current
     setError(null)
     setPhase({
       kind: 'fetching',
       label: source.kind === 'git' ? 'Fetching the repository…' : 'Opening the bundle…',
     })
     const result = await window.shelf.stageSharedTool(source)
+    if (gen !== genRef.current) {
+      // A newer open superseded this fetch — drop the scratch clone we just made.
+      if (result.ok) void window.shelf.discardSharedTool(result.stage.stageId).catch(() => {})
+      return
+    }
     if (!result.ok) {
       setError(result)
       setPhase({ kind: 'source' })
@@ -138,6 +148,7 @@ export function AddSharedToolDialog({
   }
 
   async function approve(stage: StagedShareView, destination: string) {
+    const gen = genRef.current
     setError(null)
     setPhase({ kind: 'working', stage })
     const outcome = await window.shelf.confirmSharedTool(stage.stageId, {
@@ -145,6 +156,10 @@ export function AddSharedToolDialog({
       env,
       runSetup: true,
     })
+    // A second link arrived mid-approve: the add still completed (it's in the
+    // library), but this sheet now belongs to the newer request — don't
+    // stomp its phase or navigate away from it.
+    if (gen !== genRef.current) return
     if (!outcome.ok) {
       setError(outcome)
       if (outcome.code === 'destination_invalid') {

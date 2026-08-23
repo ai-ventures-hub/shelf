@@ -413,18 +413,26 @@ export const MAX_STAGED_BYTES = 2 * 1024 * 1024 * 1024
  * target resolves outside the tree — a cloned repo may track symlinks that a
  * consented setup step would then follow.
  */
-function auditStagedTree(root: string): { bytes: number; escapingLinks: string[] } {
+function auditStagedTree(root: string): { bytes: number; escapingLinks: string[]; hasGitDir: boolean } {
+  // Walk the REALPATH: on macOS the data root is under /var → /private/var,
+  // so a relative internal symlink resolved against the unresolved `root`
+  // would look like it escapes when it does not. We never descend into
+  // symlinked dirs, so every `dir` below is already a real path.
   const rootReal = fs.realpathSync(root)
   let bytes = 0
+  let hasGitDir = false
   const escapingLinks: string[] = []
   const walk = (dir: string) => {
     for (const dirent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (dirent.name === '.git') continue
+      if (dirent.name.toLowerCase() === '.git') {
+        hasGitDir = true
+        continue
+      }
       const abs = path.join(dir, dirent.name)
       if (dirent.isSymbolicLink()) {
         const target = path.resolve(dir, fs.readlinkSync(abs))
         if (target !== rootReal && !target.startsWith(rootReal + path.sep)) {
-          escapingLinks.push(`${path.relative(root, abs)} → ${fs.readlinkSync(abs)}`)
+          escapingLinks.push(`${path.relative(rootReal, abs)} → ${fs.readlinkSync(abs)}`)
         }
         continue
       }
@@ -432,8 +440,8 @@ function auditStagedTree(root: string): { bytes: number; escapingLinks: string[]
       else if (dirent.isFile()) bytes += fs.statSync(abs).size
     }
   }
-  walk(root)
-  return { bytes, escapingLinks }
+  walk(rootReal)
+  return { bytes, escapingLinks, hasGitDir }
 }
 
 export async function stageSharedTool(
@@ -499,6 +507,17 @@ export async function stageSharedTool(
     const projectRoot = unwrapSingleFolder(stagePath)
 
     const audit = auditStagedTree(projectRoot)
+    // A git clone legitimately has a `.git` (its own metadata, needed for
+    // updates). A BUNDLE must not: isSafeZipPath already refuses `.git`
+    // entries, and this is belt-and-braces over a wrapper folder that
+    // smuggled one — git would run its config the next time the user opens
+    // the folder. existsSync is case-folded on APFS, catching `.GIT`.
+    if (source.kind === 'bundle' && (audit.hasGitDir || fs.existsSync(path.join(projectRoot, '.git')))) {
+      throw new ShareError(
+        'bundle_invalid',
+        'That bundle contains an embedded .git directory; Shelf won’t add it.',
+      )
+    }
     if (audit.bytes > MAX_STAGED_BYTES) {
       throw new ShareError(
         source.kind === 'git' ? 'clone_failed' : 'bundle_invalid',
@@ -611,7 +630,8 @@ export function validateDestination(
   }
   if (fs.existsSync(resolved)) {
     try {
-      const stat = fs.statSync(resolved)
+      const stat = fs.lstatSync(resolved)
+      if (stat.isSymbolicLink()) return { ok: false, reason: 'That path is a symlink; choose a real folder.' }
       if (!stat.isDirectory()) return { ok: false, reason: 'That path is a file, not a folder.' }
       if (fs.readdirSync(resolved).length > 0) {
         return { ok: false, reason: 'That folder already has files in it — pick an empty or new folder.' }
@@ -669,9 +689,20 @@ export async function confirmStagedShare(
     throw new ShareError('stage_missing', 'The fetched files are gone. Fetch again.')
   }
 
-  fs.mkdirSync(path.dirname(destination), { recursive: true })
-  if (fs.existsSync(destination)) fs.rmdirSync(destination) // validated empty
-  moveDir(stage.stagePath, destination)
+  // A destination that turned unusable between validation and now (no
+  // permission, a symlink, a race) is a folder problem — keep the stage
+  // alive so the user can pick another folder, not a lost fetch.
+  try {
+    fs.mkdirSync(path.dirname(destination), { recursive: true })
+    if (fs.existsSync(destination)) fs.rmdirSync(destination) // validated empty
+    moveDir(stage.stagePath, destination)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code && ['EACCES', 'EPERM', 'ENOTDIR', 'EEXIST', 'ENOENT', 'EROFS'].includes(code)) {
+      throw new ShareError('destination_invalid', `Shelf couldn’t write to that folder (${code}). Choose another.`)
+    }
+    throw err
+  }
   // Stage wrapper (when the project was nested one level) goes with it.
   fs.rmSync(path.join(stagingRoot(deps.dataRoot || resolveShelfDataRoot()), stage.stageId), {
     recursive: true,
@@ -840,12 +871,15 @@ export async function checkToolUpdates(tool: Tool): Promise<UpdateCheck> {
 
   const fetch = await runGit(
     git,
-    ['-C', cwd, '-c', 'protocol.ext.allow=never', '-c', 'protocol.file.allow=never', 'fetch', '--quiet', 'origin'],
+    ['-C', cwd, '-c', 'protocol.ext.allow=never', '-c', 'protocol.file.allow=never', 'fetch', '--prune', '--quiet', 'origin'],
     { timeoutMs: 120_000 },
   )
   if (!fetch.ok) {
     return { state: 'fetch_failed', message: gitFailure(fetch, 'git fetch failed') }
   }
+  // Re-point origin/HEAD in case the remote's default branch was renamed
+  // (a stale origin/HEAD would otherwise report up_to_date forever).
+  await runGit(git, ['-C', cwd, 'remote', 'set-head', 'origin', '--auto'], { timeoutMs: 10_000 })
   const target = await resolveRemoteTarget(git, cwd)
   if (!target) return { state: 'no_target_branch', remote }
 
@@ -1003,6 +1037,9 @@ export async function applyToolUpdate(
   if (!git) return { ok: false, message: GIT_MISSING_REMEDY, applied: [], skipped: [], missingEnvKeys: [], running: false }
 
   const before = localManifest(cwd)
+  // Detection can change across the pull (a lockfile swap). Allow what the
+  // check could have offered from EITHER side, so a ticked box is honoured.
+  const preInstall = detectedInstall(cwd)
   const runningState = deps.processes ? await deps.processes.getState(tool.id) : undefined
   const running = runningState?.status === 'running' || runningState?.status === 'starting'
   const pull =
@@ -1026,7 +1063,13 @@ export async function applyToolUpdate(
   const skipped: { field: string; reason: string }[] = []
   const next: Tool = { ...tool }
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-  const LOCAL_EDIT = 'you changed this locally, so the shared value was not applied'
+  const empty = (v: unknown) => v == null || v === '' || (Array.isArray(v) && v.length === 0)
+  // When the OLD manifest left a field empty, the tool's current value came
+  // from local inspection/detection, not a deliberate edit — say so softly.
+  const editReason = (old: unknown) =>
+    empty(old)
+      ? 'this tool already had its own value, so the shared one was not applied'
+      : 'you changed this locally, so the shared value was not applied'
   if (after) {
     for (const key of ['name', 'description', 'notes'] as const) {
       const incoming = after[key]
@@ -1036,7 +1079,7 @@ export async function applyToolUpdate(
         if (key === 'name') next.name = incoming || tool.name
         else next[key] = incoming
         applied.push(key)
-      } else skipped.push({ field: key, reason: LOCAL_EDIT })
+      } else skipped.push({ field: key, reason: editReason(old) })
     }
     // launchCommand: a healed port rewrote the local command (PORT= prefix,
     // --port flag). That is not a local edit — compare after re-pinning the
@@ -1051,14 +1094,14 @@ export async function applyToolUpdate(
             ? withForcedPort(after.launchCommand, tool.port)
             : after.launchCommand
         applied.push('launchCommand')
-      } else skipped.push({ field: 'launchCommand', reason: LOCAL_EDIT })
+      } else skipped.push({ field: 'launchCommand', reason: editReason(before?.launchCommand) })
     }
     for (const key of ['tags', 'capabilities'] as const) {
       if (same(after[key], before?.[key] || [])) continue
       if (same(tool[key], before?.[key] || [])) {
         next[key] = after[key]
         applied.push(key)
-      } else skipped.push({ field: key, reason: LOCAL_EDIT })
+      } else skipped.push({ field: key, reason: editReason(before?.[key]) })
     }
     const accessKey = (list: ToolManifest['agentAccess']) =>
       JSON.stringify(list.map((a) => [a.kind, a.transport, a.entrypoint, a.setupRequired, a.notes]))
@@ -1066,7 +1109,7 @@ export async function applyToolUpdate(
       if (accessKey(tool.agentAccess) === accessKey(before?.agentAccess || [])) {
         next.agentAccess = after.agentAccess
         applied.push('agentAccess')
-      } else skipped.push({ field: 'agentAccess', reason: LOCAL_EDIT })
+      } else skipped.push({ field: 'agentAccess', reason: editReason(before?.agentAccess) })
     }
     // Port/url only when the local copy still sits on the old manifest's
     // port (a healed/reassigned port is a local fact we must keep). Keep
@@ -1094,10 +1137,16 @@ export async function applyToolUpdate(
   )
 
   // What runs is what was shown, enforced here: only commands the fetched
-  // manifest declares (or the detected install) can run, never an arbitrary
-  // string from the caller.
-  const allowed = new Set([...(after?.bootstrap || []), ...detectedInstall(cwd)])
+  // manifest declares (or the detected install, pre- or post-pull) can run,
+  // never an arbitrary string from the caller.
+  const allowed = new Set([...(after?.bootstrap || []), ...preInstall, ...detectedInstall(cwd)])
   const setupCommands = (input.setupCommands || []).filter((cmd) => allowed.has(cmd))
+  if (input.runSetup && (input.setupCommands || []).length && setupCommands.length === 0) {
+    skipped.push({
+      field: 'setup',
+      reason: 'the setup commands no longer match the updated project, so nothing was run',
+    })
+  }
   let setup: { command: string; ok: boolean }[] | undefined
   if (input.runSetup && setupCommands.length) {
     setup = []

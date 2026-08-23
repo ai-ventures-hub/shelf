@@ -143,8 +143,10 @@ export function isSafeZipPath(name: string): boolean {
   if (segments.length === 0) return false
   // A planted `.git/` (config with core.fsmonitor, hooks) would execute the
   // moment the receiver runs git in the folder — which a dev tool invites.
-  // Export never includes .git; receive refuses it too.
-  if (segments[0] === '.git') return false
+  // Refuse it at ANY depth (a wrapper folder puts it second) and case-fold:
+  // on APFS `.GIT/config` is the same file git reads. Export never includes
+  // .git; receive refuses it too.
+  if (segments.some((seg) => seg.toLowerCase() === '.git')) return false
   return segments.every((s) => s !== '.' && s !== '..')
 }
 

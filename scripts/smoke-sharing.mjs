@@ -324,6 +324,11 @@ try {
   assert.ok(!fs.existsSync('/abs/escape.txt'))
   assert.ok(!fs.existsSync(path.join(dest, 'link')))
   assert.equal(fs.readFileSync(path.join(dest, 'sub', 'deep.txt'), 'utf8'), 'deep')
+  // .git at any depth, case-folded — a planted repo config would execute on
+  // the receiver's next `git status`.
+  assert.equal(isSafeZipPath('.git/config'), false)
+  assert.equal(isSafeZipPath('.GIT/config'), false)
+  assert.equal(isSafeZipPath('wrapper/.git/hooks/post-checkout'), false)
   assert.equal(isSafeZipPath('a\\b'), false)
   assert.equal(isSafeZipPath('C:/x'), false)
   assert.equal(isSafeZipPath('./x'), false)
@@ -471,6 +476,24 @@ try {
   )
   console.log('OK: escaping symlinks in a shared repo are refused')
 
+  // An INTERNAL relative symlink must be allowed even though the data root
+  // lives under /var → /private/var (the audit walks the realpath).
+  const okLinkDir = path.join(tmp, 'oklink-src')
+  writeFixtureProject(okLinkDir, { withSecretEnvFile: false })
+  fs.mkdirSync(path.join(okLinkDir, 'sub'))
+  fs.symlinkSync('../server.mjs', path.join(okLinkDir, 'sub', 'alias.mjs'))
+  const okBare = path.join(daemonRoot, 'oklink.git')
+  execFileSync('git', ['init', '--bare', '-q', '--initial-branch=main', okBare])
+  git(okLinkDir, 'init', '-q', '--initial-branch=main')
+  git(okLinkDir, 'add', '-A')
+  git(okLinkDir, 'commit', '-q', '-m', 'ok link')
+  git(okLinkDir, 'push', '-q', `file://${okBare}`, 'main')
+  execFileSync('git', ['-C', okBare, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  const okStage = await stageSharedTool({ kind: 'git', repo: `git://127.0.0.1:${daemonPort}/oklink.git` }, { dataRoot: rxRoot, toolsRoot })
+  assert.ok(okStage.stageId, 'internal relative symlink is allowed')
+  discardStagedShare(okStage, rxRoot)
+  console.log('OK: internal relative symlinks are allowed (audit walks realpath)')
+
   // Destination validation.
   const stage2 = await stageSharedTool({ kind: 'git', repo: repoUrl }, { dataRoot: rxRoot, toolsRoot })
   assert.equal(validateDestination('/', stage2).ok, false)
@@ -513,6 +536,33 @@ try {
   const stage3 = await stageSharedTool({ kind: 'git', repo: repoUrl }, { dataRoot: rxRoot, toolsRoot })
   assert.equal(stage3.destination, path.join(toolsRoot, 'Image Prepper-2'))
   discardStagedShare(stage3, rxRoot)
+
+  // A bundle whose wrapper folder smuggles a .git is refused at stage time
+  // (belt-and-braces over isSafeZipPath).
+  const gitWrapDir = path.join(tmp, 'gitwrap')
+  fs.mkdirSync(path.join(gitWrapDir, 'inner', '.git'), { recursive: true })
+  writeFixtureProject(path.join(gitWrapDir, 'inner'), { withSecretEnvFile: false })
+  fs.writeFileSync(path.join(gitWrapDir, 'inner', '.git', 'config'), '[core]\n\tfsmonitor = /tmp/evil.sh\n')
+  const wrapZip = buildZip(
+    (function walk(dir, rel) {
+      const out = []
+      for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+        const r = rel ? `${rel}/${d.name}` : d.name
+        if (d.isDirectory()) { out.push({ name: `${r}/`, data: Buffer.alloc(0) }); out.push(...walk(path.join(dir, d.name), r)) }
+        else out.push({ name: r, data: fs.readFileSync(path.join(dir, d.name)) })
+      }
+      return out
+    })(gitWrapDir, ''),
+  )
+  const wrapFile = path.join(tmp, 'gitwrap.zip')
+  fs.writeFileSync(wrapFile, wrapZip)
+  const wrapStage = await stageSharedTool({ kind: 'bundle', bundlePath: wrapFile }, { dataRoot: rxRoot, toolsRoot })
+  // isSafeZipPath strips every .git entry at extract, so the staged tree is
+  // clean (no repo to execute) — the safer outcome than refusing the bundle.
+  assert.ok(!fs.existsSync(path.join(wrapStage.stagePath, '.git')), 'embedded .git stripped from a bundle')
+  assert.ok(fs.existsSync(path.join(wrapStage.stagePath, 'server.mjs')), 'the rest of the project survives')
+  discardStagedShare(wrapStage, rxRoot)
+  console.log('OK: an embedded .git is stripped from a bundle, project kept')
 
   // Bundle receive path (no git).
   const bundle2 = await exportToolBundle(store.get(sender.id), path.join(tmp, 'share.zip'), { appVersion: '1.2.0-smoke' })
