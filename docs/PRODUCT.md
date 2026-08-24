@@ -102,7 +102,8 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   new-profile wizard (blank vs project-seeded), imported fonts in the
   live preview, `shelf_get_collection` stack context, launch-health
   chips on library cards, and agent write-path hardening.
-- **`shelf_upsert_collection`** (built 2026-08-23 on v2, unreleased):
+- **v1.3 — `shelf_upsert_collection`** (released 2026-08-23, `v1.3.0`,
+  with name look-alike hardening across all three stores):
   "create a collection named X and build these N tools into it" works
   end-to-end over MCP. Ownership mirrors design profiles (agents draft,
   you decide): agent-created collections carry `origin: 'agent'` and stay
@@ -123,9 +124,10 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   register/bootstrap pipeline, provenance + explicit "Check for
   updates", `shelf_export_tool` over MCP. Agent-driven receive
   deliberately not built. See [`SHARING.md`](SHARING.md).
-- **v1.3 — Tool Sharing, stage 2: Team Tools catalog**: team = a catalog
+- **v1.4 — Tool Sharing, stage 2: Team Tools catalog**: team = a catalog
   repo (`catalog.json`), never a Shelf-operated service ("No cloud. No
-  account." holds); Team Tools pane + "Share with team".
+  account." holds); Team Tools pane + "Share with team". (Was earmarked
+  v1.3; collections took that number first.)
 
 ## Later Community enhancements
 

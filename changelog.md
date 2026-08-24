@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-08-23
 
 - **Agents can build collections now.** `shelf_upsert_collection` lets a
   connected agent create a collection and put tools in it, so "make a
@@ -11,6 +11,16 @@
   can no longer change it. Agents never bind a design profile to a
   collection, and never edit one you own. (Removing a tool from your
   library still removes it from every collection, as it always has.)
+- **No look-alike names.** Names that render identically to something you
+  already own can no longer be created by an agent. A collection or
+  design profile whose name differs from yours only by an invisible
+  character, an accent form, or extra spaces is refused, and invisible
+  characters are stripped from every stored name, so nothing an agent
+  writes can masquerade as yours in the sidebar or in Quick Open. Tool
+  names fold invisible characters too, while keeping genuinely different
+  names distinct. This covers invisible characters, compatibility forms,
+  spacing, case, and Latin accents; it does not attempt to catch
+  look-alike letters borrowed from other alphabets.
 
 ## 1.2.1 — 2026-08-23
 

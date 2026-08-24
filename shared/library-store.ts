@@ -108,6 +108,12 @@ export class LibraryStore {
     return this.read().tools.find((t) => t.id === id)
   }
 
+  /** Every tool whose name folds to the same key (see findByName). */
+  findAllByName(name: string): Tool[] {
+    const needle = foldToolName(name)
+    return this.read().tools.filter((t) => foldToolName(t.name) === needle)
+  }
+
   /**
    * Case-insensitive name match, with invisible characters folded out so a
    * zero-width twin resolves to the REAL tool instead of creating a
@@ -115,10 +121,16 @@ export class LibraryStore {
    * used by the ownership guards: tools have no owner to protect, and
    * collapsing accents here would make shelf_upsert_tool silently overwrite
    * a different tool ("Café" vs "Cafe"), which is worse than a duplicate.
+   *
+   * AMBIGUITY FAILS CLOSED. A library that already collected a twin before
+   * 1.3.0 has two tools that now read identically; picking "whichever was
+   * stored first" would let `shelf://launch?name=` run the planted command
+   * and let an upsert overwrite the wrong tool. Callers get undefined and
+   * must disambiguate by id.
    */
   findByName(name: string): Tool | undefined {
-    const needle = foldToolName(name)
-    return this.read().tools.find((t) => foldToolName(t.name) === needle)
+    const matches = this.findAllByName(name)
+    return matches.length === 1 ? matches[0] : undefined
   }
 
   /** Match on resolved project folder — registering a folder twice must update, not duplicate. */
@@ -142,10 +154,16 @@ export class LibraryStore {
       const capabilitiesChanged =
         !previous || !sameCapabilitySet(previous.capabilities, nextCapabilities)
 
+      const cleanName = stripInvisibleChars(input.name).trim()
+      // Refuse rather than silently minting another "Untitled": a name made
+      // only of invisible characters would never match itself on the next
+      // lookup, so each call would add one more identical-looking tool.
+      if (!cleanName) throw new Error('Tool name is required.')
+
       const tool: Tool = {
         ...input,
         id: input.id || randomUUID(),
-        name: stripInvisibleChars(input.name).trim(),
+        name: cleanName,
         tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
         capabilities: normalizeCapabilities(input.capabilities),
         agentAccess: normalizeAgentAccess(
@@ -243,12 +261,18 @@ export class LibraryStore {
   } {
     return withFileLockSync(this.filePath, () => {
       const data = this.read()
-      const name = input.name.trim()
+      // Strip FIRST, then validate. Checking the raw string let a zero-width
+      // character inside a token break containsLikelySecret while the strip
+      // afterwards persisted the live credential — and let an all-invisible
+      // name pass the "required" check.
+      const name = stripInvisibleChars(input.name).trim()
       if (!name) throw new Error('Collection name is required.')
       if (name.length > MAX_COLLECTION_NAME) {
         throw new Error(`Collection name is too long (max ${MAX_COLLECTION_NAME} characters).`)
       }
-      const description = input.description?.trim() || undefined
+      const description = input.description === undefined
+        ? undefined
+        : stripInvisibleChars(input.description).trim() || ''
       if (description && description.length > MAX_COLLECTION_DESCRIPTION) {
         throw new Error(
           `Collection description is too long (max ${MAX_COLLECTION_DESCRIPTION} characters).`,
@@ -307,7 +331,7 @@ export class LibraryStore {
         id: target?.id || '',
         name,
         // Absent leaves it alone; an explicit '' clears it.
-        description: input.description === undefined ? target?.description : description,
+        description: description === undefined ? target?.description : description || undefined,
         toolIds: nextToolIds,
         // Never carried from agent input; preserved from the stored record.
         designProfileId: target?.designProfileId,
@@ -342,7 +366,7 @@ export class LibraryStore {
       // Strip here, not only in normalizeCollection, so the returned record
       // matches what lands on disk (an agent gets back what it really saved).
       name: stripInvisibleChars(input.name).trim(),
-      description: input.description?.trim() || undefined,
+      description: stripInvisibleChars(input.description || '').trim() || undefined,
       toolIds: Array.from(
         new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
       ),
@@ -433,7 +457,7 @@ function normalizeCollection(input: Partial<Collection>): Collection {
   return {
     id: input.id || randomUUID(),
     name: stripInvisibleChars(input.name || 'Untitled').trim() || 'Untitled',
-    description: input.description?.trim() || undefined,
+    description: stripInvisibleChars(input.description || '').trim() || undefined,
     toolIds: Array.isArray(input.toolIds) ? input.toolIds.filter(Boolean) : [],
     designProfileId: input.designProfileId?.trim() || undefined,
     // Both normalizeCollection AND the save literal must carry `origin`, or

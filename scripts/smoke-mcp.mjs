@@ -371,12 +371,34 @@ async function main() {
     if (!/and 30 more/.test(someUnknown.warnings[0])) {
       throw new Error('capped warning should say how many were elided: ' + someUnknown.warnings[0])
     }
+    // A long-id flood must stay bounded in the RESPONSE, not just in count.
+    const longIds = await callTool(client, 'shelf_upsert_collection', {
+      name: 'Long Ids',
+      toolIds: Array.from({ length: 200 }, (_, i) => `${'x'.repeat(110)}-${i}`),
+    })
+    if (longIds.warnings[0].length > 800) {
+      throw new Error('warning must truncate long ids, got ' + longIds.warnings[0].length)
+    }
     // shelf_get_collection tells an agent whether it may write.
     const ownership = await callTool(client, 'shelf_get_collection', { id: madeCollection.collection.id })
     if (ownership.collection.editableByAgent !== false) {
       throw new Error('adopted collection must report editableByAgent:false')
     }
     console.log('OK: upsert_collection (create, idempotent name, add/remove, adoption locks agents out, bounded output)')
+
+    // An agent must not be able to rename a tool into a look-alike of another.
+    const twinA = await callTool(client, 'shelf_upsert_tool', {
+      name: 'Twin Target', launchCommand: 'echo a', projectPath: fixture,
+    })
+    const renameClash = await client.callTool({
+      name: 'shelf_upsert_tool',
+      arguments: { id: upserted.tool.id, name: 'Twin  Target', launchCommand: 'echo b' },
+    })
+    if (!renameClash.isError || !/already reads as/i.test(renameClash.content[0].text)) {
+      throw new Error('renaming into a fold-equal name must be refused')
+    }
+    await callTool(client, 'shelf_remove_tool', { id: twinA.tool.id })
+    console.log('OK: tool rename cannot manufacture a look-alike')
 
     // --- Design Engine read path (v1.0 Phase 1) ---
     // Zero-arg resolution with an empty store must error with guidance, not

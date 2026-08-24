@@ -198,7 +198,32 @@ server.registerTool(
     const now = new Date().toISOString()
     let existing: Tool | undefined
     if (args.id) existing = store.get(args.id)
-    if (!existing) existing = store.findByName(args.name)
+    if (!existing) {
+      // findByName fails closed when several tools read the same; say so
+      // instead of silently creating yet another identical-looking tool.
+      const sameName = store.findAllByName(args.name)
+      if (sameName.length > 1) {
+        return errorResult(
+          `Several tools are named “${args.name}” (${sameName
+            .map((t) => t.id)
+            .join(', ')}). Pass the id of the one you mean.`,
+        )
+      }
+      existing = sameName[0]
+    }
+    // Renaming by id must not manufacture a second tool that reads the same
+    // (the collection write path guards this; tools need it for the same
+    // reason — an ambiguous pair breaks shelf://launch?name= afterwards).
+    if (existing) {
+      const collision = store
+        .findAllByName(args.name)
+        .find((t) => t.id !== existing!.id)
+      if (collision) {
+        return errorResult(
+          `Another tool already reads as “${args.name}” (${collision.id}). Pick a different name.`,
+        )
+      }
+    }
 
     // Round-trip guard: agent-facing reads are MASKED ('***' env values,
     // KEY=*** command prefixes). The routine get_tool → tweak → upsert-back
@@ -536,12 +561,16 @@ server.registerTool(
       name: z.string().min(1).max(80).describe('Display name'),
       description: z.string().max(500).optional().describe("Pass '' to clear it"),
       toolIds: z
-        .array(z.string())
+        .array(z.string().max(120))
         .max(200)
         .optional()
         .describe('Replaces the whole member set. Omit to leave members alone.'),
-      addToolIds: z.array(z.string()).max(200).optional().describe('Tool ids to add'),
-      removeToolIds: z.array(z.string()).max(200).optional().describe('Tool ids to remove'),
+      addToolIds: z.array(z.string().max(120)).max(200).optional().describe('Tool ids to add'),
+      removeToolIds: z
+        .array(z.string().max(120))
+        .max(200)
+        .optional()
+        .describe('Tool ids to remove'),
     },
   },
   async (args) => {
@@ -572,6 +601,7 @@ server.registerTool(
           ? [
               `Ignored ${unknownToolIds.length} unknown tool id(s): ${unknownToolIds
                 .slice(0, 10)
+                .map((id) => (id.length > 40 ? `${id.slice(0, 40)}…` : id))
                 .join(', ')}${unknownToolIds.length > 10 ? `, and ${unknownToolIds.length - 10} more` : ''}. Call shelf_list_tools for current ids.`,
             ]
           : undefined,

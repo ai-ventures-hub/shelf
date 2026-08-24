@@ -524,7 +524,8 @@ export const BARE_SECRET_BOUNDARY = '(?<![\\w-])'
  * name. Stripped before a name is stored so nothing renders invisibly in the
  * sidebar, and before it is folded for comparison.
  */
-const INVISIBLE_CHARS = /[\u0000-\u001F\u007F\u200B-\u200F\u2028-\u202E\u2066-\u2069\uFEFF]/g
+const INVISIBLE_CHARS =
+  /[\p{Cc}\p{Cf}\p{Co}\p{Cs}\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180E\u2800\u3164\uFE00-\uFE0F\uFFA0\uFFF9-\uFFFB\u{E0100}-\u{E01EF}]/gu
 
 export function stripInvisibleChars(value: string): string {
   return value.replace(INVISIBLE_CHARS, '')
@@ -535,8 +536,11 @@ export function stripInvisibleChars(value: string): string {
  * Case and whitespace alone are not enough: an agent could otherwise create
  * "Client Prod\u200B" beside the user's "Client Prod" — indistinguishable in
  * the sidebar, and one click away from launching the wrong stack. NFKC
- * reconciles composed/decomposed forms, and dropping combining marks closes
- * the Turkish dotless-i and accent look-alikes. Deliberately aggressive:
+ * reconciles composed/decomposed forms, and dropping Latin combining marks
+ * closes the accent look-alikes (Café/Cafe, İstanbul/Istanbul). It does NOT
+ * close homoglyphs — Cyrillic "Асmе" still folds distinctly from "Acme";
+ * catching those needs script-mixing detection, which is its own feature.
+ * Deliberately aggressive:
  * this only ever makes an agent's create/rename fail closed with guidance,
  * and never restricts what the user can name something in the GUI.
  */
@@ -544,7 +548,10 @@ export function foldDisplayName(name: string): string {
   return stripInvisibleChars(name.normalize('NFKC'))
     .toLowerCase()
     .normalize('NFD')
-    .replace(/\p{M}/gu, '')
+    // Latin combining marks ONLY. Stripping every \p{M} also collapsed
+    // ガ/カ, हिन्दी/हनद, שָׁלוֹם/שלום and كِتاب/كتاب, which made an agent's own
+    // draft silently retarget a different one for non-Latin names.
+    .replace(/[\u0300-\u036F]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
