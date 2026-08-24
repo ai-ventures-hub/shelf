@@ -1,4 +1,5 @@
 import { AgentChat } from '@/components/landing/AgentChat'
+import { AgentCollections } from '@/components/landing/AgentCollections'
 import { AppShowcase } from '@/components/landing/AppShowcase'
 import { DesignEngine } from '@/components/landing/DesignEngine'
 import { DevMode } from '@/components/landing/DevMode'
@@ -23,7 +24,7 @@ const SOFTWARE_JSON_LD = {
   url: 'https://shelfmcp.com',
   downloadUrl: 'https://shelfmcp.com/download',
   description:
-    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, share them with your team as portable tools, and hand them to your AI agents over MCP, along with design profiles so agents build in your brand. No cloud, no account.',
+    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, share them with your team as portable tools, and hand them to your AI agents over MCP, along with design profiles so agents build in your brand. Agents can group your tools into collections you own. No cloud, no account.',
 }
 
 /** Landing v2 — the scroll-scrubbed hero leads, the story beats follow. */
@@ -44,6 +45,7 @@ export default function HomePage() {
         <DesignEngine />
         <DevMode />
         <ToolSharing />
+        <AgentCollections />
         <FinalCta />
       </main>
       <SiteFooter />

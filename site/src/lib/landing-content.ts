@@ -158,3 +158,30 @@ export const SHARE_SHEET_ROWS = [
   value: string
   kind: 'path' | 'cmd' | 'env'
 }[]
+
+/** #collections — the agent-built collections proof points (1.3). */
+export const COLLECTION_POINTS = [
+  {
+    title: 'Agents draft. You decide.',
+    body: 'Anything an agent builds arrives marked From agent. Edit it once in Shelf and it belongs to you, and agents can’t change it after that, by id or by name. They never attach a design profile to one either.',
+  },
+  {
+    title: 'A collection grants nothing new.',
+    body: 'It’s a named list of tools your agent could already see and launch. Delete the collection and every tool in it stays exactly where it was.',
+  },
+  {
+    title: 'No look-alike names.',
+    body: 'A name that differs from one of yours only by an invisible character, an accent form, spacing, or case is refused, and Shelf strips invisible characters out of every name it stores.',
+  },
+  {
+    title: 'One button starts the stack.',
+    body: 'Start stack brings up every tool in the collection at once and leaves the ones already running alone. Stop stack takes them down together.',
+  },
+] as const satisfies readonly { title: string; body: string }[]
+
+/** #collections — member rows of the static collection-page mock. */
+export const COLLECTION_ROWS = [
+  { letter: 'S', name: 'Script Room', line: ':5174 · npm run dev' },
+  { letter: 'V', name: 'Voice Bench', line: ':8000 · uvicorn app:app' },
+  { letter: 'R', name: 'Render Queue', line: 'one-shot · node render.js' },
+] as const satisfies readonly { letter: string; name: string; line: string }[]
