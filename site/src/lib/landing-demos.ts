@@ -50,11 +50,12 @@ export const SCAN_ROWS = [
 ] as const satisfies readonly { left: string; right: string; tone: DemoTone }[]
 
 /** #app — showcase tabs, in pill order. Default active tab is 'mcp'. */
-export type AppTabId = 'library' | 'gaps' | 'register' | 'design' | 'mcp'
+export type AppTabId = 'library' | 'gaps' | 'register' | 'share' | 'design' | 'mcp'
 export const APP_TABS = [
   { id: 'library', label: 'Library' },
   { id: 'gaps', label: 'Capability gaps' },
   { id: 'register', label: 'Register a tool' },
+  { id: 'share', label: 'Share a tool' },
   { id: 'design', label: 'Design profiles' },
   { id: 'mcp', label: 'MCP Connections' },
 ] as const satisfies readonly { id: AppTabId; label: string }[]
@@ -236,3 +237,21 @@ export const MODE_ROWS = {
   'simple' | 'developer',
   readonly { label: string; meta: string; tone: DemoTone; dim?: boolean }[]
 >
+
+/**
+ * #app — Share tab: the shelf.json Share writes beside the project. Keys are
+ * the real manifest fields (shared/tool-manifest.ts), and `env` carries a
+ * HINT, never a value — the whole point of the tab, so don't "improve" that
+ * line into something that looks like a key.
+ */
+export const SHARE_MANIFEST_LINES = [
+  { text: '{' },
+  { key: 'shelfManifest', val: '1,' },
+  { key: 'name', val: '"Image Prepper",' },
+  { key: 'launchCommand', val: '"npm run dev -- --port 4173",' },
+  { key: 'port', val: '4173,' },
+  { key: 'capabilities', val: '["batch-optimize images"],' },
+  { key: 'bootstrap', val: '["npm install"],' },
+  { key: 'env', val: '{ "OPENAI_API_KEY": "your own key" }' },
+  { text: '}' },
+] as const satisfies readonly ({ text: string } | { key: string; val: string })[]

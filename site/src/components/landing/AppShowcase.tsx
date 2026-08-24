@@ -9,6 +9,7 @@ import {
   IMPORT_FIELDS,
   LIB_CARDS,
   MCP_CLIENTS,
+  SHARE_MANIFEST_LINES,
   SIDE_LIBRARY,
   type AppTabId,
 } from '@/lib/landing-demos'
@@ -17,10 +18,12 @@ import {
 const SIDE_ACTIVE: Partial<Record<AppTabId, string>> = {
   library: 'All tools',
   gaps: 'Capability gaps',
+  // Share lives on a tool's own page, so the library row stays lit.
+  share: 'All tools',
 }
 
 /**
- * #app — the four-tab window mock. Defaults to the MCP Connections tab
+ * #app — the six-tab window mock. Defaults to the MCP Connections tab
  * (the last pill, deliberately). Panels are keyed by tab so fadeUp replays.
  */
 export function AppShowcase() {
@@ -36,8 +39,8 @@ export function AppShowcase() {
           This is Shelf.
         </h2>
         <p className="sec-lead">
-          The real macOS app. The same library, gaps, and connections your
-          agents see over MCP.
+          The real macOS app. The library, the gaps, the sharing, and the
+          connections your agents see over MCP.
         </p>
         <div className="showcase-tabs" role="tablist" aria-label="App views">
           {APP_TABS.map((t) => (
@@ -280,6 +283,45 @@ export function AppShowcase() {
                     </span>
                     <span className="mock-btn mock-btn--tall">Edit details</span>
                   </div>
+                </div>
+              )}
+              {tab === 'share' && (
+                <div className="showcase-panel" key="share">
+                  <h3>Share a tool</h3>
+                  <p className="showcase-panel-sub">
+                    Share writes <code>shelf.json</code> beside your project and
+                    copies a link. Your coworker sees one consent sheet before
+                    anything runs.
+                  </p>
+                  <div className="appshare-status">
+                    <span className="pill" data-tone="success" data-fill="">
+                      Link copied
+                    </span>
+                    <code className="appshare-chip">
+                      shelf://add?repo=github.com/your-team/image-prepper
+                    </code>
+                  </div>
+                  <div className="appshare-json">
+                    {SHARE_MANIFEST_LINES.map((line, i) =>
+                      'text' in line ? (
+                        <span className="appshare-line" key={i}>
+                          {line.text}
+                        </span>
+                      ) : (
+                        <span className="appshare-line" key={i} data-indent="true">
+                          <span className="appshare-key">&quot;{line.key}&quot;</span>: {line.val}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                  <div className="reg-actions">
+                    <span className="mock-btn mock-btn--primary mock-btn--tall">Share</span>
+                    <span className="mock-btn mock-btn--tall">Export bundle (.zip)</span>
+                  </div>
+                  <p className="mcp-verbs">
+                    env names only. There is no code path that puts one of your
+                    values in this file.
+                  </p>
                 </div>
               )}
             </div>

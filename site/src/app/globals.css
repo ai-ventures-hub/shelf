@@ -1630,6 +1630,10 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
 .showcase-pane {
   padding: 28px 32px;
+  /* Grid item: without this it sizes to its widest content, so the Share
+     tab's nowrap manifest lines would push the window wider than its own
+     overflow:hidden frame and clip instead of scrolling. */
+  min-width: 0;
 }
 
 .showcase-panel {
@@ -1902,6 +1906,56 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   font-family: var(--av-font-mono);
   font-size: 11.5px;
   color: var(--av-text-tertiary);
+}
+
+/* Share tab — the manifest Share writes, plus the link it copied. The env
+   line is the claim the section exists for: a hint, never a value. */
+.appshare-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.appshare-chip {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid rgb(120 149 255 / 30%);
+  border-radius: var(--av-radius-md);
+  background: var(--av-accent-quiet);
+  font-family: var(--av-font-mono);
+  font-size: 12.5px;
+  color: var(--av-text-primary);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.appshare-json {
+  display: grid;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-md);
+  background: var(--av-bg-well);
+  overflow-x: auto;
+}
+
+.appshare-line {
+  font-family: var(--av-font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--av-text-secondary);
+  white-space: nowrap;
+}
+
+.appshare-line[data-indent='true'] {
+  padding-left: 18px;
+}
+
+.appshare-key {
+  color: var(--av-accent-soft, #9badff);
 }
 
 /* Register tab */
