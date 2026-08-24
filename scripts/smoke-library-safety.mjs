@@ -140,6 +140,25 @@ try {
   assert.throws(() => owned.upsertCollectionFromAgent({ name: '   ' }), /required/i)
   assert.throws(() => owned.upsertCollectionFromAgent({ id: 'nope', name: 'Ghost' }), /not found/i)
   console.log('OK: collection ownership (draft, persistence, adoption, brand + input guards)')
+  // --- Tool names: no invisible twins, but no surprise overwrites either ---
+  const real = owned.save({
+    id: '', name: 'Deploy Prod', tags: [], capabilities: [], agentAccess: [],
+    favorite: false, launchCommand: 'deploy.sh', createdAt: '', updatedAt: '',
+  })
+  // A zero-width twin resolves to the SAME tool, so shelf_upsert_tool updates
+  // it instead of planting a look-alike the user might launch by mistake.
+  assert.equal(owned.findByName('Deploy\u200B Prod')?.id, real.id, 'invisible twin resolves to the real tool')
+  assert.equal(owned.findByName('deploy  prod')?.id, real.id, 'case + whitespace folded')
+  // …but accents stay DISTINCT: folding them would make an agent upsert
+  // silently overwrite a different tool, which is worse than a duplicate.
+  assert.equal(owned.findByName('Déploy Prod'), undefined, 'accents are not folded for tools')
+  // Stored names never carry invisibles.
+  const twinTool = owned.save({
+    id: '', name: 'Deploy\u200BStaging', tags: [], capabilities: [], agentAccess: [],
+    favorite: false, launchCommand: 'x.sh', createdAt: '', updatedAt: '',
+  })
+  assert.equal(twinTool.name, 'DeployStaging', 'invisibles stripped from stored tool name')
+  console.log('OK: tool names resist invisible twins without collapsing distinct names')
 } finally {
   fs.rmSync(root, { recursive: true, force: true })
 }

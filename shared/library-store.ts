@@ -108,9 +108,17 @@ export class LibraryStore {
     return this.read().tools.find((t) => t.id === id)
   }
 
+  /**
+   * Case-insensitive name match, with invisible characters folded out so a
+   * zero-width twin resolves to the REAL tool instead of creating a
+   * look-alike beside it. Deliberately NOT the aggressive foldDisplayName
+   * used by the ownership guards: tools have no owner to protect, and
+   * collapsing accents here would make shelf_upsert_tool silently overwrite
+   * a different tool ("Café" vs "Cafe"), which is worse than a duplicate.
+   */
   findByName(name: string): Tool | undefined {
-    const needle = name.trim().toLowerCase()
-    return this.read().tools.find((t) => t.name.trim().toLowerCase() === needle)
+    const needle = foldToolName(name)
+    return this.read().tools.find((t) => foldToolName(t.name) === needle)
   }
 
   /** Match on resolved project folder — registering a folder twice must update, not duplicate. */
@@ -137,7 +145,7 @@ export class LibraryStore {
       const tool: Tool = {
         ...input,
         id: input.id || randomUUID(),
-        name: input.name.trim(),
+        name: stripInvisibleChars(input.name).trim(),
         tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
         capabilities: normalizeCapabilities(input.capabilities),
         agentAccess: normalizeAgentAccess(
@@ -453,7 +461,10 @@ function normalizeTool(input: Partial<Tool>): Tool {
   const now = new Date().toISOString()
   return {
     id: input.id || randomUUID(),
-    name: (input.name || 'Untitled').trim(),
+    // Invisibles stripped so an agent cannot plant a tool whose name renders
+    // identically to one of yours in the library or Quick Open, where the
+    // wrong click launches its command.
+    name: stripInvisibleChars(input.name || 'Untitled').trim() || 'Untitled',
     description: input.description?.trim() || undefined,
     iconPath: input.iconPath?.trim() || undefined,
     iconLucide: input.iconLucide?.trim() || undefined,
@@ -497,6 +508,11 @@ function normalizeSource(input: Partial<ToolSource> | undefined): ToolSource | u
     addedAt: typeof input.addedAt === 'string' && input.addedAt ? input.addedAt : new Date().toISOString(),
     updatedAt: typeof input.updatedAt === 'string' && input.updatedAt ? input.updatedAt : undefined,
   }
+}
+
+/** Light fold for tool-name identity: invisibles, whitespace runs, case. */
+function foldToolName(name: string): string {
+  return stripInvisibleChars(name).replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 /** Case-insensitive set equality over normalized capability phrases. */
