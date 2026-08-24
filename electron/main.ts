@@ -73,6 +73,7 @@ import {
   toggleWindow,
   type DesktopIntegrationHost,
 } from './desktop-integration'
+import { adoptCollection } from '../shared/library-store'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { registerMcpConnectIpc } from './mcp-connect-ipc'
 import { flushPendingOnboarding, submitOnboarding } from './onboarding-relay'
@@ -582,8 +583,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('collections:list', () => store.listCollections())
+  // Any GUI save adopts the collection: an agent draft becomes user-owned
+  // and shelf_upsert_collection can no longer touch it.
   ipcMain.handle('collections:save', (_e, collection: Collection) =>
-    store.saveCollection(collection),
+    store.saveCollection(adoptCollection(collection)),
   )
   ipcMain.handle('collections:delete', (_e, id: string) => {
     store.deleteCollection(id)

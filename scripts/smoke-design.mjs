@@ -200,6 +200,34 @@ try {
     'deleting a profile never touches library.json',
   )
 
+  // --- Look-alike names cannot dodge the ownership guard (audit follow-up) ---
+  // NFC alone used to let these through, which would put an agent draft
+  // beside a user profile that renders identically in the Design list.
+  const userBrand = store.save({ name: 'Acme Brand', tokens: {}, origin: 'user' })
+  for (const twin of [
+    'Acme Brand\u200B',            // zero-width space
+    'Acme\u200D Brand',            // zero-width joiner
+    'Acme  Brand',                 // double space
+    'acme brand',                  // case
+    'Ácme Brand'.normalize('NFD'), // decomposed accent
+  ]) {
+    assert.throws(
+      () => store.upsertFromAgent({ name: twin, tokens: {} }),
+      /user-owned/i,
+      `look-alike profile name must be refused: ${JSON.stringify(twin)}`,
+    )
+  }
+  // A genuinely different name is still fine.
+  const distinctBrand = store.upsertFromAgent({ name: 'Acme Internal', tokens: {} })
+  assert.equal(distinctBrand.action, 'created')
+  // Invisibles never reach the stored name.
+  const stripped = store.upsertFromAgent({ name: 'Klax\u200Bon Two', tokens: {} })
+  assert.equal(stripped.profile.name, 'Klaxon Two', 'invisibles stripped from stored profile name')
+  store.delete(userBrand.id)
+  store.delete(distinctBrand.profile.id)
+  store.delete(stripped.profile.id)
+  console.log('OK: profile ownership guard resists look-alike names')
+
   // --- Ownership (origin) semantics behind the agent write path ---
   const agentOwned = store.save({
     name: 'Agent Draft',

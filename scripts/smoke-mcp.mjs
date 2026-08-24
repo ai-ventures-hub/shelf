@@ -296,6 +296,110 @@ async function main() {
     }
     console.log('OK: collections', collections.count)
 
+    // --- shelf_upsert_collection: agent write path + ownership ---
+    // Create by name, with a bogus id mixed in to prove unknown ids are
+    // reported rather than silently swallowed.
+    const madeCollection = await callTool(client, 'shelf_upsert_collection', {
+      name: 'Movie Studio',
+      description: 'Agent-built stack',
+      toolIds: [upserted.tool.id, 'not-a-real-tool-id'],
+    })
+    if (madeCollection.action !== 'created') {
+      throw new Error(`Expected created, got ${madeCollection.action}`)
+    }
+    if (!madeCollection.collection.toolIds.includes(upserted.tool.id)) {
+      throw new Error('shelf_upsert_collection did not store the member')
+    }
+    if (madeCollection.collection.toolIds.includes('not-a-real-tool-id')) {
+      throw new Error('unknown tool id was stored')
+    }
+    if (!madeCollection.warnings?.[0]?.includes('not-a-real-tool-id')) {
+      throw new Error('unknown tool id was not reported back')
+    }
+    // Same name again updates the agent's own draft instead of duplicating.
+    const reupsert = await callTool(client, 'shelf_upsert_collection', {
+      name: 'Movie Studio',
+      addToolIds: [upserted.tool.id],
+    })
+    if (reupsert.action !== 'updated' || reupsert.collection.id !== madeCollection.collection.id) {
+      throw new Error('re-upsert by name should update the same agent draft')
+    }
+    if (reupsert.collection.toolIds.length !== 1) {
+      throw new Error('addToolIds must not duplicate an existing member')
+    }
+    // removeToolIds empties it; the collection survives.
+    const emptied = await callTool(client, 'shelf_upsert_collection', {
+      id: madeCollection.collection.id,
+      name: 'Movie Studio',
+      removeToolIds: [upserted.tool.id],
+    })
+    if (emptied.collection.toolIds.length !== 0) throw new Error('removeToolIds did not drop the member')
+
+    // The GUI adopting it (any collections:save) locks agents out.
+    const { adoptCollection } = requireCjs('../dist-electron/shared/library-store.js')
+    const adoptStore = new SmokeLibraryStore(smokeDataRoot)
+    adoptStore.saveCollection(adoptCollection(adoptStore.getCollection(madeCollection.collection.id)))
+    const refused = await client.callTool({
+      name: 'shelf_upsert_collection',
+      arguments: { id: madeCollection.collection.id, name: 'Movie Studio', addToolIds: [upserted.tool.id] },
+    })
+    if (!refused.isError || !/user-owned/i.test(refused.content[0].text)) {
+      throw new Error('agents must not edit a user-adopted collection')
+    }
+    // …and cannot squat the name either.
+    const nameSquat = await client.callTool({
+      name: 'shelf_upsert_collection',
+      arguments: { name: 'movie studio', toolIds: [] },
+    })
+    if (!nameSquat.isError || !/user owns it/i.test(nameSquat.content[0].text)) {
+      throw new Error('agents must not hijack a user-owned collection by name')
+    }
+    // A design-profile binding is the user's call and survives agent edits.
+    // A runaway agent cannot flood its own context through this tool.
+    const flood = await client.callTool({
+      name: 'shelf_upsert_collection',
+      arguments: { name: 'Flood', toolIds: Array.from({ length: 500 }, (_, i) => `id-${i}`) },
+    })
+    if (!flood.isError) throw new Error('oversized toolIds array must be rejected at the schema')
+    const someUnknown = await callTool(client, 'shelf_upsert_collection', {
+      name: 'Some Unknown',
+      toolIds: Array.from({ length: 40 }, (_, i) => `ghost-${i}`),
+    })
+    if (someUnknown.warnings[0].length > 400) {
+      throw new Error('unknown-id warning must be capped, got ' + someUnknown.warnings[0].length)
+    }
+    if (!/and 30 more/.test(someUnknown.warnings[0])) {
+      throw new Error('capped warning should say how many were elided: ' + someUnknown.warnings[0])
+    }
+    // A long-id flood must stay bounded in the RESPONSE, not just in count.
+    const longIds = await callTool(client, 'shelf_upsert_collection', {
+      name: 'Long Ids',
+      toolIds: Array.from({ length: 200 }, (_, i) => `${'x'.repeat(110)}-${i}`),
+    })
+    if (longIds.warnings[0].length > 800) {
+      throw new Error('warning must truncate long ids, got ' + longIds.warnings[0].length)
+    }
+    // shelf_get_collection tells an agent whether it may write.
+    const ownership = await callTool(client, 'shelf_get_collection', { id: madeCollection.collection.id })
+    if (ownership.collection.editableByAgent !== false) {
+      throw new Error('adopted collection must report editableByAgent:false')
+    }
+    console.log('OK: upsert_collection (create, idempotent name, add/remove, adoption locks agents out, bounded output)')
+
+    // An agent must not be able to rename a tool into a look-alike of another.
+    const twinA = await callTool(client, 'shelf_upsert_tool', {
+      name: 'Twin Target', launchCommand: 'echo a', projectPath: fixture,
+    })
+    const renameClash = await client.callTool({
+      name: 'shelf_upsert_tool',
+      arguments: { id: upserted.tool.id, name: 'Twin  Target', launchCommand: 'echo b' },
+    })
+    if (!renameClash.isError || !/already reads as/i.test(renameClash.content[0].text)) {
+      throw new Error('renaming into a fold-equal name must be refused')
+    }
+    await callTool(client, 'shelf_remove_tool', { id: twinA.tool.id })
+    console.log('OK: tool rename cannot manufacture a look-alike')
+
     // --- Design Engine read path (v1.0 Phase 1) ---
     // Zero-arg resolution with an empty store must error with guidance, not
     // invent a profile.

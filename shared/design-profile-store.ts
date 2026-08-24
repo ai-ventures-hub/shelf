@@ -15,6 +15,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { resolveShelfDataRoot } from './paths'
+import { foldDisplayName, stripInvisibleChars } from './types'
 import type {
   DesignAsset,
   DesignAssetKind,
@@ -184,7 +185,9 @@ export class DesignProfileStore {
 
   /** Core upsert, mutating `data` in place. Caller holds the lock and writes. */
   private applySave(data: DesignProfilesFile, input: SaveDesignProfileInput): DesignProfile {
-    const name = input.name.trim()
+    // Strip invisibles before storing: a name that renders identically to
+    // another in the Design list is a lure, not a legitimate name.
+    const name = stripInvisibleChars(input.name).trim()
     if (!name) throw new Error('Profile name is required.')
 
     const now = new Date().toISOString()
@@ -370,14 +373,15 @@ export function isSafeProfileId(id: string): boolean {
 }
 
 /**
- * Case-insensitive, NFC-normalized name lookup — idempotent seeding, and
- * the ownership guard must not be dodged by a Unicode doppelganger.
+ * Name lookup behind idempotent seeding AND the ownership guard, so it folds
+ * every look-alike an agent could use to dodge it: invisibles, compatibility
+ * forms, combining marks, whitespace runs, case. NFC alone let
+ * "Brand\u200B" and a dotless-i twin through. Shared with the collection
+ * guard (foldDisplayName) so both write paths behave identically.
  */
 function findByNameIn(profiles: DesignProfile[], name: string): DesignProfile | undefined {
-  const needle = name.normalize('NFC').trim().toLowerCase()
-  return profiles.find(
-    (profile) => profile.name.normalize('NFC').toLowerCase() === needle,
-  )
+  const needle = foldDisplayName(name)
+  return profiles.find((profile) => foldDisplayName(profile.name) === needle)
 }
 
 function isTokenGroup(value: unknown): value is DesignTokenGroup {
@@ -401,7 +405,7 @@ function normalizeProfile(input: Partial<DesignProfile>): DesignProfile {
       typeof input.id === 'string' && isSafeProfileId(input.id.trim())
         ? input.id.trim()
         : randomUUID(),
-    name: str(input.name, 'Untitled'),
+    name: stripInvisibleChars(str(input.name, 'Untitled')).trim() || 'Untitled',
     isDefault: input.isDefault === true,
     tokens: isTokenGroup(input.tokens) ? input.tokens : {},
     modes: {

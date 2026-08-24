@@ -4,7 +4,49 @@ import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { resolveAppDataRoot, resolveShelfDataRoot } from './paths'
+import { containsLikelySecret } from './capability-intelligence'
+import { foldDisplayName, stripInvisibleChars } from './types'
 import type { Collection, LibraryFile, Tool, ToolSource } from './types'
+
+/**
+ * saveCollection input. `origin` is a WRITE INTENT, not the stored value:
+ * 'agent' marks an agent draft, 'user' adopts it (clears the flag), and
+ * omitting it preserves what is stored. The GUI always passes 'user'.
+ */
+export interface SaveCollectionInput
+  extends Omit<Collection, 'createdAt' | 'updatedAt' | 'origin'> {
+  createdAt?: string
+  updatedAt?: string
+  /**
+   * Required so a future write path cannot silently leave an agent draft
+   * agent-writable. 'preserve' is the explicit "not an ownership event".
+   */
+  origin: 'agent' | 'user' | 'preserve'
+}
+
+/**
+ * The GUI's write intent. Any human edit adopts an agent draft, so main's
+ * collections:save funnels through this instead of hand-spreading the flag
+ * (which a reordered spread could silently break).
+ */
+export function adoptCollection(collection: Collection): SaveCollectionInput {
+  return { ...collection, origin: 'user' }
+}
+
+export interface AgentCollectionInput {
+  id?: string
+  name: string
+  description?: string
+  /** Replaces the whole member set when present. */
+  toolIds?: string[]
+  /** Appended after `toolIds` (or to the existing set when it is absent). */
+  addToolIds?: string[]
+  removeToolIds?: string[]
+}
+
+/** Bounds on agent-written text, so a runaway loop cannot bloat library.json. */
+const MAX_COLLECTION_NAME = 80
+const MAX_COLLECTION_DESCRIPTION = 500
 
 /**
  * Persists the tool library under a stable Application Support root.
@@ -66,9 +108,29 @@ export class LibraryStore {
     return this.read().tools.find((t) => t.id === id)
   }
 
+  /** Every tool whose name folds to the same key (see findByName). */
+  findAllByName(name: string): Tool[] {
+    const needle = foldToolName(name)
+    return this.read().tools.filter((t) => foldToolName(t.name) === needle)
+  }
+
+  /**
+   * Case-insensitive name match, with invisible characters folded out so a
+   * zero-width twin resolves to the REAL tool instead of creating a
+   * look-alike beside it. Deliberately NOT the aggressive foldDisplayName
+   * used by the ownership guards: tools have no owner to protect, and
+   * collapsing accents here would make shelf_upsert_tool silently overwrite
+   * a different tool ("Café" vs "Cafe"), which is worse than a duplicate.
+   *
+   * AMBIGUITY FAILS CLOSED. A library that already collected a twin before
+   * 1.3.0 has two tools that now read identically; picking "whichever was
+   * stored first" would let `shelf://launch?name=` run the planted command
+   * and let an upsert overwrite the wrong tool. Callers get undefined and
+   * must disambiguate by id.
+   */
   findByName(name: string): Tool | undefined {
-    const needle = name.trim().toLowerCase()
-    return this.read().tools.find((t) => t.name.trim().toLowerCase() === needle)
+    const matches = this.findAllByName(name)
+    return matches.length === 1 ? matches[0] : undefined
   }
 
   /** Match on resolved project folder — registering a folder twice must update, not duplicate. */
@@ -92,10 +154,16 @@ export class LibraryStore {
       const capabilitiesChanged =
         !previous || !sameCapabilitySet(previous.capabilities, nextCapabilities)
 
+      const cleanName = stripInvisibleChars(input.name).trim()
+      // Refuse rather than silently minting another "Untitled": a name made
+      // only of invisible characters would never match itself on the next
+      // lookup, so each call would add one more identical-looking tool.
+      if (!cleanName) throw new Error('Tool name is required.')
+
       const tool: Tool = {
         ...input,
         id: input.id || randomUUID(),
-        name: input.name.trim(),
+        name: cleanName,
         tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
         capabilities: normalizeCapabilities(input.capabilities),
         agentAccess: normalizeAgentAccess(
@@ -163,37 +231,154 @@ export class LibraryStore {
     return this.read().collections.find((c) => c.id === id)
   }
 
-  saveCollection(input: Omit<Collection, 'createdAt' | 'updatedAt'> & {
-    createdAt?: string
-    updatedAt?: string
-  }): Collection {
+  saveCollection(input: SaveCollectionInput): Collection {
     return withFileLockSync(this.filePath, () => {
       const data = this.read()
-      const now = new Date().toISOString()
-      const existing = data.collections.findIndex((c) => c.id === input.id)
-      const knownToolIds = new Set(data.tools.map((t) => t.id))
-
-      const collection: Collection = {
-        id: input.id || randomUUID(),
-        name: input.name.trim(),
-        description: input.description?.trim() || undefined,
-        toolIds: Array.from(
-          new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
-        ),
-        designProfileId: input.designProfileId?.trim() || undefined,
-        createdAt:
-          existing >= 0
-            ? data.collections[existing].createdAt
-            : input.createdAt || now,
-        updatedAt: now,
-      }
-
-      if (existing >= 0) data.collections[existing] = collection
-      else data.collections.push(collection)
-
+      const collection = this.applyCollectionSave(data, input)
       this.write(data)
       return collection
     })
+  }
+
+  /**
+   * Agent write path for collections (shelf_upsert_collection). Ownership
+   * mirrors design profiles: an agent may only create collections and keep
+   * editing its OWN drafts. The moment the user edits one in Shelf it is
+   * adopted and becomes off-limits. Enforced INSIDE the file lock — checking
+   * ownership outside it would race a concurrent GUI save.
+   *
+   * Membership is any tool that exists: a collection is a named list, and it
+   * grants an agent nothing it cannot already do with shelf_list_tools /
+   * shelf_launch_tool. `designProfileId` is deliberately never accepted —
+   * binding a brand is the user's call, the same way an agent draft can
+   * never claim the default design profile.
+   */
+  upsertCollectionFromAgent(input: AgentCollectionInput): {
+    action: 'created' | 'updated'
+    collection: Collection
+    /** Ids that matched no tool; reported rather than silently dropped. */
+    unknownToolIds: string[]
+  } {
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      // Strip FIRST, then validate. Checking the raw string let a zero-width
+      // character inside a token break containsLikelySecret while the strip
+      // afterwards persisted the live credential — and let an all-invisible
+      // name pass the "required" check.
+      const name = stripInvisibleChars(input.name).trim()
+      if (!name) throw new Error('Collection name is required.')
+      if (name.length > MAX_COLLECTION_NAME) {
+        throw new Error(`Collection name is too long (max ${MAX_COLLECTION_NAME} characters).`)
+      }
+      const description = input.description === undefined
+        ? undefined
+        : stripInvisibleChars(input.description).trim() || ''
+      if (description && description.length > MAX_COLLECTION_DESCRIPTION) {
+        throw new Error(
+          `Collection description is too long (max ${MAX_COLLECTION_DESCRIPTION} characters).`,
+        )
+      }
+      // Name and description are shown in the GUI and returned to other
+      // agents; refuse credential-looking text outright (design-profile
+      // precedent) instead of relying on masking downstream.
+      for (const text of [name, description]) {
+        if (text && containsLikelySecret(text)) {
+          throw new Error('Collection fields cannot contain credential-like values.')
+        }
+      }
+
+      let target = input.id ? data.collections.find((c) => c.id === input.id) : undefined
+      if (input.id && !target) throw new Error(`Collection not found: ${input.id}`)
+
+      if (!target) {
+        const sameName = findCollectionByName(data.collections, name)
+        if (sameName?.origin === 'agent') {
+          target = sameName // idempotent re-run updates the earlier draft
+        } else if (sameName) {
+          throw new Error(
+            `A collection named "${sameName.name}" already exists and the user owns it. Agents cannot modify it — pick a different name, or ask the user to add tools to it in Shelf.`,
+          )
+        }
+      } else if (target.origin !== 'agent') {
+        throw new Error(
+          `Collection "${target.name}" is user-owned. Agents cannot modify it — the user curates it in Shelf. Create a new collection instead.`,
+        )
+      } else {
+        // Rename-by-id needs the same collision guard as create, or an agent
+        // draft can masquerade under a user collection's name.
+        const collision = findCollectionByName(data.collections, name)
+        if (collision && collision.id !== target.id) {
+          throw new Error(`A collection named "${collision.name}" already exists. Pick a different name.`)
+        }
+      }
+
+      const knownToolIds = new Set(data.tools.map((t) => t.id))
+      // Only ids the agent tried to ADD can be "unknown". Removing an id
+      // whose tool is already gone is the legitimate cleanup case, not a
+      // mistake to warn about.
+      const requested = [...(input.toolIds || []), ...(input.addToolIds || [])]
+      const unknownToolIds = Array.from(
+        new Set(requested.filter((id) => !knownToolIds.has(id))),
+      )
+
+      const base = input.toolIds !== undefined ? input.toolIds : target?.toolIds || []
+      const removing = new Set(input.removeToolIds || [])
+      const nextToolIds = Array.from(new Set([...base, ...(input.addToolIds || [])]))
+        .filter((id) => knownToolIds.has(id) && !removing.has(id))
+
+      const action = target ? ('updated' as const) : ('created' as const)
+      const collection = this.applyCollectionSave(data, {
+        id: target?.id || '',
+        name,
+        // Absent leaves it alone; an explicit '' clears it.
+        description: description === undefined ? target?.description : description || undefined,
+        toolIds: nextToolIds,
+        // Never carried from agent input; preserved from the stored record.
+        designProfileId: target?.designProfileId,
+        origin: 'agent',
+      })
+      this.write(data)
+      return { action, collection, unknownToolIds }
+    })
+  }
+
+  /** Core collection upsert, mutating `data` in place. Caller holds the lock. */
+  private applyCollectionSave(
+    data: LibraryFile,
+    input: SaveCollectionInput,
+  ): Collection {
+    const now = new Date().toISOString()
+    const existing = data.collections.findIndex((c) => c.id === input.id)
+    const previous = existing >= 0 ? data.collections[existing] : undefined
+    const knownToolIds = new Set(data.tools.map((t) => t.id))
+
+    // Write intent → stored value: 'user' adopts (clears), 'agent' marks,
+    // omitted preserves. Same three-way rule as DesignProfileStore.
+    const origin =
+      input.origin === 'agent'
+        ? ('agent' as const)
+        : input.origin === 'user'
+          ? undefined
+          : previous?.origin // 'preserve'
+
+    const collection: Collection = {
+      id: input.id || randomUUID(),
+      // Strip here, not only in normalizeCollection, so the returned record
+      // matches what lands on disk (an agent gets back what it really saved).
+      name: stripInvisibleChars(input.name).trim(),
+      description: stripInvisibleChars(input.description || '').trim() || undefined,
+      toolIds: Array.from(
+        new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
+      ),
+      designProfileId: input.designProfileId?.trim() || undefined,
+      origin,
+      createdAt: previous ? previous.createdAt : input.createdAt || now,
+      updatedAt: now,
+    }
+
+    if (existing >= 0) data.collections[existing] = collection
+    else data.collections.push(collection)
+    return collection
   }
 
   deleteCollection(id: string): void {
@@ -271,20 +456,39 @@ function normalizeCollection(input: Partial<Collection>): Collection {
   const now = new Date().toISOString()
   return {
     id: input.id || randomUUID(),
-    name: (input.name || 'Untitled').trim(),
-    description: input.description?.trim() || undefined,
+    name: stripInvisibleChars(input.name || 'Untitled').trim() || 'Untitled',
+    description: stripInvisibleChars(input.description || '').trim() || undefined,
     toolIds: Array.isArray(input.toolIds) ? input.toolIds.filter(Boolean) : [],
     designProfileId: input.designProfileId?.trim() || undefined,
+    // Both normalizeCollection AND the save literal must carry `origin`, or
+    // agent ownership silently vanishes on the next read (Tool.source lesson).
+    origin: input.origin === 'agent' ? 'agent' : undefined,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
   }
+}
+
+/**
+ * Look-alike-proof collection lookup for the agent ownership guard.
+ * Folds invisibles, unicode form, case, accents, and whitespace runs so an
+ * agent cannot plant a visual twin of a user-owned collection.
+ */
+function findCollectionByName(
+  collections: Collection[],
+  name: string,
+): Collection | undefined {
+  const needle = foldDisplayName(name)
+  return collections.find((c) => foldDisplayName(c.name) === needle)
 }
 
 function normalizeTool(input: Partial<Tool>): Tool {
   const now = new Date().toISOString()
   return {
     id: input.id || randomUUID(),
-    name: (input.name || 'Untitled').trim(),
+    // Invisibles stripped so an agent cannot plant a tool whose name renders
+    // identically to one of yours in the library or Quick Open, where the
+    // wrong click launches its command.
+    name: stripInvisibleChars(input.name || 'Untitled').trim() || 'Untitled',
     description: input.description?.trim() || undefined,
     iconPath: input.iconPath?.trim() || undefined,
     iconLucide: input.iconLucide?.trim() || undefined,
@@ -328,6 +532,11 @@ function normalizeSource(input: Partial<ToolSource> | undefined): ToolSource | u
     addedAt: typeof input.addedAt === 'string' && input.addedAt ? input.addedAt : new Date().toISOString(),
     updatedAt: typeof input.updatedAt === 'string' && input.updatedAt ? input.updatedAt : undefined,
   }
+}
+
+/** Light fold for tool-name identity: invisibles, whitespace runs, case. */
+function foldToolName(name: string): string {
+  return stripInvisibleChars(name).replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 /** Case-insensitive set equality over normalized capability phrases. */
