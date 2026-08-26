@@ -1,6 +1,6 @@
 /**
- * Fixture data for the interactive landing mocks (hero shelf, drop-demo loop,
- * app showcase, mode toggle). Client-safe pure data — importable from both
+ * Fixture data for the interactive landing mocks (hero shelf, app showcase,
+ * mode toggle). Client-safe pure data — importable from both
  * server and client components; anything a client component needs lives here
  * so landing-content.ts can stay server-only.
  */
@@ -33,21 +33,6 @@ export const HERO_FILENAMES = [
   'docker compose up … which folder?',
   'source .venv/bin/activate ???',
 ] as const
-
-/** #how — drop-demo loop: the titlebar label per phase. */
-export const DROP_PHASE_LABELS = [
-  'Waiting for a drop',
-  'Understanding the project',
-  'Getting it ready',
-  'Running',
-] as const
-
-/** #how — phase 1 project-scan rows. */
-export const SCAN_ROWS = [
-  { left: 'package.json', right: '✓ Next.js · npm', tone: 'success' },
-  { left: 'launch', right: '✓ npm run dev', tone: 'success' },
-  { left: 'port 3000', right: 'busy → moved to 3001', tone: 'warning' },
-] as const satisfies readonly { left: string; right: string; tone: DemoTone }[]
 
 /** #app — showcase tabs, in pill order. Default active tab is 'mcp'. */
 export type AppTabId = 'library' | 'gaps' | 'register' | 'share' | 'design' | 'mcp'

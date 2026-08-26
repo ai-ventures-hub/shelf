@@ -1,7 +1,7 @@
 import { HOW_CARDS } from '@/lib/landing-content'
-import { DropDemo } from './DropDemo'
+import { LandingVideo } from './LandingVideo'
 
-/** #how — the drop-demo loop framed by the promise and the three steps. */
+/** #how — real drop-to-run footage framed by the promise and three steps. */
 export function HowItWorks() {
   return (
     <section id="how" className="section" data-well aria-labelledby="how-heading">
@@ -17,7 +17,15 @@ export function HowItWorks() {
             files. No <strong>“what’s a port?”</strong>
           </p>
         </div>
-        <DropDemo />
+        <LandingVideo
+          behavior="auto-once"
+          caption="A real project folder goes onto Shelf and comes back as a running tool, with its launch command and port remembered."
+          label="Shelf demo: dragging a project folder into the library and launching it"
+          playLabel="Play the drop-to-run demo"
+          poster="/media/shelf-drop-and-run-poster.webp"
+          src="/media/shelf-drop-and-run.mp4"
+          variant="how"
+        />
         <div className="how-cards">
           {HOW_CARDS.map((card, i) => (
             <div

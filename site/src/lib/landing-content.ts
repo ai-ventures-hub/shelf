@@ -7,7 +7,7 @@
 
 export type PillTone = 'accent' | 'success' | 'warning' | 'neutral' | 'danger'
 
-/** #how — the three numbered cards under the drop-demo window. */
+/** #how — the three numbered cards under the real product recording. */
 export const HOW_CARDS = [
   {
     n: '01',
@@ -79,30 +79,6 @@ export const HONEST_CARDS = [
   readiness: string
   readinessTone: PillTone
   action: string
-}[]
-
-/**
- * #agents — the chat vignette. A bubble is a list of parts so the one
- * highlighted phrase ("portfolio-site is running") can carry its own tone.
- */
-export const CHAT_BUBBLES = [
-  { role: 'user', parts: [{ text: 'Launch my portfolio site' }] },
-  {
-    role: 'agent',
-    parts: [
-      { text: 'Done. ' },
-      { text: 'portfolio-site is running', tone: 'success' },
-      { text: '. Opened it in your browser.' },
-    ],
-  },
-  { role: 'user', parts: [{ text: 'What do I have that resizes images?' }] },
-  {
-    role: 'agent',
-    parts: [{ text: 'Image Prepper on your shelf does batch resizing, and it’s ready to use.' }],
-  },
-] as const satisfies readonly {
-  role: 'user' | 'agent'
-  parts: readonly { text: string; tone?: 'success' }[]
 }[]
 
 /** #design — the proof points under the lead. */

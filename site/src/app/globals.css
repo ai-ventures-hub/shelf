@@ -1,6 +1,6 @@
 /**
  * Shelf marketing site — AI Ventures design language.
- * Landing v2 (vibe-coder-first): scroll-scrubbed hero · drop-demo loop ·
+ * Landing v2 (vibe-coder-first): scroll-scrubbed hero · real product demos ·
  * app showcase tabs · honest cards · agent chat · mode toggle · final CTA.
  * Dark is the identity; no light theme shipped.
  *
@@ -502,16 +502,6 @@ section[id] {
 /* ==========================================================================
    Motion — keyframe vocabulary (ported from the design file) + reveals
    ========================================================================== */
-@keyframes hoverFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -520,25 +510,6 @@ section[id] {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@keyframes barFill {
-  from {
-    width: 4%;
-  }
-  to {
-    width: 96%;
-  }
-}
-
-@keyframes pulseDash {
-  0%,
-  100% {
-    border-color: var(--av-slate-800);
-  }
-  50% {
-    border-color: var(--av-accent);
   }
 }
 
@@ -1166,281 +1137,116 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   font-weight: inherit;
 }
 
-.drop-shell {
-  width: min(920px, 100%);
+.landing-video {
+  min-width: 0;
+  margin: 0;
+}
+
+.landing-video[data-variant='how'] {
+  width: min(1040px, 100%);
   margin: 0 auto;
 }
 
-.drop-titlebar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--av-border-default);
-}
-
-.drop-titlebar-app {
-  margin-left: 10px;
-  font-family: var(--av-font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--av-text-tertiary);
-  letter-spacing: 0.06em;
-}
-
-.drop-titlebar-phase {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--av-text-tertiary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.drop-stage {
-  min-height: 320px;
-  display: grid;
-  /* minmax(0,1fr) caps the track at the stage width — with an auto track,
-     the panels' fixed widths would size it past the viewport on phones and
-     max-width:100% would resolve against the oversized track. */
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  padding: 34px;
-}
-
-.drop-panel {
-  animation: fadeUp 0.3s ease both;
-}
-
-.drop-zone {
-  text-align: center;
-  animation: fadeUp 0.4s ease both;
-}
-
-.drop-zone-box {
-  width: min(420px, 100%);
-  padding: 44px 30px;
-  border: 2px dashed var(--av-border-default);
-  border-radius: 18px;
-  animation: pulseDash 2s ease infinite;
-}
-
-.drop-folder {
-  margin: 0 auto 18px;
-  width: 74px;
-  animation: hoverFloat 2.4s ease-in-out infinite;
-}
-
-.drop-folder-tab {
-  width: 34px;
-  height: 9px;
-  background: #526fdd;
-  border-radius: 4px 4px 0 0;
-}
-
-.drop-folder-body {
-  width: 74px;
-  height: 48px;
-  background: var(--av-mark-grad);
-  border-radius: 0 6px 6px 6px;
-  box-shadow: 0 16px 40px rgb(82 111 221 / 35%);
-}
-
-.drop-zone-title {
-  font-family: var(--av-font-display);
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.drop-zone-sub {
-  margin-top: 6px;
-  font-size: 13.5px;
-  color: var(--av-text-tertiary);
-}
-
-.drop-scan {
-  width: min(460px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-family: var(--av-font-mono);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.drop-kicker {
-  font-family: var(--av-font-ui);
-  font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--av-accent-text);
-}
-
-.drop-scan-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 11px 14px;
-  border: 1px solid var(--av-border-default);
-  border-radius: 10px;
-  background: var(--av-bg-well);
-}
-
-.drop-scan-row span:last-child[data-tone='success'] {
-  color: var(--av-success);
-}
-
-.drop-scan-row span:last-child[data-tone='warning'] {
-  color: var(--av-warning);
-}
-
-.drop-scan-note {
-  font-family: var(--av-font-ui);
-  font-size: 12.5px;
-  color: var(--av-text-tertiary);
-}
-
-.drop-install {
-  width: min(460px, 100%);
-}
-
-.drop-install .drop-kicker {
-  margin-bottom: 14px;
-}
-
-.drop-install-box {
-  padding: 18px;
-  border: 1px solid var(--av-border-default);
-  border-radius: 14px;
-  background: var(--av-bg-well);
-}
-
-.drop-install-row {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--av-font-mono);
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.drop-install-row span:last-child {
-  color: var(--av-success);
-  animation: blinkDot 1s ease infinite;
-}
-
-.drop-bar {
-  margin-top: 12px;
-  height: 6px;
-  border-radius: 99px;
-  background: var(--av-bg-raised);
+.landing-video-frame {
+  position: relative;
+  aspect-ratio: 8 / 5;
   overflow: hidden;
+  border: 1px solid var(--av-border-default);
+  border-radius: 18px;
+  background: #05070c;
+  box-shadow: 0 28px 80px rgb(0 0 0 / 28%);
+  isolation: isolate;
 }
 
-.drop-bar-fill {
+.landing-video-frame video {
+  display: block;
+  width: 100%;
   height: 100%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, #526fdd, #9aafff);
-  animation: barFill 2.4s ease both;
+  object-fit: contain;
+  background: #05070c;
 }
 
-.drop-install-note {
-  margin-top: 12px;
-  font-size: 13.5px;
-  color: var(--av-text-secondary);
-}
-
-.drop-running {
-  width: min(480px, 100%);
-}
-
-.drop-running-card {
-  padding: 20px;
-  border: 1px solid var(--av-success-border);
-  border-radius: 16px;
-  background: var(--av-bg-well);
-  box-shadow: 0 0 0 1px rgb(72 213 151 / 15%);
-}
-
-.drop-running-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.drop-running-id {
-  flex: 1;
-  min-width: 0;
-}
-
-.drop-running-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.drop-running-url {
-  font-family: var(--av-font-mono);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--av-text-tertiary);
-}
-
-.drop-running-pill {
-  padding: 5px 11px;
-  border-radius: 99px;
-  border: 1px solid var(--av-success-border);
-  background: var(--av-success-surface);
-  color: var(--av-success);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.drop-running-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.drop-running-clients {
-  margin-left: auto;
+.landing-video-control {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
   display: inline-flex;
   align-items: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--av-accent-text);
+  gap: 9px;
+  min-height: 44px;
+  padding: 11px 17px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--av-radius-full);
+  background: rgb(9 12 20 / 88%);
+  color: var(--av-text-primary);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 38%);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
 }
 
-.drop-running-note {
-  margin-top: 12px;
-  text-align: center;
-  font-size: 13.5px;
+.landing-video-control:hover {
+  border-color: rgb(120 149 255 / 70%);
+  background: rgb(20 27 46 / 94%);
+  transform: translate(-50%, -50%) scale(1.02);
+}
+
+.landing-video-control:focus-visible {
+  outline: 3px solid var(--av-accent);
+  outline-offset: 4px;
+}
+
+.landing-video[data-state='ended'] .landing-video-control {
+  top: auto;
+  bottom: 18px;
+  transform: translateX(-50%);
+}
+
+.landing-video[data-state='ended'] .landing-video-control:hover {
+  transform: translateX(-50%) scale(1.02);
+}
+
+.landing-video-loading {
+  position: absolute;
+  z-index: 2;
+  right: 14px;
+  bottom: 14px;
+  padding: 6px 9px;
+  border: 1px solid var(--av-border-default);
+  border-radius: var(--av-radius-full);
+  background: rgb(9 12 20 / 82%);
   color: var(--av-text-secondary);
+  font-size: 11.5px;
+  font-weight: 650;
+  backdrop-filter: blur(10px);
 }
 
-.drop-dots {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 0 18px;
-}
-
-.drop-dots span {
-  width: 26px;
-  height: 4px;
-  border-radius: 99px;
-  background: var(--av-border-default);
-}
-
-.drop-dots span[data-active='true'] {
-  background: var(--av-accent);
-}
-
-.drop-note {
-  text-align: center;
-  margin: 14px 0 0;
-  font-size: 12px;
+.landing-video figcaption {
+  margin-top: 13px;
   color: var(--av-text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.landing-video[data-variant='agent'] figcaption {
+  text-align: left;
+}
+
+.landing-video-error {
+  margin: 7px 0 0;
+  color: var(--av-warning);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 .how-cards {
@@ -2099,7 +1905,7 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   color: var(--av-accent-text);
 }
 
-/* —— #agents · Claude asks —— */
+/* —— #agents · Your agent asks —— */
 .chat-grid {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -2141,40 +1947,6 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
   object-fit: contain;
 }
 
-.chat-panel {
-  border: 1px solid var(--av-border-default);
-  border-radius: 16px;
-  background: var(--av-bg-panel);
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.chat-bubble {
-  max-width: 85%;
-  padding: 12px 16px;
-  font-size: 14px;
-}
-
-.chat-bubble[data-role='user'] {
-  align-self: flex-end;
-  border-radius: 14px 14px 4px 14px;
-  background: var(--av-accent-quiet);
-  border: 1px solid rgb(120 149 255 / 30%);
-}
-
-.chat-bubble[data-role='agent'] {
-  align-self: flex-start;
-  border-radius: 14px 14px 14px 4px;
-  background: var(--av-bg-well);
-  border: 1px solid var(--av-border-default);
-}
-
-.chat-bubble [data-tone='success'] {
-  color: var(--av-success);
-  font-weight: 600;
-}
 
 /* —— #design · Brand switcher (1.0) —— */
 /* Copy left, window right — zigzags against #agents/#dev around it.
@@ -2979,23 +2751,6 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     font-size: 11.5px;
   }
 
-  .drop-stage {
-    padding: 24px 16px;
-    min-height: 280px;
-  }
-
-  .drop-scan {
-    font-size: 12.5px;
-  }
-
-  .drop-install-box {
-    padding: 14px;
-  }
-
-  .drop-running-card {
-    padding: 16px;
-  }
-
   .how-cards {
     margin-top: 32px;
     gap: 14px;
@@ -3014,15 +2769,6 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
-  }
-
-  .chat-panel {
-    padding: 16px;
-  }
-
-  .chat-bubble {
-    max-width: 92%;
-    font-size: 13.5px;
   }
 
   .honest-card {
@@ -3045,19 +2791,10 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
     padding: 0 14px;
   }
 
-  .drop-titlebar {
-    padding: 12px 16px;
-  }
-
-  /* One-line titlebar: the phase label is the informative half. */
-  .drop-titlebar-app {
-    display: none;
-  }
-
-  .drop-running-clients {
-    flex-basis: 100%;
-    margin-left: 0;
-    margin-top: 4px;
+  .landing-video-control {
+    width: max-content;
+    max-width: calc(100% - 32px);
+    justify-content: center;
   }
 
   .reg-field dd {

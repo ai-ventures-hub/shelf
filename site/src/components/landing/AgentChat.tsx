@@ -1,10 +1,11 @@
-import { CHAT_BUBBLES } from '@/lib/landing-content'
+import Image from 'next/image'
 import { MCP_CLIENTS } from '@/lib/landing-demos'
+import { LandingVideo } from './LandingVideo'
 
 /** Chip order differs from the MCP-tab card order: Claude Code leads here. */
 const CHIP_ORDER = ['claude-code', 'claude-desktop', 'cursor', 'codex'] as const
 
-/** #agents — copy + client chips beside the chat vignette. */
+/** #agents — copy + client chips beside a real agent-launch recording. */
 export function AgentChat() {
   const chips = CHIP_ORDER.map(
     (id) => MCP_CLIENTS.find((client) => client.id === id)!,
@@ -15,7 +16,7 @@ export function AgentChat() {
         <div className="chat-copy">
           <p className="eyebrow">Connected, not configured</p>
           <h2 id="agents-heading" className="sec-h2">
-            Claude asks. Your shelf answers.
+            Your agent asks. Your shelf answers.
           </h2>
           <p className="sec-lead">
             Connect Claude Code, Claude Desktop, Cursor, or Codex in one click.
@@ -25,26 +26,22 @@ export function AgentChat() {
           <div className="chat-chips">
             {chips.map((client) => (
               <span key={client.id} className="chat-chip">
-                <img src={client.logo} alt="" width={16} height={16} />
+                <Image src={client.logo} alt="" width={16} height={16} />
                 {client.chip}
               </span>
             ))}
           </div>
         </div>
-        <div className="chat-panel" data-reveal>
-          {CHAT_BUBBLES.map((bubble, i) => (
-            <div key={i} className="chat-bubble" data-role={bubble.role}>
-              {bubble.parts.map((part, j) =>
-                'tone' in part && part.tone ? (
-                  <span key={j} data-tone={part.tone}>
-                    {part.text}
-                  </span>
-                ) : (
-                  <span key={j}>{part.text}</span>
-                ),
-              )}
-            </div>
-          ))}
+        <div data-reveal>
+          <LandingVideo
+            behavior="click"
+            caption="Cursor asks Shelf to launch Image Polisher. Shelf starts it and returns the live URL."
+            label="Shelf demo: Cursor asking Shelf to launch Image Polisher"
+            playLabel="Watch an agent launch a tool"
+            poster="/media/shelf-agent-launch-poster.webp"
+            src="/media/shelf-agent-launch.mp4"
+            variant="agent"
+          />
         </div>
       </div>
     </section>
