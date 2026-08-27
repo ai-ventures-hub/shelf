@@ -3,10 +3,14 @@
 .team-add {
   display: flex;
   gap: 0.5rem;
+  align-items: stretch;
   margin-bottom: 1rem;
 }
 
-.team-add .input {
+/* The URL box is the app's own field primitive (primitives.css) — it only
+   needs to flex here. Anything else re-invents the input and renders
+   browser-default chrome next to a styled button. */
+.team-add .field-input {
   flex: 1;
   min-width: 0;
 }

@@ -179,10 +179,13 @@ export function TeamToolsPage() {
       <form className="team-add" onSubmit={addCatalog}>
         <input
           type="text"
-          className="input"
+          className="field-input"
           value={url}
           placeholder="https://github.com/your-team/shelf-catalog"
           aria-label="Catalog repository URL"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy === 'add'}
           onChange={(e) => setUrl(e.target.value)}
         />
         <button type="submit" className="btn btn-primary" disabled={busy === 'add' || !url.trim()}>
