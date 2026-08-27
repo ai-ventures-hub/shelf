@@ -63,6 +63,7 @@ async function main() {
   await run('mcp path preference', 'node', ['scripts/smoke-mcp-path.mjs'])
   await run('mcp smoke', 'node', ['scripts/smoke-mcp.mjs'])
   await run('tool sharing', 'node', ['scripts/smoke-sharing.mjs'])
+  await run('team catalog', 'node', ['scripts/smoke-catalog.mjs'])
   await run('design engine stress', 'node', ['scripts/smoke-design-stress.mjs'])
   console.log('\nOK: smoke:all passed')
 }

@@ -43,6 +43,7 @@ import {
   checkToolUpdates,
   cleanStagingRoot,
   confirmStagedShare,
+  detectGitRemote,
   discardStagedShare,
   exportToolBundle,
   exportToolManifest,
@@ -57,6 +58,15 @@ import {
   type StagedShare,
 } from '../shared/tool-share'
 import { folderNameFor } from '../shared/tool-manifest'
+import { containsLikelySecret } from '../shared/capability-intelligence'
+import { TeamCatalogStore, type TeamCatalog } from '../shared/team-catalog-store'
+import {
+  addCatalog,
+  publishToCatalog,
+  syncCatalog,
+  type PublishResult,
+} from '../shared/team-catalog-sync'
+import type { CatalogEntry } from '../shared/team-catalog'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -97,6 +107,7 @@ let prefs: PrefsStore
 let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
+let teamCatalogs: TeamCatalogStore
 let isQuitting = false
 /** Staged (fetched, not yet approved) shared-tool adds, by stageId. */
 const stagedShares = new Map<string, StagedShare>()
@@ -891,6 +902,78 @@ function registerIpc(): void {
     return applyToolUpdate(tool, input, { store, processes })
   })
 
+  // ---- Team Tools catalog (1.4) -----------------------------------------
+  // A catalog is a git repo holding catalog.json. Shelf reads that one file
+  // and nothing else out of it; installing an entry goes through the SAME
+  // stage → consent sheet → confirm path a shelf:// link uses, so the sheet
+  // stays the only thing that can authorize execution.
+  ipcMain.handle('catalog:list', (): TeamCatalog[] => teamCatalogs.list())
+  ipcMain.handle('catalog:add', async (_e, url: string) => {
+    try {
+      const result = await addCatalog(url, teamCatalogs)
+      return { ok: true, catalog: result.catalog, warnings: result.warnings, empty: result.empty }
+    } catch (err) {
+      return shareFailure(err)
+    }
+  })
+  ipcMain.handle('catalog:refresh', async (_e, id: string) => {
+    try {
+      const result = await syncCatalog(id, teamCatalogs)
+      return { ok: true, catalog: result.catalog, warnings: result.warnings, empty: result.empty }
+    } catch (err) {
+      return shareFailure(err)
+    }
+  })
+  ipcMain.handle('catalog:remove', (_e, id: string) => teamCatalogs.remove(id))
+  // Publish: the tool's own git remote is the entry's repo. A tool with no
+  // remote has nothing a coworker could clone, so it is refused here rather
+  // than written as an entry nobody can install.
+  ipcMain.handle('catalog:publish', async (_e, catalogId: string, toolId: string) => {
+    try {
+      const tool = store.get(toolId)
+      if (!tool) throw new Error(`Tool not found: ${toolId}`)
+      const remote = tool.projectPath ? await detectGitRemote(tool.projectPath) : null
+      if (!remote) {
+        return shareFailure(
+          new ShareError(
+            'catalog_invalid',
+            `${tool.name} has no git remote, so there's nothing for a teammate to install from.`,
+            'Push the project to a remote first, then share it with your team. Or send a bundle from the ⋯ menu.',
+          ),
+        )
+      }
+      // Same refusal buildManifest applies to these exact fields: a catalog
+      // entry is pushed to a shared repo, so a credential in a name,
+      // description, or capability would live in that repo's history for
+      // everyone with clone access.
+      const freeText: Array<[string, string | undefined]> = [
+        ['name', tool.name],
+        ['description', tool.description],
+        ...tool.capabilities.map((c): [string, string] => ['capabilities', c]),
+      ]
+      for (const [label, text] of freeText) {
+        if (text && containsLikelySecret(text)) {
+          return shareFailure(
+            new ShareError(
+              'export_refused',
+              `The ${label} looks like it contains a credential, and a catalog entry is pushed to a repository your whole team can read. Move secrets into Environment variables (those are never shared) and try again.`,
+            ),
+          )
+        }
+      }
+      const entry: CatalogEntry = {
+        name: tool.name,
+        description: tool.description || undefined,
+        capabilities: tool.capabilities.slice(0, 40),
+        repo: remote,
+      }
+      const result: PublishResult = await publishToCatalog(catalogId, entry, teamCatalogs)
+      return { ok: true, result, catalog: teamCatalogs.get(catalogId) }
+    } catch (err) {
+      return shareFailure(err)
+    }
+  })
+
   ipcMain.handle('system:openUrl', (_e, url: string) => system.openUrl(url))
   ipcMain.handle('system:openPath', (_e, target: string) => system.openPath(target))
   ipcMain.handle('system:openEditor', (_e, projectPath: string) =>
@@ -926,6 +1009,7 @@ if (gotLock) {
     receipts = new ReceiptStore()
     capabilityGaps = new CapabilityGapStore()
     designProfiles = new DesignProfileStore()
+    teamCatalogs = new TeamCatalogStore()
     // Scratch clones from adds that never reached approve/cancel.
     cleanStagingRoot(store.getRoot())
     processes = new ProcessManager(store, {

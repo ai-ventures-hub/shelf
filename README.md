@@ -36,6 +36,11 @@ query what you've built, launch it, and honestly record what's missing.
   agent and it pulls your tokens and a paste-ready brand brief. Seed a profile straight from a
   project's own CSS variables and Tailwind config — deterministically, nothing guessed — or show
   an agent a site you love and it saves the extracted brand back as a draft you review.
+- **Share a tool, or a whole team's worth.** Share writes a `shelf.json` beside your project and
+  copies a `shelf://add` link; your coworker approves one consent sheet and it's running, with env
+  values never leaving your Mac. A team is a git repo holding a `catalog.json`: point Shelf at it
+  once and **Team Tools** lists everything your teammates published, one Install away. No Shelf
+  server, no account — access is whatever your git host already says it is.
 - **Quick Open** (`⌘K`), menu bar mode, and a `shelf://` URL scheme.
 
 ## Install

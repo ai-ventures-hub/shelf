@@ -76,6 +76,12 @@ export type {
   UpdateCommit,
 } from '../shared/tool-share'
 export type { ManifestFieldDiff, ToolManifest } from '../shared/tool-manifest'
+export type { CatalogEntry, TeamCatalogFile } from '../shared/team-catalog'
+export type { TeamCatalog, TeamCatalogsFile } from '../shared/team-catalog-store'
+export type {
+  CatalogSyncView,
+  PublishResult as CatalogPublishResult,
+} from '../shared/team-catalog-sync'
 export type { SaveDesignProfileInput } from '../shared/design-profile-store'
 export type { ExtractedTokens } from '../shared/design-extract'
 export type { ShortcutStatus } from '../shared/global-shortcut'

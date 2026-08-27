@@ -161,3 +161,35 @@ export const COLLECTION_ROWS = [
   { letter: 'V', name: 'Voice Bench', line: ':8000 · uvicorn app:app' },
   { letter: 'R', name: 'Render Queue', line: 'one-shot · node render.js' },
 ] as const satisfies readonly { letter: string; name: string; line: string }[]
+
+/**
+ * #share — the Team Tools band (1.4). Stage 2 of sharing: rows of a team
+ * catalog as the pane renders them. `state` drives the right-hand chip, and
+ * the claim under the rows (a pointer, never a command or a key) is the whole
+ * reason a catalog is safe to subscribe to.
+ */
+export const TEAM_ROWS = [
+  {
+    name: 'Image Prepper',
+    detail: 'batch-optimize images',
+    state: 'Install',
+    tone: 'action',
+  },
+  {
+    name: 'Doc Converter',
+    detail: 'convert documents',
+    state: 'On your shelf',
+    tone: 'quiet',
+  },
+  {
+    name: 'Render Queue',
+    detail: 'render video jobs',
+    state: 'Install',
+    tone: 'action',
+  },
+] as const satisfies readonly {
+  name: string
+  detail: string
+  state: string
+  tone: 'action' | 'quiet'
+}[]

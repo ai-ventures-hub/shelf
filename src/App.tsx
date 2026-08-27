@@ -10,6 +10,7 @@ import { DesignListPage } from './pages/DesignListPage'
 import { DesignProfilePage } from './pages/DesignProfilePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { McpConnectPage } from './pages/McpConnectPage'
+import { TeamToolsPage } from './pages/TeamToolsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ToolDetailPage } from './pages/ToolDetailPage'
 import { ToolFormPage } from './pages/ToolFormPage'
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/collections/:collectionId" element={<CollectionPage />} />
             <Route path="/design" element={<DesignListPage />} />
             <Route path="/design/:id" element={<DesignProfilePage />} />
+            <Route path="/team" element={<TeamToolsPage />} />
             <Route path="/mcp" element={<McpConnectPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tools/new" element={<ToolFormPage />} />

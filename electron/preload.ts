@@ -4,9 +4,12 @@ import type {
   ApplyUpdateResult,
   ConfirmShareInput,
   ConfirmShareResult,
+  CatalogPublishResult,
+  CatalogSyncView,
   ShareFailure,
   ShareSource,
   StagedShare,
+  TeamCatalog,
   UpdateCheck,
   RegisterProjectOptions,
   RegisterProjectResult,
@@ -152,6 +155,19 @@ const api = {
     ipcRenderer.invoke('share:checkUpdates', id),
   applyToolUpdate: (id: string, input: ApplyUpdateInput): Promise<ApplyUpdateResult> =>
     ipcRenderer.invoke('share:applyUpdate', id, input),
+  /** Team Tools catalogs (1.4): subscribe, refresh, publish an entry. */
+  listTeamCatalogs: (): Promise<TeamCatalog[]> => ipcRenderer.invoke('catalog:list'),
+  addTeamCatalog: (url: string): Promise<CatalogSyncView | ShareFailure> =>
+    ipcRenderer.invoke('catalog:add', url),
+  refreshTeamCatalog: (id: string): Promise<CatalogSyncView | ShareFailure> =>
+    ipcRenderer.invoke('catalog:refresh', id),
+  removeTeamCatalog: (id: string): Promise<boolean> => ipcRenderer.invoke('catalog:remove', id),
+  publishToTeamCatalog: (
+    catalogId: string,
+    toolId: string,
+  ): Promise<
+    { ok: true; result: CatalogPublishResult; catalog?: TeamCatalog } | ShareFailure
+  > => ipcRenderer.invoke('catalog:publish', catalogId, toolId),
   /** A shelf://add link arrived — renderer opens the Add-from-URL sheet. */
   onAddShared: (cb: (info: { repo: string }) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, info: { repo: string }) => cb(info)

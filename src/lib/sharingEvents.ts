@@ -8,6 +8,12 @@ export const ADD_SHARED_EVENT = 'shelf:add-shared'
 export interface AddSharedRequest {
   repo?: string
   bundlePath?: string
+  /**
+   * Skip the explicit Fetch click and clone straight into the consent sheet.
+   * Only for sources the user already vouched for — a Team Tools entry from a
+   * catalog they subscribed to. A shelf:// link from chat never sets this.
+   */
+  autoFetch?: boolean
 }
 
 export function requestAddShared(detail: AddSharedRequest = {}): void {

@@ -124,10 +124,19 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   register/bootstrap pipeline, provenance + explicit "Check for
   updates", `shelf_export_tool` over MCP. Agent-driven receive
   deliberately not built. See [`SHARING.md`](SHARING.md).
-- **v1.4 — Tool Sharing, stage 2: Team Tools catalog**: team = a catalog
-  repo (`catalog.json`), never a Shelf-operated service ("No cloud. No
-  account." holds); Team Tools pane + "Share with team". (Was earmarked
-  v1.3; collections took that number first.)
+- **v1.4 — Tool Sharing, stage 2: Team Tools catalog** (released
+  2026-08-26, `v1.4.0`): a team is a catalog repo (`catalog.json`), never
+  a Shelf-operated service, so "No cloud. No account." holds — access is
+  git access. Team Tools pane, subscribe by URL, Install through the
+  existing consent sheet, and "Share with team" appending your entry and
+  pushing it. Entries are POINTERS ONLY (name, description, capabilities,
+  repo); launch command, setup, and env keys still come from the tool's
+  own `shelf.json` at install time, so a catalog can never change what a
+  tool runs. Publish edits the team's file in place rather than rewriting
+  it from Shelf's normalized view, and refuses free text that looks like a
+  credential. Agent-driven install stays unbuilt for the same reason
+  `shelf_add_shared_tool` was in 1.2; a read-only `shelf_list_team_tools`
+  is deferred. (Was earmarked v1.3; collections took that number first.)
 
 ## Later Community enhancements
 

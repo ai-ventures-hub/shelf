@@ -1,0 +1,155 @@
+/* Team Tools (1.4) — catalog sections and their entry rows. */
+
+.team-add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  margin-bottom: 1rem;
+}
+
+/* The URL box is the app's own field primitive (primitives.css) — it only
+   needs to flex here. Anything else re-invents the input and renders
+   browser-default chrome next to a styled button. */
+.team-add .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-catalog {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+}
+
+.team-catalog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.team-catalog-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.team-catalog-meta {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.team-catalog-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.team-catalog-empty {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.team-entries {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.team-entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel-raised);
+}
+
+.team-entry-main {
+  min-width: 0;
+}
+
+.team-entry-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.team-entry-desc {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* The repo is the only actionable field in an entry, so it stays visible
+   rather than hidden behind a tooltip. */
+.team-entry-repo {
+  margin: 0.25rem 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--subtle);
+  overflow-wrap: anywhere;
+}
+
+.team-entry-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.team-entry-action {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+}
+
+/* Catalog picker inside the Share with team sheet. */
+.team-pick {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.team-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.team-pick-row:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.team-pick-row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.team-pick-row small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.team-pick-cta {
+  color: var(--brand);
+  font-size: 0.85rem;
+  font-weight: 600;
+}

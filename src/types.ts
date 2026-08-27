@@ -123,6 +123,43 @@ export interface ShareFailure {
 }
 
 /** What the consent sheet shows (stagePath never leaves the main process). */
+/** One tool in a team catalog (v1.4). `repo` is the only actionable field. */
+export interface CatalogEntry {
+  name: string
+  description?: string
+  capabilities: string[]
+  repo: string
+}
+
+/** A subscribed team catalog as the renderer sees it. */
+export interface TeamCatalog {
+  id: string
+  url: string
+  name: string
+  addedAt: string
+  lastFetchedAt?: string
+  lastError?: string
+  warnings?: string[]
+  hasUnpushedEntry?: boolean
+  entries: CatalogEntry[]
+}
+
+export interface CatalogSyncView {
+  ok: true
+  catalog: TeamCatalog
+  warnings: string[]
+  empty: boolean
+}
+
+export interface CatalogPublishResult {
+  action: 'added' | 'updated'
+  pushed: boolean
+  pushProblem?: string
+  pushRemedy?: string
+  pushRemedyCommand?: string
+  count: number
+}
+
 export interface StagedShareView {
   stageId: string
   source: ShareSource
@@ -713,6 +750,14 @@ export interface ShelfApi {
   discardSharedTool: (stageId: string) => Promise<void>
   checkToolUpdates: (id: string) => Promise<UpdateCheck>
   applyToolUpdate: (id: string, input: ApplyUpdateInput) => Promise<ApplyUpdateResult>
+  listTeamCatalogs: () => Promise<TeamCatalog[]>
+  addTeamCatalog: (url: string) => Promise<CatalogSyncView | ShareFailure>
+  refreshTeamCatalog: (id: string) => Promise<CatalogSyncView | ShareFailure>
+  removeTeamCatalog: (id: string) => Promise<boolean>
+  publishToTeamCatalog: (
+    catalogId: string,
+    toolId: string,
+  ) => Promise<{ ok: true; result: CatalogPublishResult; catalog?: TeamCatalog } | ShareFailure>
   onAddShared: (cb: (info: { repo: string }) => void) => () => void
   getPrefs: () => Promise<UiPrefs>
   updatePrefs: (

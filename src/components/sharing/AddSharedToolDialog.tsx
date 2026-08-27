@@ -30,6 +30,8 @@ interface AddSharedToolDialogProps {
   open: boolean
   initialRepo?: string
   initialBundlePath?: string
+  /** Fetch the repo on open instead of waiting for a Fetch click (catalogs). */
+  autoFetch?: boolean
   onClose: () => void
 }
 
@@ -41,6 +43,7 @@ export function AddSharedToolDialog({
   open,
   initialRepo,
   initialBundlePath,
+  autoFetch,
   onClose,
 }: AddSharedToolDialogProps) {
   const navigate = useNavigate()
@@ -83,10 +86,15 @@ export function AddSharedToolDialog({
     setRepo(initialRepo || '')
     setPhase({ kind: 'source' })
     if (initialBundlePath) void fetchSource({ kind: 'bundle', bundlePath: initialBundlePath })
+    // Install from a Team Tools catalog: the user subscribed to that catalog
+    // themselves, so the Install click is the intent the Fetch click exists to
+    // capture. The consent sheet below is still the only thing that can
+    // authorize setup or launch.
+    else if (initialRepo && autoFetch) void fetchSource({ kind: 'git', repo: initialRepo })
     else if (initialRepo) window.setTimeout(() => fetchButtonRef.current?.focus(), 0)
     else window.setTimeout(() => inputRef.current?.focus(), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialRepo, initialBundlePath])
+  }, [open, initialRepo, initialBundlePath, autoFetch])
 
   async function fetchSource(source: { kind: 'git'; repo: string } | { kind: 'bundle'; bundlePath: string }) {
     const gen = genRef.current

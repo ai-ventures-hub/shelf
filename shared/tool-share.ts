@@ -51,6 +51,12 @@ export type ShareErrorCode =
   | 'stage_missing'
   | 'export_refused'
   | 'folder_missing'
+  // Catalog paths (v1.4). They share ShareError so the GUI's existing
+  // remedy rendering (prose + one-click command) works unchanged.
+  | 'catalog_invalid'
+  | 'catalog_missing'
+  | 'catalog_unpushed'
+  | 'push_failed'
 
 /** IPC-safe failure shape (a thrown ShareError loses code/remedy over IPC). */
 export interface ShareFailure {
@@ -105,7 +111,7 @@ export function cleanStagingRoot(dataRoot = resolveShelfDataRoot()): void {
 // git plumbing
 // ---------------------------------------------------------------------------
 
-interface GitRun {
+export interface GitRun {
   ok: boolean
   code: number | null
   stdout: string
@@ -156,7 +162,7 @@ export async function resolveGitBinary(): Promise<string | null> {
   return cachedGit
 }
 
-async function requireGit(): Promise<string> {
+export async function requireGit(): Promise<string> {
   const git = await resolveGitBinary()
   if (!git) {
     throw new ShareError(
@@ -249,7 +255,7 @@ export function classifyCloneFailure(text: string): CloneFailureKind {
  * to actually do — sign git in, use SSH, or take a bundle — instead of
  * surfacing git's plumbing text.
  */
-function cloneFailure(url: string, run: GitRun): ShareError {
+export function cloneFailure(url: string, run: GitRun): ShareError {
   const kind = classifyCloneFailure(`${run.stderr}\n${run.stdout}`)
   const ssh = sshUrlForHttps(url)
   let host = 'the server'
@@ -296,7 +302,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function runGit(git: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<GitRun> {
+export function runGit(git: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<GitRun> {
   return new Promise((resolve) => {
     execFile(
       git,
@@ -333,7 +339,7 @@ function runGit(git: string, args: string[], opts: { cwd?: string; timeoutMs?: n
   })
 }
 
-function gitFailure(run: GitRun, fallback: string): string {
+export function gitFailure(run: GitRun, fallback: string): string {
   const text = `${run.stderr}\n${run.stdout}`.trim()
   if (!text) return fallback
   // Last meaningful line is usually the reason ("fatal: …").

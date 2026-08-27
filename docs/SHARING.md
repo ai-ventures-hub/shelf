@@ -142,7 +142,7 @@ pre-confirmed by URL parameters.
   a design that preserves human consent (e.g. tool stages the add, GUI
   confirms). The GUI is the only receive surface in v1.2.
 
-### Stage 2 (fast follow, still serverless): Team Tools catalog
+### Stage 2 (v1.4, still serverless): Team Tools catalog
 
 A "team" is a git repo containing `catalog.json` — entries of
 `{ name, description, capabilities, repo }`. Everyone points Shelf at the
@@ -153,6 +153,100 @@ action, or `gh` when present). Access control *is* git access — the org
 already knows who's on the team. Homebrew-tap pattern; zero Shelf
 infrastructure; the site's "no cloud sync / no team accounts" claims stay
 true.
+
+Stage 1 made sharing possible; it did not make it discoverable. A link is
+a push event that depends on a person remembering at the right moment,
+and it scrolls out of Slack. A catalog is a standing list, so a new
+machine or a new teammate is self-serve. That is the whole of what stage
+2 adds — every tool a catalog installs, a `shelf://add` link can already
+install today.
+
+#### Catalog file: `catalog.json` (in the catalog repo root)
+
+```json
+{
+  "shelfCatalog": 1,
+  "name": "GWP Tools",
+  "tools": [
+    {
+      "name": "Image Prepper",
+      "description": "Batch resize and optimize product shots",
+      "capabilities": ["batch-optimize images"],
+      "repo": "https://github.com/your-team/image-prepper"
+    }
+  ]
+}
+```
+
+**A catalog carries pointers, never payload.** No launch command, no
+setup steps, no env, no URL to open. Those come from each tool's own
+`shelf.json` when it is installed, and the consent sheet renders them
+verbatim at that moment. Nothing in a catalog can change what runs, which
+is what keeps the trust story identical to stage 1 rather than widened by
+it. A hostile catalog can point you at a bad repo; it cannot make a good
+repo do something else.
+
+`normalizeCatalog` treats the file as **untrusted input**, the same
+posture `normalizeManifest` takes: bounded entry count, bounded string
+lengths, entries whose `repo` fails `validateRepoUrl` dropped with a
+counted warning, invisible characters stripped from stored display names
+(the Team Tools pane is one click from an install, so a look-alike name
+matters here the way it did for collections in 1.3).
+
+#### Subscription state: `team-catalogs.json`
+
+Its own store in the data root, mirroring `design-profile-store` /
+`capability-gap-store` (normalize on read, `withFileLockSync` on write).
+A record is `{ id, url, name, addedAt, lastFetchedAt?, lastError?,
+entries }`. The working clone lives at `<data root>/catalogs/<id>` and
+never leaves the main process, like `stagePath` before it.
+
+#### Fetch and refresh
+
+Clone `--depth 1 --single-branch` through the same hardened git
+invocation `stageSharedTool` uses: scoped `-c protocol.ext.allow=never`,
+`-c protocol.file.allow=never`, `-c core.hooksPath=/dev/null`,
+`GIT_TERMINAL_PROMPT=0`, the `gh` credential helper for a private https
+remote, hard timeout, URL always after `--`.
+
+Refresh is `git fetch --depth 1` followed by `merge --ff-only`, **never
+`reset --hard`**: an unpushed "Share with team" commit has to survive a
+refresh, and when the merge can't fast-forward the user is told they have
+a local entry that never made it to the remote. Only `catalog.json` is
+read out of the clone. Nothing else in that repo is executed, copied, or
+shown.
+
+#### Install
+
+Team Tools lists the entries; Install hands the entry's `repo` to
+`stageSharedTool` and lands on the existing consent sheet, then
+`confirmStagedShare`. **Decision: Install fetches straight into the
+sheet, with no second Fetch click.** The click that a `shelf://` link
+requires exists because a link can arrive from anyone; a catalog is a
+source the user added themselves, once, in Settings, and the sheet is
+still the thing that gates execution. Entries already in the library are
+matched on `Tool.source.repo` and offer "Check for updates" instead of a
+second install.
+
+#### Share with team
+
+On a tool that has a git remote: append `{ name, description,
+capabilities, repo }` to the working clone's `catalog.json`, commit, and
+push when git can. A push that fails leaves the entry committed locally
+and explains why, reusing 1.2's auth remedies (`gh auth login && gh auth
+setup-git`, the SSH address, or ask for access). Refused when the tool
+has no remote, and an existing entry for the same repo is updated in
+place rather than duplicated.
+
+#### Non-goals for v1.4
+
+Version pinning, signed catalogs, auto-refresh on a timer, any
+Shelf-hosted index. Agent-driven install stays deliberately unbuilt for
+the same reason `shelf_add_shared_tool` was in 1.2: an agent installing a
+coworker's code unattended skips the consent sheet by construction. A
+read-only `shelf_list_team_tools` (so an agent can say "your team has one
+that does this") is defensible and cheap, but it is deferred out of 1.4
+so the release is the catalog and nothing else.
 
 ## Relationship to the commercial tier
 
@@ -254,8 +348,9 @@ Decisions made while building that the concept above left open:
    consent sheet, provenance + "Check for updates", smokes (manifest
    round-trip, secret-stripping, hostile-manifest normalization, deep
    link, update/diverged paths) + the pre-release adversarial pass.
-2. **v1.3 — Team Tools catalog**: catalog repo support, Team Tools pane,
-   "Share with team".
+2. **v1.4 — Team Tools catalog**: catalog repo support, Team Tools pane,
+   "Share with team". (Earmarked v1.3 when this doc was written;
+   agent-built collections took that number.)
 3. **Later / maybe never**: version pinning, divergence merging, signed
    manifests, hosted anything.
 

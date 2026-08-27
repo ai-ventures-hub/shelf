@@ -5,6 +5,7 @@ import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
 import { StatusPill } from '../components/StatusPill'
 import { ToolIcon } from '../components/ToolIcon'
+import { ShareWithTeamDialog } from '../components/sharing/ShareWithTeamDialog'
 import { UpdateSheet } from '../components/sharing/UpdateSheet'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
@@ -60,6 +61,7 @@ export function ToolDetailPage() {
     | null
   >(null)
   const [updatesOpen, setUpdatesOpen] = useState(false)
+  const [teamShareOpen, setTeamShareOpen] = useState(false)
   const { receipts, clear: clearReceipts } = useReceipts({
     toolId: id,
     limit: 25,
@@ -225,6 +227,16 @@ export function ToolDetailPage() {
             label: 'Export bundle (.zip)…',
             disabled: busy,
             onSelect: exportBundle,
+          },
+        ]
+      : []),
+    ...(current.projectPath
+      ? [
+          {
+            id: 'team',
+            label: 'Share with team…',
+            disabled: busy,
+            onSelect: () => setTeamShareOpen(true),
           },
         ]
       : []),
@@ -646,6 +658,11 @@ export function ToolDetailPage() {
       </div>
 
       <UpdateSheet tool={current} open={updatesOpen} onClose={() => setUpdatesOpen(false)} />
+      <ShareWithTeamDialog
+        tool={current}
+        open={teamShareOpen}
+        onClose={() => setTeamShareOpen(false)}
+      />
 
       <section className="panel" style={{ marginTop: '1rem' }}>
         <div className="panel-header">
