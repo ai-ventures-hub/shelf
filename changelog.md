@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.0 — 2026-08-26
+
+- **Your team's tools, in one list.** Sharing a tool used to mean
+  remembering to send someone a link, and links scroll away. Now a team is
+  a git repo holding a `catalog.json`, and everyone points Shelf at it
+  once. **Team Tools** shows everything your teammates published, and
+  Install runs the same consent sheet as any other shared tool: the full
+  source, the exact setup and launch commands, an input for each env key,
+  and nothing running until you approve. Anyone who can clone the repo is
+  on the team, so access is whatever your git host already says it is. No
+  Shelf server, no account, no registry.
+- **Share with team.** On a tool with a git remote, the ⋯ menu adds your
+  entry to a catalog and pushes it. What travels is a pointer — the name,
+  what it does, its capabilities, and the repo. No launch command, no setup
+  steps, no env keys; those still come from the tool's own `shelf.json`
+  when someone installs it, and a catalog can never change what a tool
+  runs. Shelf refuses to publish a name, description, or capability that
+  looks like it holds a credential, the same way Share already refuses to
+  export one.
+- **The catalog file stays the team's.** Shelf edits the one entry it owns
+  and leaves the rest of the file alone, including fields and rows this
+  version doesn't understand. If a push doesn't go through, your entry
+  stays committed on your Mac and Shelf tells you how to finish it. If the
+  catalog moved on while you were away, Shelf rebuilds your entry on top
+  of it instead of getting stuck.
+
 ## 1.3.0 — 2026-08-23
 
 - **Agents can build collections now.** `shelf_upsert_collection` lets a
