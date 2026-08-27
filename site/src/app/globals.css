@@ -3050,6 +3050,125 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 }
 
 
+/* Team Tools band (1.4) — the second beat of #share. Copy left, the pane
+   right, mirroring the consent sheet above it so the section reads as one
+   story told twice: to one coworker, then to everyone. */
+.team-band {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+  margin-top: 56px;
+  padding-top: 48px;
+  border-top: 1px solid var(--av-border-default);
+}
+
+.team-band-h {
+  margin: 0;
+  font-family: var(--av-font-display);
+  font-size: clamp(26px, 2.8vw, 34px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--av-text-primary);
+  text-wrap: balance;
+}
+
+.team-band-lead {
+  margin: 14px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--av-text-secondary);
+  text-wrap: pretty;
+}
+
+.team-band-lead code {
+  font-family: var(--av-font-mono);
+  font-size: 0.9em;
+  color: var(--av-text-primary);
+}
+
+.team-pane {
+  box-shadow: 0 30px 90px rgb(0 0 0 / 35%);
+}
+
+.team-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  row-gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--av-border-default);
+  background: var(--av-bg-raised);
+}
+
+.team-pane-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--av-text-primary);
+}
+
+.team-pane-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--av-text-tertiary);
+}
+
+.team-pane-body {
+  padding: 6px 18px 18px;
+}
+
+.team-pane-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--av-border-subtle, rgb(255 255 255 / 6%));
+}
+
+.team-pane-id {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.team-pane-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--av-text-primary);
+}
+
+.team-pane-detail {
+  font-size: 12px;
+  color: var(--av-text-tertiary);
+}
+
+.team-pane-state {
+  margin-left: auto;
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--av-radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.team-pane-state[data-tone='action'] {
+  background: var(--av-accent);
+  color: var(--av-text-on-accent);
+}
+
+.team-pane-state[data-tone='quiet'] {
+  border: 1px solid var(--av-border-default);
+  color: var(--av-text-tertiary);
+}
+
+.team-pane-foot {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--av-text-tertiary);
+}
+
 /* —— #collections · Agent-built collections (1.3) —— */
 /* Window and copy above, four ownership safeguards below. The mock is the
    collection page an agent left behind: the From agent chip and the "yours
@@ -3211,5 +3330,16 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
   .coll-grid .coll-window {
     order: 2;
+  }
+}
+
+@media (max-width: 1000px) {
+  /* Base .team-band is defined above but AFTER the mid-file stack query, so
+     its override has to live here to win on source order. */
+  .team-band {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    margin-top: 40px;
+    padding-top: 36px;
   }
 }
