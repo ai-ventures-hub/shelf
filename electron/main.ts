@@ -58,6 +58,7 @@ import {
   type StagedShare,
 } from '../shared/tool-share'
 import { folderNameFor } from '../shared/tool-manifest'
+import { containsLikelySecret } from '../shared/capability-intelligence'
 import { TeamCatalogStore, type TeamCatalog } from '../shared/team-catalog-store'
 import {
   addCatalog,
@@ -940,6 +941,25 @@ function registerIpc(): void {
             'Push the project to a remote first, then share it with your team. Or send a bundle from the ⋯ menu.',
           ),
         )
+      }
+      // Same refusal buildManifest applies to these exact fields: a catalog
+      // entry is pushed to a shared repo, so a credential in a name,
+      // description, or capability would live in that repo's history for
+      // everyone with clone access.
+      const freeText: Array<[string, string | undefined]> = [
+        ['name', tool.name],
+        ['description', tool.description],
+        ...tool.capabilities.map((c): [string, string] => ['capabilities', c]),
+      ]
+      for (const [label, text] of freeText) {
+        if (text && containsLikelySecret(text)) {
+          return shareFailure(
+            new ShareError(
+              'export_refused',
+              `The ${label} looks like it contains a credential, and a catalog entry is pushed to a repository your whole team can read. Move secrets into Environment variables (those are never shared) and try again.`,
+            ),
+          )
+        }
       }
       const entry: CatalogEntry = {
         name: tool.name,

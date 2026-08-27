@@ -43,6 +43,7 @@ const {
   emptyCatalog,
   normalizeCatalog,
   readCatalogFile,
+  readRawCatalog,
   serializeCatalog,
   upsertCatalogEntry,
   writeCatalogFile,
@@ -369,7 +370,132 @@ async function main() {
   ok('refresh and publish serialize per catalog')
 
   // ---------------------------------------------------------------------
-  // 6. A hand-edited id can never escape the clones root.
+  // 6. Publish edits the team's file in place: rows and keys this Shelf
+  //    can't use must survive someone else's publish.
+  // ---------------------------------------------------------------------
+  // Someone hand-adds a row with extra keys, plus a row Shelf's allow-list
+  // can't fetch. Neither is Shelf's to delete.
+  const handEdit = path.join(tmp, 'hand-edit')
+  execFileSync('git', ['clone', '-q', `file://${catalogBare}`, handEdit])
+  const handRaw = JSON.parse(fs.readFileSync(path.join(handEdit, 'catalog.json'), 'utf8'))
+  handRaw.maintainer = 'ops@example.invalid'
+  handRaw.tools.push({
+    name: 'Deploy Bot',
+    repo: 'https://git.internal/deploy.git',
+    owner: 'ops',
+    docs: 'https://wiki/deploy',
+  })
+  handRaw.tools.push({ name: 'Legacy', repo: 'file:///srv/legacy.git' })
+  fs.writeFileSync(path.join(handEdit, 'catalog.json'), `${JSON.stringify(handRaw, null, 2)}\n`)
+  git(handEdit, 'add', '-A')
+  git(handEdit, 'commit', '-q', '-m', 'Hand-edited rows')
+  git(handEdit, 'push', '-q', `file://${catalogBare}`, 'main')
+
+  await publishToCatalog(
+    subB.catalog.id,
+    { name: 'After Hand Edit', capabilities: [], repo: 'https://example.com/after.git' },
+    storeB,
+  )
+  const afterPublish = readRawCatalog(storeB.clonePath(subB.catalog.id))
+  assert.equal(afterPublish.doc.maintainer, 'ops@example.invalid', 'unknown top-level keys survive')
+  const deployRow = afterPublish.tools.find((t) => t.repo === 'https://git.internal/deploy.git')
+  assert.ok(deployRow, 'a row Shelf did not touch survives a publish')
+  assert.equal(deployRow.owner, 'ops', 'unknown entry keys survive')
+  assert.equal(deployRow.docs, 'https://wiki/deploy')
+  assert.ok(
+    afterPublish.tools.some((t) => t.repo === 'file:///srv/legacy.git'),
+    'a row this Shelf refuses to fetch is still not deleted from the team file',
+  )
+  ok('publish preserves rows and keys the normalizer drops')
+
+  // ---------------------------------------------------------------------
+  // 7. A clone is only reused when its origin is the record's url.
+  // ---------------------------------------------------------------------
+  const otherBare = path.join(daemonRoot, 'other-catalog.git')
+  execFileSync('git', ['init', '--bare', '-q', '--initial-branch=main', otherBare])
+  fs.writeFileSync(path.join(otherBare, 'git-daemon-export-ok'), '')
+  const otherSeed = path.join(tmp, 'other-seed')
+  fs.mkdirSync(otherSeed, { recursive: true })
+  writeCatalogFile(otherSeed, {
+    shelfCatalog: 1,
+    name: 'Other Team',
+    tools: [{ name: 'Only Here', capabilities: [], repo: 'https://example.com/only-here.git' }],
+  })
+  git(otherSeed, 'init', '-q', '--initial-branch=main')
+  git(otherSeed, 'add', '-A')
+  git(otherSeed, 'commit', '-q', '-m', 'Other catalog')
+  git(otherSeed, 'push', '-q', `file://${otherBare}`, 'main')
+  execFileSync('git', ['-C', otherBare, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  const otherUrl = `git://127.0.0.1:${port}/other-catalog.git`
+
+  // Mac A still holds an unpushed entry, so repointing must refuse rather
+  // than silently discard it.
+  storeA.update(added.catalog.id, { url: otherUrl })
+  await assert.rejects(
+    () => syncCatalog(added.catalog.id, storeA),
+    /never pushed/,
+    'a repointed catalog with an unpushed entry is refused, not wiped',
+  )
+  ok('repointing a catalog never silently drops an unpushed entry')
+
+  const rootC = path.join(tmp, 'mac-c')
+  fs.mkdirSync(rootC, { recursive: true })
+  const storeC = new TeamCatalogStore(rootC)
+  const subC = await addCatalog(catalogUrl, storeC)
+  storeC.update(subC.catalog.id, { url: otherUrl })
+  const repointed = await syncCatalog(subC.catalog.id, storeC)
+  assert.ok(
+    repointed.catalog.entries.some((e) => e.name === 'Only Here'),
+    'a repointed catalog fetches the NEW repo, not the old clone',
+  )
+  assert.ok(
+    !repointed.catalog.entries.some((e) => e.name === 'Image Prepper'),
+    'entries from the old repo are gone',
+  )
+  ok('a clone is only reused when its origin matches the url')
+
+  // ---------------------------------------------------------------------
+  // 8. A diverged push recovers instead of dead-ending.
+  // ---------------------------------------------------------------------
+  const rootD = path.join(tmp, 'mac-d')
+  fs.mkdirSync(rootD, { recursive: true })
+  const storeD = new TeamCatalogStore(rootD)
+  const subD = await addCatalog(catalogUrl, storeD)
+  const dirD = storeD.clonePath(subD.catalog.id)
+
+  // D commits an entry that never reached the remote...
+  const localRaw = readRawCatalog(dirD)
+  localRaw.tools.push({ name: 'Stranded', capabilities: [], repo: 'https://example.com/stranded.git' })
+  localRaw.doc.tools = localRaw.tools
+  fs.writeFileSync(path.join(dirD, 'catalog.json'), `${JSON.stringify(localRaw.doc, null, 2)}\n`)
+  git(dirD, 'add', '-A')
+  git(dirD, 'commit', '-q', '-m', 'Stranded entry')
+  // ...and meanwhile the remote moves.
+  await publishToCatalog(
+    subB.catalog.id,
+    { name: 'Remote Moved', capabilities: [], repo: 'https://example.com/moved.git' },
+    storeB,
+  )
+
+  const recovered = await publishToCatalog(
+    subD.catalog.id,
+    { name: 'After Diverge', capabilities: [], repo: 'https://example.com/after-diverge.git' },
+    storeD,
+  )
+  assert.equal(
+    recovered.pushed,
+    true,
+    `a diverged publish should rebuild and push: ${recovered.pushProblem || ''}`,
+  )
+  const finalRemote = await syncCatalog(subB.catalog.id, storeB)
+  const names = finalRemote.catalog.entries.map((e) => e.name)
+  assert.ok(names.includes('After Diverge'), 'the new entry landed')
+  assert.ok(names.includes('Remote Moved'), "the teammate's entry survived")
+  assert.ok(names.includes('Stranded'), 'the entry stranded by the earlier failure was carried over')
+  ok('a diverged publish rebuilds on the remote instead of dead-ending')
+
+  // ---------------------------------------------------------------------
+  // 9. A hand-edited id can never escape the clones root.
   // ---------------------------------------------------------------------
   const clonesRoot = path.join(rootA, 'catalogs')
   for (const bad of ['../../etc', '/etc/passwd', '..']) {

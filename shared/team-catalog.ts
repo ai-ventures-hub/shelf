@@ -244,3 +244,106 @@ export function upsertCatalogEntry(
 export function emptyCatalog(name?: string): TeamCatalogFile {
   return { shelfCatalog: CATALOG_VERSION, ...(name ? { name } : {}), tools: [] }
 }
+
+/**
+ * Raw, in-place editing of a team's `catalog.json`.
+ *
+ * Publish must never write back the NORMALIZED catalog: `normalizeCatalog`
+ * drops rows it can't use and `serializeCatalog` emits only the four fields
+ * this Shelf knows, so a normalize-then-write round trip silently deletes a
+ * teammate's extra keys, rows past the caps, and duplicate-repo rows for the
+ * whole team on the next push. Read the document as it is, change the one
+ * entry, keep everything else. (ToolManifest preserves unknown keys on read
+ * for the same reason.)
+ */
+export interface RawCatalog {
+  doc: Record<string, unknown>
+  tools: Record<string, unknown>[]
+}
+
+export function readRawCatalog(repoPath: string): RawCatalog | null {
+  const file = path.join(repoPath, CATALOG_FILENAME)
+  let stat: fs.Stats
+  try {
+    stat = fs.statSync(file)
+  } catch {
+    return null
+  }
+  if (!stat.isFile()) return null
+  if (stat.size > MAX_CATALOG_BYTES) {
+    throw new Error(
+      `${CATALOG_FILENAME} is larger than ${Math.round(MAX_CATALOG_BYTES / 1024)} KB; Shelf won't read it.`,
+    )
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (err) {
+    throw new Error(
+      `${CATALOG_FILENAME} in that repository isn't valid JSON: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    )
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${CATALOG_FILENAME} is not a JSON object.`)
+  }
+  const doc = parsed as Record<string, unknown>
+  const tools = Array.isArray(doc.tools)
+    ? (doc.tools.filter((t) => t && typeof t === 'object' && !Array.isArray(t)) as Record<
+        string,
+        unknown
+      >[])
+    : []
+  return { doc, tools }
+}
+
+export function emptyRawCatalog(name?: string): RawCatalog {
+  const doc: Record<string, unknown> = { shelfCatalog: CATALOG_VERSION, tools: [] }
+  if (name) doc.name = name
+  return { doc, tools: [] }
+}
+
+function rawRepo(row: Record<string, unknown>): string {
+  return typeof row.repo === 'string' ? row.repo.trim().toLowerCase() : ''
+}
+
+/** Change (or append) one row, leaving that row's other keys intact. */
+export function upsertRawEntry(raw: RawCatalog, entry: CatalogEntry): 'added' | 'updated' {
+  const key = entry.repo.trim().toLowerCase()
+  const fields: Record<string, unknown> = {
+    name: entry.name,
+    description: entry.description,
+    capabilities: entry.capabilities,
+    repo: entry.repo,
+  }
+  const index = raw.tools.findIndex((row) => rawRepo(row) === key)
+  if (index >= 0) {
+    raw.tools[index] = { ...raw.tools[index], ...fields }
+    return 'updated'
+  }
+  raw.tools.push(fields)
+  return 'added'
+}
+
+/** Re-apply rows the remote doesn't have; used when a push has to be rebased. */
+export function mergeRawEntries(raw: RawCatalog, rows: Record<string, unknown>[]): number {
+  let added = 0
+  for (const row of rows) {
+    const key = rawRepo(row)
+    if (!key) continue
+    if (raw.tools.some((existing) => rawRepo(existing) === key)) continue
+    raw.tools.push(row)
+    added += 1
+  }
+  return added
+}
+
+export function writeRawCatalog(repoPath: string, raw: RawCatalog): void {
+  raw.doc.tools = raw.tools
+  fs.writeFileSync(
+    path.join(repoPath, CATALOG_FILENAME),
+    `${JSON.stringify(raw.doc, null, 2)}\n`,
+    'utf8',
+  )
+}

@@ -13,8 +13,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   ShareError,
+  classifyCloneFailure,
   cloneFailure,
   gitFailure,
+  type GitRun,
   githubHelperArgs,
   requireGit,
   resolveGhBinary,
@@ -23,12 +25,14 @@ import {
 } from './tool-share'
 import {
   CATALOG_FILENAME,
-  emptyCatalog,
+  emptyRawCatalog,
+  mergeRawEntries,
   readCatalogFile,
-  upsertCatalogEntry,
-  writeCatalogFile,
+  readRawCatalog,
+  upsertRawEntry,
+  writeRawCatalog,
   type CatalogEntry,
-  type TeamCatalogFile,
+  type RawCatalog,
 } from './team-catalog'
 import type { TeamCatalog, TeamCatalogStore } from './team-catalog-store'
 
@@ -120,7 +124,29 @@ async function syncCatalogLocked(
   let unpushed = false
 
   try {
-    if (!isGitRepo(dir)) {
+    // A clone is only reusable if it is a clone OF THIS URL. The record's url
+    // can change (there is no UI for it, so editing team-catalogs.json is how
+    // a team move gets done) and two hand-edited ids can sanitize onto one
+    // directory; reusing the old clone would fetch from, and push to, the
+    // wrong repository.
+    let reusable = isGitRepo(dir)
+    if (reusable) {
+      const origin = await runGit(git, ['-C', dir, 'config', '--get', 'remote.origin.url'], {
+        timeoutMs: GIT_TIMEOUT_MS,
+      })
+      if (!origin.ok || !sameRemote(origin.stdout, valid.url)) {
+        if (record.hasUnpushedEntry) {
+          throw new ShareError(
+            'catalog_unpushed',
+            `The copy of this catalog on this Mac points at ${
+              origin.stdout.trim() || 'another repository'
+            }, and it still has an entry that was never pushed. Shelf won't replace it and lose that entry — push it, or unsubscribe and add the catalog again.`,
+          )
+        }
+        reusable = false
+      }
+    }
+    if (!reusable) {
       // A half-written clone from an interrupted run would make `clone` fail
       // on a non-empty directory; start clean.
       fs.rmSync(dir, { recursive: true, force: true })
@@ -297,28 +323,12 @@ async function publishToCatalogLocked(
     )
   }
 
-  const existing = readCatalogFile(dir)
-  const base: TeamCatalogFile = existing?.catalog || emptyCatalog(record.name)
-  const result = upsertCatalogEntry(base, { ...entry, repo: entryUrl.url })
-  writeCatalogFile(dir, result.catalog)
+  const pending: CatalogEntry = { ...entry, repo: entryUrl.url }
+  const raw = readRawCatalog(dir) || emptyRawCatalog(record.name)
+  const action = upsertRawEntry(raw, pending)
+  writeRawCatalog(dir, raw)
 
-  const add = await runGit(git, ['-C', dir, 'add', '--', CATALOG_FILENAME], {
-    timeoutMs: GIT_TIMEOUT_MS,
-  })
-  if (!add.ok) {
-    throw new ShareError('catalog_invalid', `Couldn't stage the catalog: ${gitFailure(add, 'git add failed')}`)
-  }
-
-  const message = `${result.action === 'added' ? 'Add' : 'Update'} ${entry.name} in the Shelf catalog`
-  const commit = await runGit(git, ['-C', dir, 'commit', '--quiet', '-m', message], {
-    timeoutMs: GIT_TIMEOUT_MS,
-  })
-  if (!commit.ok && !/nothing to commit|no changes added/i.test(`${commit.stdout}${commit.stderr}`)) {
-    throw new ShareError(
-      'catalog_invalid',
-      `Couldn't commit the catalog entry: ${gitFailure(commit, 'git commit failed')}`,
-    )
-  }
+  await commitCatalog(git, dir, action, pending.name)
 
   // Clones are no longer shallow, but a clone left by an earlier build might
   // be, and some servers refuse a push from one. Cheap insurance.
@@ -330,33 +340,149 @@ async function publishToCatalogLocked(
     )
   }
 
-  const push = await runGit(
-    git,
-    [...hardening(), ...githubHelperArgs(valid.url, gh), '-C', dir, 'push', '--quiet'],
-    { timeoutMs: CLONE_TIMEOUT_MS },
-  )
+  let push = await pushCatalog(git, gh, dir, valid.url)
 
-  const count = result.catalog.tools.length
+  // A rejected non-fast-forward push is the one failure Shelf can resolve by
+  // itself: the remote moved while this entry was pending. Rebuild the entry
+  // (and any other rows only this Mac has) on top of the remote's version and
+  // push once more, instead of leaving the catalog permanently stuck.
+  if (!push.ok && isNonFastForward(push)) {
+    const rebased = await rebaseOntoRemote(git, gh, dir, valid.url, pending)
+    if (rebased) push = await pushCatalog(git, gh, dir, valid.url)
+  }
+
+  const final = readCatalogFile(dir)
+  const entries = final?.catalog.tools || []
+  const count = entries.length
   if (push.ok) {
     store.update(record.id, {
-      entries: result.catalog.tools,
+      entries,
       hasUnpushedEntry: undefined,
       lastFetchedAt: new Date().toISOString(),
       lastError: undefined,
     })
-    return { action: result.action, pushed: true, count }
+    return { action, pushed: true, count }
   }
 
-  const failure = cloneFailure(valid.url, push)
-  store.update(record.id, { entries: result.catalog.tools, hasUnpushedEntry: true })
+  const failure = pushFailure(valid.url, push, record.name)
+  store.update(record.id, { entries, hasUnpushedEntry: true })
   return {
-    action: result.action,
+    action,
     pushed: false,
-    pushProblem: `Your entry is committed here, but the push to ${record.name} didn't go through. ${failure.message}`,
+    pushProblem: failure.message,
     pushRemedy: failure.remedy,
     pushRemedyCommand: failure.remedyCommand,
     count,
   }
+}
+
+function sameRemote(a: string, b: string): boolean {
+  const clean = (value: string) => value.trim().replace(/\.git$/i, '').replace(/\/+$/, '').toLowerCase()
+  return clean(a) === clean(b) && clean(a) !== ''
+}
+
+async function commitCatalog(
+  git: string,
+  dir: string,
+  action: 'added' | 'updated',
+  name: string,
+): Promise<void> {
+  const add = await runGit(git, ['-C', dir, 'add', '--', CATALOG_FILENAME], {
+    timeoutMs: GIT_TIMEOUT_MS,
+  })
+  if (!add.ok) {
+    throw new ShareError('catalog_invalid', `Couldn't stage the catalog: ${gitFailure(add, 'git add failed')}`)
+  }
+  const message = `${action === 'added' ? 'Add' : 'Update'} ${name} in the Shelf catalog`
+  const commit = await runGit(git, ['-C', dir, 'commit', '--quiet', '-m', message], {
+    timeoutMs: GIT_TIMEOUT_MS,
+  })
+  if (!commit.ok && !/nothing to commit|no changes added/i.test(`${commit.stdout}${commit.stderr}`)) {
+    throw new ShareError(
+      'catalog_invalid',
+      `Couldn't commit the catalog entry: ${gitFailure(commit, 'git commit failed')}`,
+    )
+  }
+}
+
+function pushCatalog(git: string, gh: string | null, dir: string, url: string) {
+  return runGit(git, [...hardening(), ...githubHelperArgs(url, gh), '-C', dir, 'push', '--quiet'], {
+    timeoutMs: CLONE_TIMEOUT_MS,
+  })
+}
+
+function isNonFastForward(run: GitRun): boolean {
+  return /non-fast-forward|fetch first|\[rejected\]|failed to push some refs/i.test(
+    `${run.stderr}\n${run.stdout}`,
+  )
+}
+
+/**
+ * Take the remote's version of the catalog and re-apply the rows only this
+ * clone has, newest entry included. `reset --hard` is safe here BECAUSE the
+ * local rows are captured first and merged back — the commits are disposable,
+ * the entries are not.
+ */
+async function rebaseOntoRemote(
+  git: string,
+  gh: string | null,
+  dir: string,
+  url: string,
+  pending: CatalogEntry,
+): Promise<boolean> {
+  const before = readRawCatalog(dir)
+  const localRows = before ? before.tools : []
+  const fetch = await runGit(
+    git,
+    [...hardening(), ...githubHelperArgs(url, gh), '-C', dir, 'fetch', '--quiet', 'origin'],
+    { timeoutMs: CLONE_TIMEOUT_MS },
+  )
+  if (!fetch.ok) return false
+  const reset = await runGit(git, ['-C', dir, 'reset', '--hard', '--quiet', 'FETCH_HEAD'], {
+    timeoutMs: GIT_TIMEOUT_MS,
+  })
+  if (!reset.ok) return false
+
+  const raw = readRawCatalog(dir) || emptyRawCatalog()
+  mergeRawEntries(raw, localRows)
+  const action = upsertRawEntry(raw, pending)
+  writeRawCatalog(dir, raw)
+  await commitCatalog(git, dir, action, pending.name)
+  return true
+}
+
+/**
+ * A push failure said as a push failure. cloneFailure's wording ("Couldn't
+ * fetch that repository") is wrong here, but its auth/not-found triage is
+ * right, so borrow the triage and keep the verbs honest.
+ */
+function pushFailure(url: string, run: GitRun, catalogName: string): ShareError {
+  const kind = classifyCloneFailure(`${run.stderr}\n${run.stdout}`)
+  const lead = `Your entry is committed here, but the push to ${catalogName} didn't go through.`
+  if (kind === 'auth' || kind === 'ssh_auth') {
+    const borrowed = cloneFailure(url, run)
+    return new ShareError(
+      'push_failed',
+      `${lead} git isn't signed in with permission to write to that repository.`,
+      borrowed.remedy,
+      borrowed.remedyCommand,
+    )
+  }
+  if (kind === 'not_found') {
+    return new ShareError(
+      'push_failed',
+      `${lead} That repository isn't there, or your account can't write to it.`,
+      'Ask whoever owns the catalog repo for write access, then try again.',
+    )
+  }
+  if (isNonFastForward(run)) {
+    return new ShareError(
+      'push_failed',
+      `${lead} The catalog changed on the remote and Shelf couldn't rebuild your entry on top of it.`,
+      'Refresh the catalog from Team Tools and share again.',
+    )
+  }
+  return new ShareError('push_failed', `${lead} ${gitFailure(run, 'git push failed')}`)
 }
 
 /** The user's git identity, or null when git has neither name nor email. */
