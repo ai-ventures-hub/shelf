@@ -38,6 +38,15 @@ function NavIcon({ name }: { name: string }) {
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
       )
+    case 'team':
+      return (
+        <svg {...common}>
+          <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19" />
+          <circle cx="10" cy="8" r="3.2" />
+          <path d="M20 19v-1.4a3.4 3.4 0 0 0-2.6-3.3" />
+          <path d="M15.4 5.2a3.2 3.2 0 0 1 0 5.6" />
+        </svg>
+      )
     case 'favorites':
       return (
         <svg {...common}>
@@ -401,6 +410,20 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavCount collapsed={collapsed} value={designProfiles.length} />
           </NavLink>
 
+          {/* Team: catalogs are a source of tools, so this sits with Library
+              and Design rather than under System. Visible in both ui modes —
+              sharing was never developer-only. */}
+          {!collapsed ? <p className="nav-label">Team</p> : <div className="nav-divider" />}
+          <NavLink
+            to="/team"
+            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+            title="Team Tools"
+            aria-label="Team Tools"
+          >
+            <NavIcon name="team" />
+            <NavLabel collapsed={collapsed}>Team Tools</NavLabel>
+          </NavLink>
+
           {/* System: MCP + Settings once each — never duplicate Connect chrome. */}
           {!collapsed ? <p className="nav-label">System</p> : <div className="nav-divider" />}
           <NavLink
@@ -465,6 +488,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
         open={addShared !== null}
         initialRepo={addShared?.repo}
         initialBundlePath={addShared?.bundlePath}
+        autoFetch={addShared?.autoFetch}
         onClose={() => setAddShared(null)}
       />
 
