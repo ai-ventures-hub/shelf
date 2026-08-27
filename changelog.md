@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1 — 2026-08-27
+
+- **The Team Tools field looks like the rest of the app.** The box you
+  paste a catalog URL into was rendering with the browser's own styling
+  instead of Shelf's, so it sat on the page as a plain white-bordered
+  rectangle next to a styled button. It now matches every other field in
+  the app, and it greys out while a catalog is being fetched.
+
 ## 1.4.0 — 2026-08-26
 
 - **Your team's tools, in one list.** Sharing a tool used to mean
