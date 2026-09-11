@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.1 - 2026-09-11
+
+- Includes all Phase 1 stabilization changes below. The 1.5.0 packaging run
+  stopped before publication; no desktop artifacts were released for that tag.
+- Updates Electron Builder to 26.16.1 to fix temporary signing-keychain
+  authentication on current macOS runners. Signing, notarization, and
+  Gatekeeper verification remain required before publication.
+
 ## 1.5.0 - 2026-09-11
 
 - **Starts and stops stay coordinated.** Shelf and connected agents share a

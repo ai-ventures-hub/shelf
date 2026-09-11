@@ -2,7 +2,7 @@
 
 Implemented September 11, 2026 on `codex/phase1-stabilize`, based on `7143503`.
 
-Prepared for Shelf 1.5.0. The checks below describe pre-release verification. Signing, notarization, publication, and website deployment are tracked in the repository release and deployment histories. Implementation tests used isolated data and did not replace the installed app or real client connection files.
+Prepared for Shelf 1.5.1. The checks below describe pre-release verification. The 1.5.0 packaging run stopped before publication because Electron Builder 26.15.3 used the certificate password to authenticate the temporary keychain; 1.5.1 pins the upstream fix in 26.16.1. Signing, notarization, publication, and website deployment are tracked in the repository release and deployment histories. Implementation tests used isolated data and did not replace the installed app or real client connection files.
 
 ## Changes and acceptance evidence
 
