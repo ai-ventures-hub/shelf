@@ -4,6 +4,8 @@
  * Shared by Codex CLI, IDE extension, and ChatGPT desktop Codex.
  */
 import fs from 'node:fs'
+import { configuredCommandExists } from './client-observation'
+import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
 import { mcpPathMigrationHint } from './mcp-server-path'
@@ -45,11 +47,9 @@ export function resolveCodexConfigPath(home = os.homedir()): string {
   return path.join(home, '.codex', 'config.toml')
 }
 
-function writeAtomicText(configPath: string, text: string): void {
+function writeAtomicText(configPath: string, text: string, previousText: string): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  const tmp = `${configPath}.tmp`
-  fs.writeFileSync(tmp, text.endsWith('\n') ? text : `${text}\n`, 'utf8')
-  fs.renameSync(tmp, configPath)
+  replaceClientConfig(configPath, text, previousText)
 }
 
 function shelfBody(
@@ -72,20 +72,21 @@ function shelfBody(
   return lines
 }
 
-function readShelfEntry(toml: string): { command?: string; args?: string[] } | null {
+function readShelfEntry(toml: string): { command?: string; args?: string[]; enabled?: boolean } | null {
   const lines = readTomlTableLines(toml, CODEX_MCP_TABLE)
   if (!lines) return null
   return {
+    enabled: !lines.some((line) => /^\s*enabled\s*=\s*false(?:\s*#.*)?\s*$/.test(line)),
     command: readTomlStringKey(lines, 'command'),
     args: readTomlStringArrayKey(lines, 'args'),
   }
 }
 
 function entryMatches(
-  entry: { command?: string; args?: string[] } | null,
+  entry: { command?: string; args?: string[]; enabled?: boolean } | null,
   serverPath: string,
 ): boolean {
-  if (!entry?.args?.length) return false
+  if (!entry?.args?.length || entry.enabled === false || !configuredCommandExists(entry.command)) return false
   return path.resolve(String(entry.args[0])) === path.resolve(serverPath)
 }
 
@@ -103,6 +104,8 @@ export async function getCodexMcpStatus(opts: {
         path: opts.nodeCommand === 'node' ? undefined : opts.nodeCommand,
       }
     : await resolveNodeCommand()
+  let configuredNodeOk = node.ok
+  let configuredNodeCommand = node.command
 
   const configExists = fs.existsSync(configPath)
   let connected = false
@@ -115,8 +118,14 @@ export async function getCodexMcpStatus(opts: {
       const entry = readShelfEntry(toml)
       if (entry && (entry.command || entry.args?.length)) {
         connected = true
+        configuredNodeOk = configuredCommandExists(entry.command)
+        configuredNodeCommand = entry.command || ''
         matches = entryMatches(entry, opts.serverPath)
-        if (!matches) {
+        if (entry.enabled === false) {
+          message = 'Shelf is disabled in Codex. Connect again to enable it.'
+        } else if (!configuredNodeOk) {
+          message = 'The executable in the Codex configuration is unavailable. Connect again to repair it.'
+        } else if (!matches) {
           const configured = entry.args?.[0]
           message =
             mcpPathMigrationHint(opts.serverPath, configured) ||
@@ -145,8 +154,8 @@ export async function getCodexMcpStatus(opts: {
     configExists,
     serverPath: opts.serverPath,
     serverOk,
-    nodeCommand: node.command,
-    nodeOk: node.ok,
+    nodeCommand: configuredNodeCommand,
+    nodeOk: configuredNodeOk,
     nodePath: node.path,
     message,
   }
@@ -179,13 +188,7 @@ export async function connectCodexMcp(opts: {
     shelfBody(node.command, opts.serverPath, node.env),
   )
 
-  let backupPath: string | undefined
-  if (existed && previousText.trim() !== nextText.trim()) {
-    backupPath = `${configPath}.shelf-backup`
-    fs.writeFileSync(backupPath, previousText, 'utf8')
-  }
-
-  writeAtomicText(configPath, nextText)
+  const backupPath = replaceClientConfig(configPath, nextText, previousText)
 
   const status = await getCodexMcpStatus({
     serverPath: opts.serverPath,
@@ -215,7 +218,7 @@ export async function disconnectCodexMcp(opts: {
   const previousText = fs.readFileSync(configPath, 'utf8')
   const nextText = removeTomlTables(previousText, CODEX_MCP_TABLE)
   if (nextText.trim() !== previousText.trim()) {
-    writeAtomicText(configPath, nextText || '')
+    writeAtomicText(configPath, nextText || '', previousText)
   }
 
   const status = await getCodexMcpStatus({

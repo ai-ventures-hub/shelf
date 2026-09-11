@@ -151,6 +151,12 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const [dropBusy, setDropBusy] = useState<string | null>(null)
   // Add-shared-tool sheet (Tool Sharing): opened by the Library page buttons
   // or a shelf://add link; hosted here so it works from every route.
+  const [pendingImports, setPendingImports] = useState<{ id: string; name: string; destination: string }[]>([])
+  useEffect(() => {
+    let active = true
+    void window.shelf?.getPendingImports().then((items) => { if (active) setPendingImports(items) }).catch(() => {})
+    return () => { active = false }
+  }, [tools])
   const [addShared, setAddShared] = useState<AddSharedRequest | null>(null)
   // Highlight the window as a drop target while files are dragged over it.
   // Counter, not boolean: dragenter/dragleave fire per child element.
@@ -461,7 +467,13 @@ export function StudioShell({ children }: { children: ReactNode }) {
       )}
 
       <main className="content">
-        <div className="content-inner">{children}</div>
+        <div className="content-inner">
+      {pendingImports.map((item) => <div key={item.id} className="warning-card" role="status">
+        Import unfinished: {item.name}. Files are preserved at {item.destination}.
+        <button type="button" className="btn" onClick={() => setAddShared({ resumeStageId: item.id })}>Resume import</button>
+      </div>)}
+        {children}
+        </div>
       </main>
 
       {dragActive && !dropBusy ? (
@@ -485,6 +497,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
       />
 
       <AddSharedToolDialog
+        resumeStageId={addShared?.resumeStageId}
         open={addShared !== null}
         initialRepo={addShared?.repo}
         initialBundlePath={addShared?.bundlePath}

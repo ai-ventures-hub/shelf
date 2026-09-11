@@ -53,6 +53,9 @@ import type {
  * No Node APIs are exposed directly — all file/process work goes through IPC.
  */
 const api = {
+  getPendingImports: (): Promise<{ id: string; name: string; destination: string }[]> => ipcRenderer.invoke('share:pendingImports'),
+  resumeImport: (id: string): Promise<Omit<StagedShare, 'stagePath'>> => ipcRenderer.invoke('share:resumeImport', id),
+  getLibraryRecovery: (): Promise<string | null> => ipcRenderer.invoke('tools:recovery'),
   listTools: (): Promise<Tool[]> => ipcRenderer.invoke('tools:list'),
   /** Launchability snapshot for every tool — one batched port scan. */
   getToolHealth: (): Promise<ToolHealth[]> => ipcRenderer.invoke('tools:health'),

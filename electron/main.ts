@@ -1,3 +1,4 @@
+import { readImport, pendingImportIds, finishImport, importMarker } from '../shared/import-journal'
 import {
   app,
   BrowserWindow,
@@ -45,7 +46,7 @@ import {
   confirmStagedShare,
   detectGitRemote,
   discardStagedShare,
-  exportToolBundle,
+  prepareToolBundle,
   exportToolManifest,
   ShareError,
   stageSharedTool,
@@ -402,6 +403,7 @@ function resolveMcpServerPath(): string {
 
 function registerIpc(): void {
   ipcMain.handle('tools:list', () => store.list())
+  ipcMain.handle('tools:recovery', () => store.recoveryNotice())
   ipcMain.handle('tools:save', (_e, tool: Tool) => store.save(tool))
   ipcMain.handle('tools:delete', async (_e, id: string) => {
     // Stop must complete AND succeed before the record goes: deleting first
@@ -788,6 +790,16 @@ function registerIpc(): void {
   ipcMain.handle('share:exportBundle', async (_e, id: string) => {
     const tool = store.get(id)
     if (!tool) throw new Error(`Tool not found: ${id}`)
+    const prepared = await prepareToolBundle(tool, { appVersion: app.getVersion() })
+    const reviewOptions: Electron.MessageBoxOptions = {
+      type: 'question', title: 'Review files to share',
+      message: `Share ${prepared.files.length} files from ${tool.name}?`,
+      detail: 'Only these files will be exported. Check for private data in source files. Git projects include tracked source plus shelf.json.\n\n' +
+        prepared.files.map((file) => `${file.name} (${file.bytes} bytes)`).join('\n'),
+      buttons: ['Cancel', 'Choose export location'], defaultId: 0, cancelId: 0,
+    }
+    const review = mainWindow ? await dialog.showMessageBox(mainWindow, reviewOptions) : await dialog.showMessageBox(reviewOptions)
+    if (review.response !== 1) return { saved: false }
     const saveOpts: Electron.SaveDialogOptions = {
       title: 'Export tool bundle',
       defaultPath: `${folderNameFor(tool.name)}.zip`,
@@ -797,8 +809,8 @@ function registerIpc(): void {
       ? await dialog.showSaveDialog(mainWindow, saveOpts)
       : await dialog.showSaveDialog(saveOpts)
     if (result.canceled || !result.filePath) return { saved: false }
-    const bundle = await exportToolBundle(tool, result.filePath, { appVersion: app.getVersion() })
-    return { saved: true, path: bundle.bundlePath, bytes: bundle.bytes }
+    fs.writeFileSync(result.filePath, prepared.zip, { mode: 0o600 })
+    return { saved: true, path: result.filePath, bytes: prepared.zip.length }
   })
   // Receive: stage (clone/unzip into scratch; runs nothing, persists nothing).
   // ShareError carries code + remedy; IPC would flatten a thrown error to
@@ -876,14 +888,31 @@ function registerIpc(): void {
         return { ok: true, result }
       } catch (err) {
         // Destination problems keep the stage alive so the user can fix the
-        // folder; anything after the move is gone either way.
-        if (!(err instanceof ShareError && err.code === 'destination_invalid')) {
+        // folder; partial moves remain recoverable from the import journal.
+        if (!(err instanceof ShareError && (err.code === 'destination_invalid' || err.code === 'import_incomplete'))) {
           stagedShares.delete(stageId)
         }
         return shareFailure(err)
       }
     },
   )
+  ipcMain.handle('share:pendingImports', () => pendingImportIds(store.getRoot()).flatMap((id) => {
+    const pending = readImport(store.getRoot(), id)
+    if (!pending) return []
+    if (store.findByProjectPath(pending.destination)) {
+      finishImport(store.getRoot(), id)
+      fs.rmSync(importMarker(pending.destination, id), { force: true })
+      return []
+    }
+    return [{ id, name: pending.stage.manifest.name || 'Shared tool', destination: pending.destination }]
+  }))
+  ipcMain.handle('share:resumeImport', (_e, id: string) => {
+    const pending = readImport(store.getRoot(), id)
+    if (!pending) throw new Error('This import no longer needs recovery.')
+    stagedShares.set(id, pending.stage)
+    const { stagePath: _stagePath, ...view } = pending.stage
+    return { ...view, destination: pending.destination }
+  })
   ipcMain.handle('share:discard', (_e, stageId: string) => {
     const stage = stagedShares.get(stageId)
     if (!stage) return
@@ -894,7 +923,7 @@ function registerIpc(): void {
   ipcMain.handle('share:checkUpdates', (_e, id: string) => {
     const tool = store.get(id)
     if (!tool) throw new Error(`Tool not found: ${id}`)
-    return checkToolUpdates(tool)
+    return checkToolUpdates(tool, store.getRoot())
   })
   ipcMain.handle('share:applyUpdate', (_e, id: string, input: ApplyUpdateInput) => {
     const tool = store.get(id)

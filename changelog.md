@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.5.0 - 2026-09-11
+
+- **Starts and stops stay coordinated.** Shelf and connected agents share a
+  per-tool operation lock. Simultaneous launches reuse an owned process,
+  Stop cancels pending startup, and failed termination stays visible and retryable.
+- **Agent launches have shared logs.** The desktop and MCP clients read the
+  same bounded run logs. Diagnostic reports open for review before copying,
+  and configured credentials are masked across logs, reports, and history.
+- **Status reflects evidence.** Printed URLs require an owned listener.
+  Connections show Configured until Shelf observes client activity. Simple
+  and Developer modes now use the same port-conflict policy.
+- **Edits survive concurrent work.** Stale saves cannot overwrite a newer
+  tool record, and external changes preserve unsaved form fields. Invalid
+  library records are set aside with a recovery notice while valid tools remain available.
+- **Sharing is safer to recover.** Bundle exports show their exact file list
+  and respect source-control membership and ignore rules. Imports and updates
+  retain recovery records after partial failures, and update retries skip
+  setup commands already recorded as complete.
+- **Runtime and release hardening.** Client configuration and backups use
+  private atomic writes. Electron is updated to 44.3.0 and the website to
+  Next.js 16.3.4. Release audits include the shipped Electron runtime.
+  Building Shelf from source now requires Node.js 22.12 or newer.
+
+## 1.4.1 — 2026-08-27
+
+- **The Team Tools field looks like the rest of the app.** The box you
+  paste a catalog URL into was rendering with the browser's own styling
+  instead of Shelf's, so it sat on the page as a plain white-bordered
+  rectangle next to a styled button. It now matches every other field in
+  the app, and it greys out while a catalog is being fetched.
+
 ## 1.4.0 — 2026-08-26
 
 - **Your team's tools, in one list.** Sharing a tool used to mean

@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { usePrefs } from './usePrefs'
 import type {
   Collection,
   LogLine,
@@ -44,7 +43,6 @@ function hasShelfApi(): boolean {
 }
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
-  const { prefs } = usePrefs()
   const [tools, setTools] = useState<Tool[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [states, setStates] = useState<Record<string, ToolRuntimeState>>({})
@@ -78,7 +76,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setTools(nextTools)
       setCollections(nextCollections)
       setStates(Object.fromEntries(nextStates.map((s) => [s.toolId, s])))
-      setError(null)
+      setError(await window.shelf.getLibraryRecovery())
       void refreshHealth()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -150,21 +148,18 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
-  // Simple mode heals busy ports silently; Developer Mode keeps the explicit
-  // failure so power users see the conflict. Callers may override per action
-  // (e.g. the "Launch on a free port" remedy button).
+  // Port reassignment is an explicit recovery action in either presentation mode.
   const startTool = useCallback(
     async (id: string, options?: StartOptions) => {
       const state = await window.shelf.startTool(
         id,
-        options ??
-          (prefs.uiMode === 'simple' ? { onPortConflict: 'reassign' } : undefined),
+        options,
       )
       setStates((prev) => ({ ...prev, [id]: state }))
       const nextTools = await window.shelf.listTools()
       setTools(nextTools)
     },
-    [prefs.uiMode],
+    [],
   )
 
   const stopTool = useCallback(async (id: string) => {

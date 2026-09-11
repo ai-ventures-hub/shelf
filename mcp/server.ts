@@ -2,6 +2,7 @@
  * Shelf MCP stdio server — same library + process manager as the Electron app.
  * Log only to stderr; stdout is reserved for MCP JSON-RPC.
  */
+import { recordClientObservation } from '../shared/client-observation'
 import { randomUUID } from 'node:crypto'
 import pkg from '../package.json'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -31,7 +32,7 @@ import {
   type Tool,
 } from '../shared/types'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { errorResult, textResult } from './result'
+import { errorResult, textResult, setRequestObserver } from './result'
 import { registerCapabilityTools } from './capability-tools'
 import { registerDesignTools } from './design-tools'
 
@@ -54,6 +55,17 @@ const server = new McpServer({
   // The app version — clients see what's actually installed (this sat at a
   // hardcoded 0.1.0 through the 1.0 release).
   version: pkg.version,
+})
+
+server.server.oninitialized = () => {
+  try { recordClientObservation(process.argv[1], server.server.getClientVersion()?.name) } catch { /* advisory */ }
+}
+
+let lastObservation = 0
+setRequestObserver(() => {
+  if (Date.now() - lastObservation < 1000) return
+  recordClientObservation(process.argv[1], server.server.getClientVersion()?.name)
+  lastObservation = Date.now()
 })
 
 const agentAccessSchema = z.object({
@@ -305,7 +317,7 @@ server.registerTool(
     const tool = store.save({
       id: existing?.id || args.id || randomUUID(),
       name: args.name,
-      description: args.description,
+      description: args.description ?? existing?.description,
       tags: args.tags || existing?.tags || [],
       capabilities: args.capabilities ?? existing?.capabilities ?? [],
       agentAccess: (args.agentAccess ?? existing?.agentAccess ?? []).map((access) => ({
@@ -333,7 +345,7 @@ server.registerTool(
       // tweak would silently un-share the tool (save literal rule).
       source: existing?.source,
       createdAt: existing?.createdAt || now,
-      updatedAt: now,
+      updatedAt: existing?.updatedAt || now,
     })
 
     return textResult({

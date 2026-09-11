@@ -15,7 +15,7 @@
  * and always passed after `--` so a crafted value can never become a flag.
  */
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -36,6 +36,10 @@ import {
   type ManifestFieldDiff,
   type ToolManifest,
 } from './tool-manifest'
+import { atomicWriteFileSync } from './atomic-file'
+import { preserveImport, readImport, pendingImportIds, finishImport, importMarker } from './import-journal'
+import { ProcessOperations } from './process-operation'
+import { readUpdateJournal, writeUpdateJournal, clearUpdateJournal } from './update-journal'
 import type { Tool, ToolSource } from './types'
 import { bundleFolder, extractZip } from './zip'
 
@@ -49,6 +53,7 @@ export type ShareErrorCode =
   | 'manifest_invalid'
   | 'destination_invalid'
   | 'stage_missing'
+  | 'import_incomplete'
   | 'export_refused'
   | 'folder_missing'
   // Catalog paths (v1.4). They share ShareError so the GUI's existing
@@ -101,7 +106,10 @@ export function stagingRoot(dataRoot = resolveShelfDataRoot()): string {
 /** Remove leftovers from adds that never reached confirm/discard (app start). */
 export function cleanStagingRoot(dataRoot = resolveShelfDataRoot()): void {
   try {
-    fs.rmSync(stagingRoot(dataRoot), { recursive: true, force: true })
+    const protectedIds = new Set(pendingImportIds(dataRoot))
+    for (const name of fs.readdirSync(stagingRoot(dataRoot))) {
+      if (!protectedIds.has(name)) fs.rmSync(path.join(stagingRoot(dataRoot), name), { recursive: true, force: true })
+    }
   } catch {
     // best-effort
   }
@@ -368,6 +376,9 @@ export function validateRepoUrl(raw: string): { ok: true; url: string } | { ok: 
       if (parsed.hostname.startsWith('-') || parsed.username.startsWith('-')) {
         return { ok: false, reason: 'That URL is not a repository address.' }
       }
+      if (parsed.search || parsed.hash || (parsed.protocol === 'https:' && parsed.username)) {
+        return { ok: false, reason: 'Remove credentials, query parameters, and fragments from the repository URL.' }
+      }
       if (parsed.password) return { ok: false, reason: 'Remove the password from the URL; Shelf never stores credentials.' }
       return { ok: true, url }
     } catch {
@@ -491,16 +502,25 @@ export async function exportToolManifest(
   }
 }
 
-/** Manifest export + zip of the project (node_modules/.git/.env* excluded). */
+/** Freeze a bundle before review, so export writes exactly the reviewed bytes. */
+export async function prepareToolBundle(tool: Tool, opts: { appVersion: string }): Promise<{
+  zip: Buffer; manifestPath: string; files: { name: string; bytes: number }[]
+}> {
+  const exported = await exportToolManifest(tool, opts)
+  let files: { name: string; bytes: number }[] = []
+  const zip = bundleFolder(tool.projectPath as string, { onFiles: (value) => { files = value } })
+  return { zip, manifestPath: exported.manifestPath, files }
+}
+
+/** Manifest export + zip of reviewed source files. */
 export async function exportToolBundle(
   tool: Tool,
   outFile: string,
   opts: { appVersion: string },
 ): Promise<{ bundlePath: string; manifestPath: string; bytes: number }> {
-  const exported = await exportToolManifest(tool, opts)
-  const zip = bundleFolder(tool.projectPath as string)
-  fs.writeFileSync(outFile, zip)
-  return { bundlePath: outFile, manifestPath: exported.manifestPath, bytes: zip.length }
+  const prepared = await prepareToolBundle(tool, opts)
+  fs.writeFileSync(outFile, prepared.zip, { mode: 0o600 })
+  return { bundlePath: outFile, manifestPath: prepared.manifestPath, bytes: prepared.zip.length }
 }
 
 // ---------------------------------------------------------------------------
@@ -816,7 +836,19 @@ export async function confirmStagedShare(
     dataRoot?: string
   },
 ): Promise<ConfirmShareResult> {
-  const valid = validateDestination(input.destination, stage)
+  const dataRoot = deps.dataRoot || deps.store.getRoot()
+  return new ProcessOperations(dataRoot).run(`import:${stage.stageId}`, () => confirmImportLocked(stage, input, deps))
+}
+
+async function confirmImportLocked(
+  stage: StagedShare, input: ConfirmShareInput,
+  deps: { store: LibraryStore; processes: ProcessManager; toolDefaults?: RegisterProjectOptions['toolDefaults']; dataRoot?: string },
+): Promise<ConfirmShareResult> {
+  const dataRoot = deps.dataRoot || deps.store.getRoot()
+  const pending = readImport(dataRoot, stage.stageId)
+  const resuming = Boolean(pending && pending.destination === path.resolve(input.destination) &&
+    !fs.existsSync(stage.stagePath) && fs.existsSync(importMarker(pending.destination, stage.stageId)))
+  const valid = resuming ? { ok: true as const, destination: pending!.destination } : validateDestination(input.destination, stage)
   if (!valid.ok) throw new ShareError('destination_invalid', valid.reason)
   const destination = valid.destination
   // A stale library entry at this path would make registerProject MERGE
@@ -828,17 +860,23 @@ export async function confirmStagedShare(
       `“${claimed.name}” in your library already points at that folder. Remove it first, or choose another folder.`,
     )
   }
-  if (!fs.existsSync(stage.stagePath)) {
+  if (!resuming && !fs.existsSync(stage.stagePath)) {
     throw new ShareError('stage_missing', 'The fetched files are gone. Fetch again.')
+  }
+  if (!resuming) {
+    preserveImport(dataRoot, stage, destination)
+    atomicWriteFileSync(importMarker(stage.stagePath, stage.stageId), stage.stageId)
   }
 
   // A destination that turned unusable between validation and now (no
   // permission, a symlink, a race) is a folder problem — keep the stage
   // alive so the user can pick another folder, not a lost fetch.
   try {
-    fs.mkdirSync(path.dirname(destination), { recursive: true })
-    if (fs.existsSync(destination)) fs.rmdirSync(destination) // validated empty
-    moveDir(stage.stagePath, destination)
+    if (!resuming) {
+      fs.mkdirSync(path.dirname(destination), { recursive: true })
+      if (fs.existsSync(destination)) fs.rmdirSync(destination) // validated empty
+      moveDir(stage.stagePath, destination)
+    }
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     if (code && ['EACCES', 'EPERM', 'ENOTDIR', 'EEXIST', 'ENOENT', 'EROFS'].includes(code)) {
@@ -846,11 +884,6 @@ export async function confirmStagedShare(
     }
     throw err
   }
-  // Stage wrapper (when the project was nested one level) goes with it.
-  fs.rmSync(path.join(stagingRoot(deps.dataRoot || resolveShelfDataRoot()), stage.stageId), {
-    recursive: true,
-    force: true,
-  })
 
   const env: Record<string, string> = {}
   for (const key of Object.keys(stage.manifest.env)) {
@@ -865,7 +898,9 @@ export async function confirmStagedShare(
       ? { kind: 'git', repo: stage.source.repo, ref: stage.ref, addedAt: now }
       : { kind: 'bundle', addedAt: now }
 
-  const result = await registerProject(
+  let result: RegisterProjectResult
+  try {
+    result = await registerProject(
     destination,
     { store: deps.store, processes: deps.processes },
     {
@@ -889,6 +924,18 @@ export async function confirmStagedShare(
       source,
     },
   )
+  } catch (err) {
+    if (deps.store.findByProjectPath(destination)) {
+      finishImport(dataRoot, stage.stageId)
+      fs.rmSync(importMarker(destination, stage.stageId), { force: true })
+      throw new ShareError('import_incomplete', `The tool was registered at ${destination}, but a later step failed. Open it in the library to retry. ${err instanceof Error ? err.message : String(err)}`)
+    }
+    throw new ShareError('import_incomplete', `Files are safe at ${destination}, but registration failed. Retry this import to continue without downloading again. ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (!result.tool) throw new ShareError('import_incomplete', `Files are safe at ${destination}. Correct the project folder and retry registration.`)
+  finishImport(dataRoot, stage.stageId)
+  fs.rmSync(importMarker(destination, stage.stageId), { force: true })
+  fs.rmSync(path.join(stagingRoot(dataRoot), stage.stageId), { recursive: true, force: true })
   return { ...result, destination }
 }
 
@@ -921,6 +968,7 @@ export interface UpdateCommit {
 }
 
 export type UpdateCheck =
+  | { state: 'recovery_required'; operationId: string; message: string; input: ApplyUpdateInput }
   | { state: 'not_shared' }
   | { state: 'folder_missing' }
   | { state: 'git_missing'; message: string; remedy: string }
@@ -931,6 +979,7 @@ export type UpdateCheck =
   | { state: 'up_to_date'; ref: string; remote: string; dirty: boolean }
   | {
       state: 'updates_available'
+      workingTree: string
       ref: string
       remoteRef: string
       target: string
@@ -950,6 +999,7 @@ export type UpdateCheck =
     }
   | {
       state: 'diverged'
+      workingTree: string
       ref: string
       remoteRef: string
       target: string
@@ -994,8 +1044,19 @@ function localManifest(projectPath: string): ToolManifest | null {
   }
 }
 
+export async function workingTreeFingerprint(cwd: string, trackedOnly = false): Promise<string> {
+  const git = await resolveGitBinary()
+  if (!git) throw new Error(GIT_MISSING_REMEDY)
+  const diff = await runGit(git, ['-C', cwd, 'diff', '--binary', 'HEAD'], { timeoutMs: 10_000 })
+  const status = await runGit(git, ['-C', cwd, 'status', '--porcelain', trackedOnly ? '--untracked-files=no' : '--untracked-files=all'], { timeoutMs: 10_000 })
+  if (!diff.ok || !status.ok) throw new Error('Could not verify local changes. No update was applied.')
+  return createHash('sha256').update(diff.stdout).update(status.stdout).digest('hex')
+}
+
 /** Fetch and summarize. Touches nothing in the working tree. */
-export async function checkToolUpdates(tool: Tool): Promise<UpdateCheck> {
+export async function checkToolUpdates(tool: Tool, dataRoot = resolveShelfDataRoot()): Promise<UpdateCheck> {
+  const pending = readUpdateJournal(dataRoot, tool)
+  if (pending) return { state: 'recovery_required', operationId: pending.id, input: { ...pending.input, resumeOperationId: pending.id }, message: `An update stopped during ${pending.phase.replaceAll('_', ' ')}. Review and resume the remaining steps. Local restore ref: ${pending.restoreRef || 'none needed'}.` }
   if (!tool.source || tool.source.kind !== 'git') return { state: 'not_shared' }
   const cwd = tool.projectPath
   if (!cwd || !fs.existsSync(cwd)) return { state: 'folder_missing' }
@@ -1086,9 +1147,11 @@ export async function checkToolUpdates(tool: Tool): Promise<UpdateCheck> {
     (key) => !(before?.env && key in before.env) && !(tool.env && key in tool.env),
   )
 
+  const workingTree = await workingTreeFingerprint(cwd)
   if (ahead > 0 || dirty) {
     return {
       state: 'diverged',
+      workingTree,
       ref,
       remoteRef,
       target,
@@ -1105,6 +1168,7 @@ export async function checkToolUpdates(tool: Tool): Promise<UpdateCheck> {
   }
   return {
     state: 'updates_available',
+    workingTree,
     ref,
     remoteRef,
     target,
@@ -1138,6 +1202,10 @@ function detectedInstall(cwd: string): string[] {
 }
 
 export interface ApplyUpdateInput {
+  expectedRef: string
+  expectedTargetRef: string
+  expectedWorkingTree: string
+  resumeOperationId?: string
   /** 'fast_forward' for a clean copy; 'take_theirs' discards local commits/changes. */
   mode: 'fast_forward' | 'take_theirs'
   /** Remote target shown on the sheet (e.g. origin/main). */
@@ -1148,6 +1216,8 @@ export interface ApplyUpdateInput {
 }
 
 export interface ApplyUpdateResult {
+  operationId?: string
+  restoreRef?: string
   ok: boolean
   message: string
   tool?: Tool
@@ -1173,9 +1243,23 @@ export async function applyToolUpdate(
   input: ApplyUpdateInput,
   deps: { store: LibraryStore; processes?: ProcessManager },
 ): Promise<ApplyUpdateResult> {
+  const root = deps.store.getRoot()
+  const key = `project-update:${tool.projectPath || tool.id}`
+  const operations = new ProcessOperations(root)
+  return operations.run(key, () => operations.run(tool.id, () => applyToolUpdateLocked(tool, input, deps)))
+}
+
+async function applyToolUpdateLocked(
+  tool: Tool, input: ApplyUpdateInput, deps: { store: LibraryStore; processes?: ProcessManager },
+): Promise<ApplyUpdateResult> {
+  const root = deps.store.getRoot()
+  const failed = (message: string): ApplyUpdateResult => ({ ok: false, message, applied: [], skipped: [], missingEnvKeys: [], running: false })
   const cwd = tool.projectPath
-  if (!cwd || !fs.existsSync(cwd)) {
-    return { ok: false, message: 'Project folder is missing.', applied: [], skipped: [], missingEnvKeys: [], running: false }
+  if (!cwd || !fs.existsSync(cwd)) return failed('Project folder is missing.')
+  let journal = readUpdateJournal(root, tool)
+  if (journal) {
+    if (input.resumeOperationId !== journal.id) return failed('An earlier update needs recovery. Check for updates again to resume it.')
+    input = journal.input
   }
   // Target is a ref name we produced (origin/main); reject anything that
   // could read as a flag or a path spec since it goes on the git command line.
@@ -1185,17 +1269,46 @@ export async function applyToolUpdate(
   const git = await resolveGitBinary()
   if (!git) return { ok: false, message: GIT_MISSING_REMEDY, applied: [], skipped: [], missingEnvKeys: [], running: false }
 
-  const before = localManifest(cwd)
+  const currentRef = await currentCommit(git, cwd)
+  const targetRef = await runGit(git, ['-C', cwd, 'rev-parse', input.target], { timeoutMs: 10_000 })
+  if (!input.expectedRef || !/^[a-f0-9]{40,64}$/.test(input.expectedTargetRef || '') || !input.expectedWorkingTree) return failed('Check for updates again before applying. The reviewed revision is missing.')
+  const filesAlreadyApplied = Boolean(journal && currentRef === input.expectedTargetRef)
+  if (!filesAlreadyApplied && (!targetRef.ok || targetRef.stdout.trim() !== input.expectedTargetRef)) return failed('The shared revision changed after review. Check for updates again.')
+  if (filesAlreadyApplied && journal?.appliedFingerprint && await workingTreeFingerprint(cwd, true) !== journal.appliedFingerprint) {
+    return failed('Tracked files changed since this update paused. Preserve those edits and restore the paused working tree before resuming setup.')
+  }
+  if (!filesAlreadyApplied && (currentRef !== input.expectedRef || await workingTreeFingerprint(cwd) !== input.expectedWorkingTree)) return failed('Local files changed after review. No update was applied. Check for updates again.')
+  const before = journal?.beforeManifest || localManifest(cwd)
   // Detection can change across the pull (a lockfile swap). Allow what the
   // check could have offered from EITHER side, so a ticked box is honoured.
   const preInstall = detectedInstall(cwd)
   const runningState = deps.processes ? await deps.processes.getState(tool.id) : undefined
-  const running = runningState?.status === 'running' || runningState?.status === 'starting'
-  const pull =
+  const running = Boolean(runningState?.pid) || runningState?.status === 'running' || runningState?.status === 'starting' || runningState?.status === 'stopping'
+  if (running) return failed('Stop this tool before updating its files, then check for updates again.')
+  if (!journal) {
+    journal = { id: randomUUID(), toolId: tool.id, projectPath: cwd, input, beforeManifest: before || null, phase: 'prepared', completedSetup: [] }
+    if (input.mode === 'take_theirs') {
+      const incoming = await runGit(git, ['-C', cwd, 'diff', '--name-only', '-z', input.expectedRef, input.expectedTargetRef], { timeoutMs: 10_000 })
+      if (!incoming.ok) return failed('Could not inspect incoming files. Nothing changed.')
+      for (const file of incoming.stdout.split('\0').filter(Boolean)) {
+        if (!fs.existsSync(path.join(cwd, file))) continue
+        const tracked = await runGit(git, ['-C', cwd, 'ls-files', '--error-unmatch', '--', file], { timeoutMs: 10_000 })
+        if (!tracked.ok) return failed(`The update would overwrite an untracked local file: ${file}. Move it before retrying.`)
+      }
+      const snapshot = await runGit(git, ['-C', cwd, 'stash', 'create', 'Shelf update restore point'], { timeoutMs: 30_000 })
+      if (!snapshot.ok) return failed('Could not preserve local changes. Nothing changed.')
+      journal.restoreRef = `refs/shelf/backups/${journal.id}`
+      const backup = await runGit(git, ['-C', cwd, 'update-ref', journal.restoreRef, snapshot.stdout.trim() || input.expectedRef], { timeoutMs: 10_000 })
+      if (!backup.ok) return failed('Could not preserve the previous revision. Nothing changed.')
+    }
+    writeUpdateJournal(root, journal)
+  }
+  const pull = filesAlreadyApplied ? { ok: true, code: 0, stdout: '', stderr: '' } :
     input.mode === 'take_theirs'
-      ? await runGit(git, ['-C', cwd, 'reset', '--hard', input.target], { timeoutMs: 60_000 })
-      : await runGit(git, ['-C', cwd, 'merge', '--ff-only', '--no-edit', input.target], { timeoutMs: 60_000 })
+      ? await runGit(git, ['-C', cwd, 'reset', '--hard', input.expectedTargetRef], { timeoutMs: 60_000 })
+      : await runGit(git, ['-C', cwd, 'merge', '--ff-only', '--no-edit', input.expectedTargetRef], { timeoutMs: 60_000 })
   if (!pull.ok) {
+    if (await currentCommit(git, cwd) === input.expectedRef && await workingTreeFingerprint(cwd) === input.expectedWorkingTree) clearUpdateJournal(root, cwd)
     return {
       ok: false,
       message: `Update failed: ${gitFailure(pull, 'git could not update the folder')}`,
@@ -1205,6 +1318,9 @@ export async function applyToolUpdate(
       running,
     }
   }
+  journal.phase = 'files_applied'
+  journal.appliedFingerprint = await workingTreeFingerprint(cwd, true)
+  writeUpdateJournal(root, journal)
   const ref = await currentCommit(git, cwd)
   const after = localManifest(cwd)
 
@@ -1279,7 +1395,11 @@ export async function applyToolUpdate(
     ref,
     updatedAt: new Date().toISOString(),
   }
-  const saved = deps.store.save(next)
+  let saved: Tool
+  try { saved = deps.store.save(next) }
+  catch (err) { return { ...failed(`Files updated, but library save failed: ${err instanceof Error ? err.message : String(err)}. Check updates to resume.`), operationId: journal.id, restoreRef: journal.restoreRef, ref } }
+  journal.phase = 'metadata_saved'
+  writeUpdateJournal(root, journal)
 
   const missingEnvKeys = Object.keys(after?.env || {}).filter(
     (key) => key !== 'PORT' && !(saved.env && key in saved.env),
@@ -1300,6 +1420,7 @@ export async function applyToolUpdate(
   if (input.runSetup && setupCommands.length) {
     setup = []
     for (const command of setupCommands) {
+      if (journal.completedSetup.includes(command)) { setup.push({ command, ok: true }); continue }
       deps.processes?.appendLog(saved.id, 'system', `Setup: ${command}`)
       const result = await runBootstrap(
         { command, label: 'Setup step from the shared manifest' },
@@ -1309,12 +1430,21 @@ export async function applyToolUpdate(
         },
       )
       setup.push({ command, ok: result.ok })
-      if (!result.ok) break
+      journal.appliedFingerprint = await workingTreeFingerprint(cwd, true)
+      if (!result.ok) {
+        journal.phase = 'setup_failed'
+        writeUpdateJournal(root, journal)
+        return { ok: false, message: 'Files and library updated, but setup failed. Check for updates to retry the remaining setup steps.', tool: saved, ref, applied, skipped, missingEnvKeys, setup, running, operationId: journal.id, restoreRef: journal.restoreRef }
+      }
+      journal.completedSetup.push(command)
+      writeUpdateJournal(root, journal)
     }
   }
 
+  clearUpdateJournal(root, cwd)
   return {
     ok: true,
+    restoreRef: journal.restoreRef,
     message:
       input.mode === 'take_theirs'
         ? 'Replaced your copy with the shared version.'

@@ -700,7 +700,7 @@ try {
 
   // Local rename must survive; capabilities (untouched locally) update.
   rxStore.save({ ...rxStore.get(rxTool.id), name: 'My Prepper' })
-  const applied = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'fast_forward', target: avail.target }, { store: rxStore, processes: rxProcesses })
+  const applied = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'fast_forward', target: avail.target, expectedRef: avail.ref, expectedTargetRef: avail.remoteRef, expectedWorkingTree: avail.workingTree }, { store: rxStore, processes: rxProcesses })
   assert.equal(applied.ok, true, applied.message)
   assert.equal(applied.ref, avail.remoteRef)
   assert.ok(applied.applied.includes('capabilities'))
@@ -730,10 +730,10 @@ try {
   assert.equal(diverged.ahead, 1)
   assert.equal(diverged.behind, 1)
   assert.equal(diverged.dirty, false)
-  const ffFail = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'fast_forward', target: diverged.target }, { store: rxStore })
+  const ffFail = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'fast_forward', target: diverged.target, expectedRef: diverged.ref, expectedTargetRef: diverged.remoteRef, expectedWorkingTree: diverged.workingTree }, { store: rxStore })
   assert.equal(ffFail.ok, false, 'fast-forward must refuse a diverged copy')
   assert.ok(fs.existsSync(path.join(confirmed.destination, 'LOCAL.md')), 'refusal keeps local work')
-  const theirs = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'take_theirs', target: diverged.target }, { store: rxStore })
+  const theirs = await applyToolUpdate(rxStore.get(rxTool.id), { mode: 'take_theirs', target: diverged.target, expectedRef: diverged.ref, expectedTargetRef: diverged.remoteRef, expectedWorkingTree: diverged.workingTree }, { store: rxStore })
   assert.equal(theirs.ok, true, theirs.message)
   assert.equal(theirs.ref, diverged.remoteRef)
   assert.ok(!fs.existsSync(path.join(confirmed.destination, 'LOCAL.md')), 'take_theirs replaced the local commit')
@@ -780,6 +780,7 @@ try {
   const healedApply = await applyToolUpdate(healedTool, {
     mode: 'fast_forward',
     target: healedCheck.target,
+    expectedRef: healedCheck.ref, expectedTargetRef: healedCheck.remoteRef, expectedWorkingTree: healedCheck.workingTree,
     runSetup: true,
     setupCommands: ['touch NEVER_RUN_THIS'],
   }, { store: rxStore, processes: rxProcesses })

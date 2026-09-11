@@ -2,6 +2,7 @@
  * Filter + serialize run receipts for Recent / Settings export.
  * Pure helpers — no filesystem I/O (callers write via dialog or smoke asserts).
  */
+import { sanitizeOutput } from './types'
 import type { ReceiptOutcome, RunReceipt } from './types'
 
 export interface ReceiptFilterOpts {
@@ -38,7 +39,7 @@ export function filterReceipts(
 }
 
 export function receiptsToJson(receipts: RunReceipt[]): string {
-  return `${JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), receipts }, null, 2)}\n`
+  return `${JSON.stringify(sanitizeOutput({ version: 1, exportedAt: new Date().toISOString(), receipts }), null, 2)}\n`
 }
 
 function csvEscape(value: string): string {
@@ -63,7 +64,7 @@ export function receiptsToCsv(receipts: RunReceipt[]): string {
     'launchCommand',
     'message',
   ]
-  const rows = receipts.map((r) =>
+  const rows = sanitizeOutput(receipts).map((r) =>
     [
       r.id,
       r.toolId,

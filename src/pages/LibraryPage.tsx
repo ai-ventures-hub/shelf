@@ -166,7 +166,7 @@ export function LibraryPage({
         return bt - at
       })
     } else if (prefs.sort === 'status') {
-      const rank = { running: 0, starting: 1, error: 2, stopped: 3 } as const
+      const rank = { running: 0, starting: 1, stopping: 1, error: 2, stopped: 3 } as const
       list = list.slice().sort((a, b) => {
         const as = states[a.id]?.status || 'stopped'
         const bs = states[b.id]?.status || 'stopped'

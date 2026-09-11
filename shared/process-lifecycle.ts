@@ -50,77 +50,75 @@ export async function runOnce(
 
 export async function terminateProcess(managed: TerminableProcess): Promise<void> {
   const { child, pgid } = managed
-  if (child.exitCode !== null || child.signalCode !== null) return
-
-  try {
-    if (pgid) process.kill(-pgid, 'SIGTERM')
-    else child.kill('SIGTERM')
-  } catch {
-    // already exited
-  }
-
-  await waitForExit(child, STOP_KILL_GRACE_MS)
-
-  // child.killed only means a signal was sent; it does not mean the process exited.
-  if (child.exitCode === null && child.signalCode === null) {
-    try {
-      if (pgid) process.kill(-pgid, 'SIGKILL')
-      else child.kill('SIGKILL')
-    } catch {
-      // ignore
-    }
-    await waitForExit(child, 1_000)
+  // A shell can exit before its descendants. Keep supervising its group.
+  if (pgid) return terminateTargets([-pgid])
+  if (child.pid && child.exitCode === null && child.signalCode === null) {
+    await terminateTargets([child.pid])
   }
 }
 
-/**
- * SIGTERM -> grace -> SIGKILL a process group (or bare pid) this manager did
- * not spawn — used to stop receipt-adopted tools that have no configured port.
- */
+/** Stop an adopted process and any descendants still in its process group. */
 export async function terminatePidGroup(pid: number): Promise<void> {
-  const alive = () => {
+  if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error('Invalid owned process id.')
+  await terminateTargets([-pid, pid])
+}
+
+async function terminateTargets(targets: number[]): Promise<void> {
+  // Darwin can return EPERM for a group whose last member is exiting. Only
+  // accept that as gone when a fresh process table proves no live member;
+  // a genuine permission refusal must keep ownership available for retry.
+  const groupHasExited = async (target: number, err: unknown): Promise<boolean> => {
+    if (target >= -1 || (err as NodeJS.ErrnoException).code !== 'EPERM') return false
     try {
-      process.kill(pid, 0)
-      return true
-    } catch (err) {
-      return (err as NodeJS.ErrnoException).code === 'EPERM'
+      const { stdout } = await execFileAsync('ps', ['-axo', 'pgid=,stat='], { timeout: 2_000 })
+      const rows = stdout.trim().split('\n').map((line) => line.trim().match(/^(\d+)\s+(\S+)$/))
+      if (rows.some((row) => !row)) return false
+      return !rows.some((row) => Number(row![1]) === -target && !row![2].startsWith('Z'))
+    } catch { return false }
+  }
+  const exists = async (target: number) => {
+    try { process.kill(target, 0); return true }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ESRCH') return false
+      if (await groupHasExited(target, err)) return false
+      throw err
     }
   }
-  const signalGroup = (signal: NodeJS.Signals) => {
-    try {
-      process.kill(-pid, signal)
-    } catch {
-      // Not a group leader — fall through to the single pid.
+  const alive = async () => {
+    for (const target of targets) if (await exists(target)) return true
+    return false
+  }
+  const signal = async (value: NodeJS.Signals) => {
+    for (const target of targets) {
+      try { process.kill(target, value) }
+      catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH' && !await groupHasExited(target, err)) throw err
+      }
     }
-    try {
-      process.kill(pid, signal)
-    } catch {
-      // already exited
-    }
   }
-  if (!alive()) return
-  signalGroup('SIGTERM')
-  const deadline = Date.now() + STOP_KILL_GRACE_MS
-  while (Date.now() < deadline && alive()) {
-    await new Promise((resolve) => setTimeout(resolve, 150))
+  const wait = async (ms: number) => {
+    const deadline = Date.now() + ms
+    while (await alive() && Date.now() < deadline) await sleep(100)
   }
-  if (alive()) {
-    signalGroup('SIGKILL')
-    await new Promise((resolve) => setTimeout(resolve, 400))
-  }
+  if (!await alive()) return
+  await signal('SIGTERM')
+  await wait(STOP_KILL_GRACE_MS)
+  if (!await alive()) return
+  await signal('SIGKILL')
+  await wait(1_000)
+  if (await alive()) throw new Error('The owned process group did not stop. Retry Stop or inspect the remaining processes.')
 }
 
 export function waitForExit(child: ChildProcess, ms: number): Promise<void> {
   return new Promise((resolve) => {
-    if (child.exitCode !== null) {
-      resolve()
-      return
-    }
-    const timer = setTimeout(() => resolve(), ms)
-    child.once('exit', () => {
+    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return }
+    const done = () => {
       clearTimeout(timer)
+      child.off('exit', done)
       resolve()
-    })
+    }
+    const timer = setTimeout(done, ms)
+    child.once('exit', done)
   })
 }
 

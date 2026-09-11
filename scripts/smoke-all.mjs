@@ -37,6 +37,8 @@ async function main() {
   await run('process smoke', 'node', ['scripts/smoke-process.mjs'])
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
+  await run('phase 1 regressions', 'node', ['scripts/smoke-phase1.mjs'])
+  await run('recovery regressions', 'node', ['scripts/smoke-recovery.mjs'])
   await run('library safety', 'node', ['scripts/smoke-library-safety.mjs'])
   await run('prefs uiMode', 'node', ['scripts/smoke-prefs.mjs'])
   await run('capability intelligence', 'node', ['scripts/smoke-capabilities.mjs'])

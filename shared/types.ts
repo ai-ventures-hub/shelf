@@ -2,7 +2,7 @@
 
 import { DEFAULT_GLOBAL_SHORTCUT } from './global-shortcut'
 
-export type ToolStatus = 'stopped' | 'starting' | 'running' | 'error'
+export type ToolStatus = 'stopped' | 'starting' | 'stopping' | 'running' | 'error'
 
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
@@ -270,6 +270,8 @@ export interface ToolRuntimeState {
 }
 
 export interface LogLine {
+  id?: string
+  runId?: string
   toolId: string
   stream: 'stdout' | 'stderr' | 'system'
   text: string
@@ -289,6 +291,7 @@ export type ReceiptOutcome =
   | 'interrupted'
 
 export interface RunReceipt {
+  processStartedAt?: string
   id: string
   toolId: string
   toolName: string
@@ -556,47 +559,58 @@ export function foldDisplayName(name: string): string {
     .trim()
 }
 
-/** Redact likely secrets before returning tool/log payloads to agents or UI. */
-export function maskSecrets(text: string): string {
-  return text
-    .replace(
-      /\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*)\s*=\s*([^\s]+)/gi,
-      '$1=***',
-    )
+/** Env keys whose values are operational, not secret. */
+const SAFE_ENV_KEYS = /^(PORT|HOST|HOSTNAME|NODE_ENV|DEBUG|CI|TZ|LANG|LC_ALL|FORCE_COLOR)$/i
+const ASSIGNMENT_VALUE = `(?:"(?:\\\\.|[^"\\\\])*"|'[^']*'|[^\\s]+)`
+
+/** One output boundary for logs, commands, history, URLs, and diagnostics. */
+export function maskSecrets(text: string, knownValues: readonly string[] = []): string {
+  let safe = text
+  for (const value of [...new Set(knownValues)].filter(Boolean).sort((a, b) => b.length - a.length)) {
+    safe = safe.split(value).join('***')
+  }
+  return safe
+    .replace(new RegExp(`\\b([A-Z][A-Z0-9_]{2,})\\s*=\\s*${ASSIGNMENT_VALUE}`, 'g'),
+      (whole, key: string) => SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`)
+    .replace(new RegExp(`\\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*)\\s*=\\s*${ASSIGNMENT_VALUE}`, 'gi'), '$1=***')
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
+    .replace(/([?&](?:token|key|api_key|access_token|password|secret|signature|sig)=)[^&#\s]*/gi, '$1***')
     .replace(/\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi, '$1 ***')
     .replace(new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
 }
 
-/** Env keys whose values are operational, not secret — safe to show agents. */
-const SAFE_ENV_KEYS = /^(PORT|HOST|HOSTNAME|NODE_ENV|DEBUG|CI|TZ|LANG|LC_ALL|FORCE_COLOR)$/i
-
-/**
- * Mask the leading VAR=value env-prefix segment of a shell command
- * (`API_KEY=x DATABASE_URL=y npm start`), sparing benign keys so agents
- * keep PORT-style facts. Stops at the first non-assignment token, so
- * `--config=./x` style flags are untouched.
- */
+/** Includes unknown env names and quoted values in the command prefix. */
 export function maskCommandEnvPrefix(command: string): string {
-  let done = false
-  return command
-    .split(/(\s+)/)
-    .map((token) => {
-      if (done || !token || /^\s+$/.test(token)) return token
-      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(token)
-      if (!match) {
-        done = true
-        return token
-      }
-      return SAFE_ENV_KEYS.test(match[1]) ? token : `${match[1]}=***`
-    })
-    .join('')
+  return command.replace(new RegExp(`^(?:\\s*(?:env\\s+)?[A-Za-z_][A-Za-z0-9_]*=${ASSIGNMENT_VALUE})+`),
+    (prefix) => prefix.replace(new RegExp(`([A-Za-z_][A-Za-z0-9_]*)=${ASSIGNMENT_VALUE}`, 'g'),
+      (whole, key: string) => SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`))
 }
 
-/** Mask UPPER_CASE=value assignments in prose (notes) — env-var convention. */
-function maskProseAssignments(text: string): string {
-  return text.replace(/\b([A-Z][A-Z0-9_]{2,})=(\S+)/g, (whole, key: string) =>
-    SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`,
-  )
+export function toolSecretValues(tool?: Pick<Tool, 'env' | 'launchCommand' | 'stopCommand'>): string[] {
+  if (!tool) return []
+  const values = Object.entries(tool.env || {}).filter(([key]) => !SAFE_ENV_KEYS.test(key)).map(([, value]) => value)
+  for (const command of [tool.launchCommand, tool.stopCommand || '']) {
+    for (const match of command.matchAll(new RegExp(`\\b([A-Z][A-Z0-9_]{2,})=${ASSIGNMENT_VALUE}`, 'g'))) {
+      if (SAFE_ENV_KEYS.test(match[1])) continue
+      const value = match[0].slice(match[0].indexOf('=') + 1)
+      values.push(/^["']/.test(value) ? value.slice(1, -1) : value)
+    }
+  }
+  return values.filter(Boolean)
+}
+
+// Identifiers, enums, and timestamps are API contracts, not free-form output.
+// An env value such as "error" must not corrupt a runtime status or tool id.
+const OUTPUT_METADATA_KEYS = new Set(['id', 'toolId', 'runId', 'receiptId', 'status', 'outcome', 'kind', 'stream', 'origin', 'transport', 'at', 'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'lastLaunchedAt', 'processStartedAt'])
+
+/** Sanitize nested output copies; never mutate the private source record. */
+export function sanitizeOutput<T>(value: T, knownValues: readonly string[] = []): T {
+  if (typeof value === 'string') return maskSecrets(value, knownValues) as T
+  if (Array.isArray(value)) return value.map((item) => sanitizeOutput(item, knownValues)) as T
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeOutput(item, OUTPUT_METADATA_KEYS.has(key) ? [] : knownValues)])) as T
+  }
+  return value
 }
 
 /**
@@ -614,13 +628,13 @@ export function sanitizeToolForOutput(tool: Tool): Tool {
   if (tool.env && env) {
     for (const key of Object.keys(tool.env)) env[key] = '***'
   }
-  return {
+  return sanitizeOutput({
     ...tool,
     ...(env ? { env } : {}),
     launchCommand: maskSecrets(maskCommandEnvPrefix(tool.launchCommand)),
     ...(tool.stopCommand
       ? { stopCommand: maskSecrets(maskCommandEnvPrefix(tool.stopCommand)) }
       : {}),
-    ...(tool.notes ? { notes: maskSecrets(maskProseAssignments(tool.notes)) } : {}),
-  }
+    ...(tool.notes ? { notes: maskSecrets(tool.notes) } : {}),
+  }, toolSecretValues(tool))
 }

@@ -1,3 +1,6 @@
+import { RunLogStore } from './run-log-store'
+import { ProcessOperations } from './process-operation'
+import { toolSecretValues } from './types'
 import type { ChildProcess } from 'node:child_process'
 import type { LibraryStore } from './library-store'
 import {
@@ -7,7 +10,7 @@ import {
   urlForPort,
   withForcedPort,
 } from './ports'
-import { verifyOccupantsOwnedBy } from './process-ownership'
+import { invalidateProcessSnapshot, verifyOccupantsOwnedBy } from './process-ownership'
 import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
 import {
   PORT_TIMEOUT_MS,
@@ -79,6 +82,7 @@ export interface ProcessManagerOptions {
 export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>()
   private readonly options: ProcessManagerOptions
+  private readonly operations: ProcessOperations
   private readonly runtime: ProcessRuntimeSupport
   /**
    * Coalesces concurrent start() calls per tool. The `processes.has` guard
@@ -99,7 +103,8 @@ export class ProcessManager {
     options: ProcessManagerOptions = {},
   ) {
     this.options = options
-    this.runtime = new ProcessRuntimeSupport(options.onEvent, options.receipts)
+    this.operations = new ProcessOperations(store.getRoot())
+    this.runtime = new ProcessRuntimeSupport(options.onEvent, options.receipts, (id) => toolSecretValues(this.store.get(id)), new RunLogStore(store.getRoot()))
   }
 
   /**
@@ -126,9 +131,7 @@ export class ProcessManager {
   }
 
   async getState(toolId: string): Promise<ToolRuntimeState> {
-    if (!this.processes.has(toolId)) {
-      await this.reconcileTool(toolId)
-    }
+    await this.reconcileTool(toolId)
     return this.runtime.peekState(toolId)
   }
 
@@ -147,7 +150,12 @@ export class ProcessManager {
   ): Promise<ToolRuntimeState> {
     const inFlight = this.inFlightStarts.get(toolId)
     if (inFlight) return inFlight
-    const run = this.startInternal(toolId, options).finally(() => {
+    const generation = this.operations.generation(toolId)
+    const cancelled = () => this.operations.generation(toolId) !== generation
+    const run = this.operations.run(toolId, async () => {
+      if (cancelled()) return this.runtime.setState(toolId, { toolId, status: 'stopped', message: 'Launch cancelled.' })
+      return this.startInternal(toolId, options, cancelled)
+    }).finally(() => {
       this.inFlightStarts.delete(toolId)
     })
     // Registered synchronously (before any await in startInternal can yield),
@@ -159,6 +167,7 @@ export class ProcessManager {
   private async startInternal(
     toolId: string,
     options: StartOptions,
+    cancelled: () => boolean = () => false,
   ): Promise<ToolRuntimeState> {
     const origin = options.origin ?? this.options.defaultOrigin?.()
     let tool = this.store.get(toolId)
@@ -238,6 +247,7 @@ export class ProcessManager {
       reassignedFrom = resolution.reassignedFrom
     }
 
+    if (cancelled()) return this.runtime.setState(toolId, { toolId, status: 'stopped', message: 'Launch cancelled.' })
     this.runtime.clearLogs(toolId)
     const startedAt = new Date().toISOString()
     this.runtime.setState(toolId, {
@@ -329,10 +339,12 @@ export class ProcessManager {
         // Commit any held partial log line before classifying the exit.
         this.runtime.flushLogs(toolId)
         const open = this.processes.get(toolId)
-        const wasManaged = this.processes.delete(toolId)
-        if (!wasManaged) return
         const current = this.runtime.peekState(toolId)
-        if (current.status === 'stopped') return
+        // Stop still owns the group after its shell exits; retain it for retry
+        // until group termination has actually succeeded.
+        if (current.status === 'stopping') return
+        const wasManaged = this.processes.delete(toolId)
+        if (!wasManaged || current.status === 'stopped') return
         const exitedBeforeReady = current.status === 'starting' && Boolean(tool.port)
         const cleanExit =
           !exitedBeforeReady &&
@@ -365,19 +377,20 @@ export class ProcessManager {
       this.store.touchLastLaunched(toolId)
 
       if (tool.port) {
-        const ready = await waitForPort(tool.port, PORT_TIMEOUT_MS, () =>
-          this.processes.has(toolId),
+        const listening = await waitForPort(tool.port, PORT_TIMEOUT_MS, () =>
+          this.processes.has(toolId) && !cancelled(),
         )
+        if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
         if (!this.processes.has(toolId)) {
           return this.runtime.peekState(toolId)
         }
+        const ready = listening && await this.ownsListener(tool.port, child.pid)
         if (!ready) {
           // Framework may have hopped ports; sniff logs before giving up.
           const sniffed = this.runtime.sniffReadyUrl(toolId)
-          if (sniffed) {
+          if (sniffed && await this.ownsListener(sniffed.port, child.pid)) {
             const updated = await this.enqueueLibraryWrite(() =>
-              this.store.save({
-                ...(tool as Tool),
+              this.store.patch(toolId, {
                 url: sniffed.url,
                 port: sniffed.port,
               }),
@@ -387,6 +400,7 @@ export class ProcessManager {
               'system',
               `Detected listening URL ${sniffed.url} (port ${sniffed.port}); updated library entry.`,
             )
+            if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
             this.runtime.markReceiptRunning(managed.receiptId, {
               pid: child.pid,
               port: sniffed.port,
@@ -412,12 +426,13 @@ export class ProcessManager {
             this.runtime.getLogs(toolId),
             'port_timeout',
           )
-          await this.stop(toolId, 'Port readiness timed out after 60s.', {
+          await this.stopInternal(toolId, 'Port readiness timed out after 60s.', {
             code: timeoutCode,
             remedy: remedyFor(timeoutCode),
           })
           return this.runtime.peekState(toolId)
         }
+        if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
         const runningMessage = reassignedFrom
           ? `Running · port ${tool.port} (reassigned from ${reassignedFrom})`
           : `Running · port ${tool.port}`
@@ -440,14 +455,20 @@ export class ProcessManager {
         if (tool.url) await this.openReadyUrl(toolId, tool.url)
       } else {
         // No configured port: still try to learn URL from framework ready logs.
-        const sniffed = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId))
+        const candidate = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId) && !cancelled())
+        if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
+        const sniffed = candidate && await this.ownsListener(candidate.port, child.pid) ? candidate : null
+        if (candidate && !sniffed) {
+          await this.stopInternal(toolId, 'The advertised service URL has no verified listener.', { code: 'port_timeout', remedy: 'copy_ai_report' })
+          return this.runtime.setState(toolId, { toolId, status: 'error', code: 'port_timeout', message: 'The process printed a URL, but Shelf could not verify its service.', remedy: 'copy_ai_report' })
+        }
+        if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
         if (!this.processes.has(toolId)) {
           return this.runtime.peekState(toolId)
         }
         if (sniffed) {
           await this.enqueueLibraryWrite(() =>
-            this.store.save({
-              ...(tool as Tool),
+            this.store.patch(toolId, {
               url: sniffed.url,
               port: sniffed.port,
             }),
@@ -458,6 +479,7 @@ export class ProcessManager {
             `Detected listening URL ${sniffed.url}; updated library entry.`,
           )
         }
+        if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
         const runningMessage = sniffed
           ? `Running · port ${sniffed.port}`
           : child.pid
@@ -526,6 +548,15 @@ export class ProcessManager {
     reason?: string,
     failure?: { code?: LaunchErrorCode; remedy?: RemedyKind },
   ): Promise<ToolRuntimeState> {
+    this.operations.cancelStarts(toolId)
+    return this.operations.run(toolId, () => this.stopInternal(toolId, reason, failure))
+  }
+
+  private async stopInternal(
+    toolId: string,
+    reason?: string,
+    failure?: { code?: LaunchErrorCode; remedy?: RemedyKind },
+  ): Promise<ToolRuntimeState> {
     const tool = this.store.get(toolId)
     const managed = this.processes.get(toolId)
     let receiptId = managed?.receiptId
@@ -570,7 +601,7 @@ export class ProcessManager {
 
     this.runtime.setState(toolId, {
       toolId,
-      status: 'stopped',
+      status: 'stopping',
       message: reason || 'Stopping…',
       pid: managed?.child.pid || externalOwner?.ownerPid || externalReceipt?.pid || undefined,
     })
@@ -667,21 +698,25 @@ export class ProcessManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.runtime.appendLog(toolId, 'system', `Stop failed: ${message}`)
-      this.runtime.endReceipt(receiptId, {
-        outcome: 'error',
-        message: `Stop failed: ${message}`,
-      })
+      // Keep ownership open when termination failed, so a retry can still stop it.
+      this.runtime.markReceiptRunning(receiptId, { message: `Stop failed: ${message}` })
       return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
         message: `Stop failed: ${message}`,
+        pid: managed?.child.pid || externalOwner?.ownerPid || externalReceipt?.pid || undefined,
       })
     }
   }
 
   async restart(toolId: string, options: StartOptions = {}): Promise<ToolRuntimeState> {
-    await this.stop(toolId)
-    return this.start(toolId, options)
+    this.operations.cancelStarts(toolId)
+    return this.operations.run(toolId, async () => {
+      const stopped = await this.stopInternal(toolId)
+      if (stopped.status !== 'stopped') return stopped
+      const generation = this.operations.generation(toolId)
+      return this.startInternal(toolId, options, () => this.operations.generation(toolId) !== generation)
+    })
   }
 
   /**
@@ -705,12 +740,13 @@ export class ProcessManager {
   ): Promise<void> {
     const scope = opts.scope || 'all'
     if (scope === 'local') {
-      await Promise.all([...this.processes.keys()].map((id) => this.stop(id, reason)))
+      await Promise.all([...new Set([...this.processes.keys(), ...this.inFlightStarts.keys()])].map((id) => this.stop(id, reason)))
       return
     }
     await this.reconcileExternals()
     const ids = new Set<string>([
       ...this.processes.keys(),
+      ...this.inFlightStarts.keys(),
       ...this.store
         .list()
         .filter((t) => this.runtime.peekState(t.id).status === 'running')
@@ -725,6 +761,21 @@ export class ProcessManager {
   }
 
   private async reconcileTool(toolId: string): Promise<void> {
+    const managed = this.processes.get(toolId)
+    const state = this.runtime.peekState(toolId)
+    if (state.status === 'stopping') return
+    if (managed) {
+      const port = state.port
+      if (!port || (state.status !== 'running' && !(state.status === 'error' && state.code === 'port_timeout'))) return
+      const healthy = await this.ownsListener(port, managed.child.pid)
+      if (this.processes.get(toolId) !== managed || this.runtime.peekState(toolId) !== state) return
+      if (!healthy && state.status === 'running') {
+        this.runtime.setState(toolId, { ...state, status: 'error', code: 'port_timeout', remedy: 'copy_ai_report', message: `Process is alive, but its service on port ${port} is unavailable.` })
+      } else if (healthy && state.status === 'error') {
+        this.runtime.setState(toolId, { ...state, status: 'running', code: undefined, remedy: undefined, message: `Running · port ${port}` })
+      }
+      return
+    }
     await reconcileExternalTool(toolId, {
       store: this.store,
       runtime: this.runtime,
@@ -760,7 +811,7 @@ export class ProcessManager {
     const occupants = await findPortOccupants(port)
     if (occupants.length === 0) return { tool }
 
-    if (onPortConflict !== 'reassign') {
+    {
       const owner = await this.trustedExternalOwner(toolId, port, occupants)
       if (owner) {
         this.runtime.appendLog(
@@ -782,6 +833,8 @@ export class ProcessManager {
         }
       }
 
+    }
+    if (onPortConflict !== 'reassign') {
       const message = `Port ${port} is already in use by another process.`
       this.runtime.emitFailedReceipt({
         toolId,
@@ -810,13 +863,12 @@ export class ProcessManager {
     const nextPort = free.port
     const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
     const nextUrl = urlForPort(tool.url, nextPort)
-    const saved = this.store.save({
-      ...tool,
+    const saved = this.store.patch(toolId, {
       port: nextPort,
       url: nextUrl,
       launchCommand: nextLaunch,
       env: { ...(tool.env || {}), PORT: String(nextPort) },
-    })
+    }, tool.updatedAt)
     return { tool: saved, reassignedFrom: previousPort }
   }
 
@@ -870,6 +922,12 @@ export class ProcessManager {
       this.runtime.appendLog(toolId, 'system', `Ownership check failed: ${message}`)
       return null
     }
+  }
+
+  private async ownsListener(port: number, pid?: number): Promise<boolean> {
+    if (!pid) return false
+    invalidateProcessSnapshot()
+    return verifyOccupantsOwnedBy(await findPortOccupants(port), pid)
   }
 
   private async openReadyUrl(toolId: string, url: string): Promise<void> {

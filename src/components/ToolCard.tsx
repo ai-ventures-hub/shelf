@@ -73,7 +73,7 @@ export function ToolCard({
   onToggleFavorite?: () => void
 }) {
   const status = state?.status || 'stopped'
-  const live = status === 'running' || status === 'starting'
+  const live = status === 'running' || status === 'starting' || status === 'stopping' || (status === 'error' && Boolean(state?.pid))
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
   const hasControls = Boolean(onLaunch || onStop)
@@ -157,7 +157,7 @@ export function ToolCard({
                 className="btn btn-quiet btn-sm btn-icon control-stop"
                 title="Stop"
                 aria-label={`Stop ${tool.name}`}
-                disabled={status === 'starting'}
+                disabled={status === 'stopping'}
                 onClick={control(onStop)}
               >
                 <Square size={13} aria-hidden />
@@ -207,7 +207,7 @@ export function ToolListRow({
   onStop?: () => void
 }) {
   const status = state?.status || 'stopped'
-  const canStop = status === 'running' || status === 'starting'
+  const canStop = status === 'running' || status === 'starting' || status === 'stopping' || (status === 'error' && Boolean(state?.pid))
   const visibleTags = tool.tags.slice(0, 2)
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
 

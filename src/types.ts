@@ -1,6 +1,6 @@
 /** Shared tool and process types used by renderer and main process contracts. */
 
-export type ToolStatus = 'stopped' | 'starting' | 'running' | 'error'
+export type ToolStatus = 'stopped' | 'starting' | 'stopping' | 'running' | 'error'
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ViewMode = 'grid' | 'list'
 export type SortMode = 'name' | 'recent' | 'status'
@@ -111,6 +111,7 @@ export type ShareErrorCode =
   | 'manifest_invalid'
   | 'destination_invalid'
   | 'stage_missing'
+  | 'import_incomplete'
   | 'export_refused'
   | 'folder_missing'
 
@@ -194,6 +195,7 @@ export interface UpdateCommit {
 }
 
 export type UpdateCheck =
+  | { state: 'recovery_required'; operationId: string; message: string; input: ApplyUpdateInput }
   | { state: 'not_shared' }
   | { state: 'folder_missing' }
   | { state: 'git_missing'; message: string; remedy: string }
@@ -204,6 +206,7 @@ export type UpdateCheck =
   | { state: 'up_to_date'; ref: string; remote: string; dirty: boolean }
   | {
       state: 'updates_available'
+      workingTree: string
       ref: string
       remoteRef: string
       target: string
@@ -217,6 +220,7 @@ export type UpdateCheck =
     }
   | {
       state: 'diverged'
+      workingTree: string
       ref: string
       remoteRef: string
       target: string
@@ -232,6 +236,10 @@ export type UpdateCheck =
     }
 
 export interface ApplyUpdateInput {
+  expectedRef: string
+  expectedTargetRef: string
+  expectedWorkingTree: string
+  resumeOperationId?: string
   mode: 'fast_forward' | 'take_theirs'
   target: string
   runSetup?: boolean
@@ -239,6 +247,8 @@ export interface ApplyUpdateInput {
 }
 
 export interface ApplyUpdateResult {
+  operationId?: string
+  restoreRef?: string
   ok: boolean
   message: string
   tool?: Tool
@@ -383,6 +393,8 @@ export interface ToolRuntimeState {
 }
 
 export interface LogLine {
+  id?: string
+  runId?: string
   toolId: string
   stream: 'stdout' | 'stderr' | 'system'
   text: string
@@ -540,6 +552,7 @@ export type ReceiptOutcome =
   | 'interrupted'
 
 export interface RunReceipt {
+  processStartedAt?: string
   id: string
   toolId: string
   toolName: string
@@ -692,6 +705,9 @@ export interface RegisterProjectResult {
 
 /** Preload bridge API exposed on window.shelf */
 export interface ShelfApi {
+  getPendingImports: () => Promise<{ id: string; name: string; destination: string }[]>
+  resumeImport: (id: string) => Promise<StagedShareView>
+  getLibraryRecovery: () => Promise<string | null>
   listTools: () => Promise<Tool[]>
   getToolHealth: () => Promise<ToolHealth[]>
   saveTool: (tool: Tool) => Promise<Tool>

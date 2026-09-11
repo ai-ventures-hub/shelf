@@ -164,7 +164,7 @@ commands and notes — agents see which keys exist, never the values.
 
 ## Develop
 
-Requires macOS and Node.js 20+.
+Requires macOS and Node.js 22.12 or newer.
 
 ```bash
 npm install

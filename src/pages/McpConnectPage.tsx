@@ -270,7 +270,7 @@ export function McpConnectPage() {
         <div className="mcp-overview-aside">
           <p className="mcp-overview-stats" aria-live="polite">
             <span>
-              <strong>{summary.connected}</strong> connected
+              <strong>{summary.connected}</strong> recently seen
             </span>
             <span className="mcp-overview-dot" aria-hidden>
               ·

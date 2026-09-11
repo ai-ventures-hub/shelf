@@ -3,6 +3,7 @@
  * Caps history so launch noise cannot grow forever.
  */
 import fs from 'node:fs'
+import { processIdentity } from './process-identity'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
@@ -10,6 +11,7 @@ import { resolveShelfDataRoot } from './paths'
 import { filterReceipts, type ReceiptFilterOpts } from './receipt-export'
 import {
   maskSecrets,
+  sanitizeOutput,
   type LaunchOrigin,
   type ReceiptOutcome,
   type ReceiptsFile,
@@ -21,6 +23,7 @@ const MAX_RECEIPTS = 400
 export type { ReceiptFilterOpts }
 
 export interface BeginReceiptInput {
+  id?: string
   toolId: string
   toolName: string
   launchCommand: string
@@ -52,17 +55,22 @@ export class ReceiptStore {
         this.write({ version: 1, receipts: [] })
         return
       }
-      try {
-        const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as
-          | Partial<ReceiptsFile>
-          | null
-        if (!parsed || !Array.isArray(parsed.receipts)) throw new Error('missing receipts array')
-      } catch {
+      let parsed: Partial<ReceiptsFile> | null
+      const recover = () => {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-')
         const backup = path.join(root, `receipts.corrupt-backup-${stamp}.json`)
-        fs.copyFileSync(this.filePath, backup)
+        atomicWriteFileSync(backup, fs.readFileSync(this.filePath, 'utf8'))
         this.write({ version: 1, receipts: [] })
       }
+      try {
+        parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as Partial<ReceiptsFile> | null
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err
+        recover()
+        return
+      }
+      if (!parsed || !Array.isArray(parsed.receipts)) { recover(); return }
+      this.write(this.read())
     })
     // Mark only dead open receipts as interrupted. Live processes may belong
     // to another Shelf host (Electron or MCP) using the same receipt file.
@@ -88,13 +96,14 @@ export class ReceiptStore {
   begin(input: BeginReceiptInput): RunReceipt {
     return withFileLockSync(this.filePath, () => {
       const receipt: RunReceipt = {
-        id: randomUUID(),
+        id: input.id || randomUUID(),
         toolId: input.toolId,
         toolName: input.toolName,
         launchCommand: maskSecrets(input.launchCommand),
         port: input.port,
         url: input.url,
         pid: input.pid,
+        processStartedAt: input.pid ? processIdentity(input.pid, true) : undefined,
         startedAt: input.startedAt || new Date().toISOString(),
         outcome: 'starting',
         message: input.message || 'Starting…',
@@ -151,13 +160,14 @@ export class ReceiptStore {
     return withFileLockSync(this.filePath, () => {
       const startedAt = input.startedAt || new Date().toISOString()
       const receipt: RunReceipt = {
-        id: randomUUID(),
+        id: input.id || randomUUID(),
         toolId: input.toolId,
         toolName: input.toolName,
         launchCommand: maskSecrets(input.launchCommand || ''),
         port: input.port,
         url: input.url,
         pid: input.pid,
+        processStartedAt: input.pid ? processIdentity(input.pid, true) : undefined,
         startedAt,
         endedAt: startedAt,
         durationMs: 0,
@@ -194,7 +204,8 @@ export class ReceiptStore {
         (receipt.outcome === 'starting' || receipt.outcome === 'running') &&
         typeof receipt.pid === 'number' &&
         (port === undefined || receipt.port === port) &&
-        isProcessOrGroupAlive(receipt.pid),
+        isProcessOrGroupAlive(receipt.pid) &&
+        (!receipt.processStartedAt || processIdentity(receipt.pid) === receipt.processStartedAt),
     )
   }
 
@@ -257,7 +268,7 @@ export class ReceiptStore {
     try {
       const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as ReceiptsFile
       if (!Array.isArray(raw.receipts)) throw new Error('missing receipts array')
-      return { version: 1, receipts: raw.receipts }
+      return { version: 1, receipts: sanitizeOutput(raw.receipts) }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       throw new Error(`Shelf could not read receipts.json: ${detail}`)
@@ -265,7 +276,7 @@ export class ReceiptStore {
   }
 
   private write(data: ReceiptsFile): void {
-    atomicWriteFileSync(this.filePath, JSON.stringify(data, null, 2))
+    atomicWriteFileSync(this.filePath, JSON.stringify(sanitizeOutput(data), null, 2))
   }
 }
 

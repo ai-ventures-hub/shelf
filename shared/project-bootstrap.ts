@@ -100,12 +100,18 @@ export function runBootstrap(
 
     const timer = setTimeout(() => {
       endedBy = 'timeout'
-      void terminateProcess(managed)
+      void terminateProcess(managed).catch((err: unknown) => {
+        opts.onLog?.('stderr', `Setup cleanup failed: ${err instanceof Error ? err.message : String(err)}\n`)
+        settle(null)
+      })
     }, timeoutMs)
 
     const onAbort = () => {
       endedBy = 'cancelled'
-      void terminateProcess(managed)
+      void terminateProcess(managed).catch((err: unknown) => {
+        opts.onLog?.('stderr', `Setup cleanup failed: ${err instanceof Error ? err.message : String(err)}\n`)
+        settle(null)
+      })
     }
     opts.signal?.addEventListener('abort', onAbort, { once: true })
 
