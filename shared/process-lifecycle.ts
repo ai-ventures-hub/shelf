@@ -64,31 +64,49 @@ export async function terminatePidGroup(pid: number): Promise<void> {
 }
 
 async function terminateTargets(targets: number[]): Promise<void> {
-  const exists = (target: number) => {
+  // Darwin can return EPERM for a group whose last member is exiting. Only
+  // accept that as gone when a fresh process table proves no live member;
+  // a genuine permission refusal must keep ownership available for retry.
+  const groupHasExited = async (target: number, err: unknown): Promise<boolean> => {
+    if (target >= -1 || (err as NodeJS.ErrnoException).code !== 'EPERM') return false
+    try {
+      const { stdout } = await execFileAsync('ps', ['-axo', 'pgid=,stat='], { timeout: 2_000 })
+      const rows = stdout.trim().split('\n').map((line) => line.trim().match(/^(\d+)\s+(\S+)$/))
+      if (rows.some((row) => !row)) return false
+      return !rows.some((row) => Number(row![1]) === -target && !row![2].startsWith('Z'))
+    } catch { return false }
+  }
+  const exists = async (target: number) => {
     try { process.kill(target, 0); return true }
     catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ESRCH') return false
+      if (await groupHasExited(target, err)) return false
       throw err
     }
   }
-  const alive = () => targets.some(exists)
-  const signal = (value: NodeJS.Signals) => {
+  const alive = async () => {
+    for (const target of targets) if (await exists(target)) return true
+    return false
+  }
+  const signal = async (value: NodeJS.Signals) => {
     for (const target of targets) {
       try { process.kill(target, value) }
-      catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err }
+      catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH' && !await groupHasExited(target, err)) throw err
+      }
     }
   }
   const wait = async (ms: number) => {
     const deadline = Date.now() + ms
-    while (alive() && Date.now() < deadline) await sleep(100)
+    while (await alive() && Date.now() < deadline) await sleep(100)
   }
-  if (!alive()) return
-  signal('SIGTERM')
+  if (!await alive()) return
+  await signal('SIGTERM')
   await wait(STOP_KILL_GRACE_MS)
-  if (!alive()) return
-  signal('SIGKILL')
+  if (!await alive()) return
+  await signal('SIGKILL')
   await wait(1_000)
-  if (alive()) throw new Error('The owned process group did not stop. Retry Stop or inspect the remaining processes.')
+  if (await alive()) throw new Error('The owned process group did not stop. Retry Stop or inspect the remaining processes.')
 }
 
 export function waitForExit(child: ChildProcess, ms: number): Promise<void> {

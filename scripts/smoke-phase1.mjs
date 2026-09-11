@@ -81,11 +81,14 @@ try {
   const retryRun = await a.start('concurrent')
   assert.equal(retryRun.status, 'running', JSON.stringify(retryRun))
   const originalKill = process.kill
+  let refuseProbe = true
   process.kill = (pid, signal) => {
-    if (pid === -retryRun.pid && signal === 'SIGTERM') { const err = new Error('injected signal refusal'); err.code = 'EPERM'; throw err }
+    if (pid === -retryRun.pid && (signal === 'SIGTERM' || (refuseProbe && signal === 0))) { const err = new Error('injected signal refusal'); err.code = 'EPERM'; throw err }
     return originalKill.call(process, pid, signal)
   }
   try {
+    await assert.rejects(terminateProcess({ child: { pid: retryRun.pid }, pgid: retryRun.pid }), { code: 'EPERM' }, 'a live group with denied probes must stay owned')
+    refuseProbe = false
     const failedStop = await a.stop('concurrent')
     assert.equal(failedStop.status, 'error'); assert.equal(failedStop.pid, retryRun.pid)
     assert.ok(receipts.findActiveProcess('concurrent'), 'failed Stop must retain ownership for retry')
@@ -93,6 +96,14 @@ try {
   const retriedStop = await a.stop('concurrent')
   assert.equal(retriedStop.status, 'stopped', JSON.stringify(retriedStop))
   console.log('OK: refused termination stays visible and a later Stop can retry')
+  process.kill = (pid, signal) => {
+    if (pid === -retryRun.pid && signal === 0) { const err = new Error('exiting group probe'); err.code = 'EPERM'; throw err }
+    return originalKill.call(process, pid, signal)
+  }
+  try {
+    await terminateProcess({ child: { pid: retryRun.pid }, pgid: retryRun.pid })
+  } finally { process.kill = originalKill }
+  console.log('OK: denied probes for an exited group are verified against the process table')
 
 
   const wp = await free()

@@ -40,6 +40,7 @@ New fault-injection cases verify:
 1. Two simultaneous OS processes produce one owned run, not two launches.
 2. A cross-host Stop invalidates a start before it can launch late.
 3. A refused termination retains a retry target; the next Stop can succeed.
+   macOS can briefly return `EPERM` for a group with only an exited zombie. A fresh process table distinguishes that completed stop from a live group whose termination was refused; both paths have regression coverage.
 4. A surviving descendant is terminated after its shell has already exited.
 5. Printed fake readiness cannot produce a running service or persist a false port.
 6. Split/quoted synthetic credentials do not appear in exported output.
