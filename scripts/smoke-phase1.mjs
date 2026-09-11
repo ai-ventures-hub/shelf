@@ -79,6 +79,7 @@ try {
   assert.equal((await a.getState('concurrent')).status, 'stopped')
   console.log('OK: independent managers share one run, its logs, and stop outcome')
   const retryRun = await a.start('concurrent')
+  assert.equal(retryRun.status, 'running', JSON.stringify(retryRun))
   const originalKill = process.kill
   process.kill = (pid, signal) => {
     if (pid === -retryRun.pid && signal === 'SIGTERM') { const err = new Error('injected signal refusal'); err.code = 'EPERM'; throw err }
@@ -89,7 +90,8 @@ try {
     assert.equal(failedStop.status, 'error'); assert.equal(failedStop.pid, retryRun.pid)
     assert.ok(receipts.findActiveProcess('concurrent'), 'failed Stop must retain ownership for retry')
   } finally { process.kill = originalKill }
-  assert.equal((await a.stop('concurrent')).status, 'stopped')
+  const retriedStop = await a.stop('concurrent')
+  assert.equal(retriedStop.status, 'stopped', JSON.stringify(retriedStop))
   console.log('OK: refused termination stays visible and a later Stop can retry')
 
 
