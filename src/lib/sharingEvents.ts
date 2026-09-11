@@ -6,6 +6,7 @@
 export const ADD_SHARED_EVENT = 'shelf:add-shared'
 
 export interface AddSharedRequest {
+  resumeStageId?: string
   repo?: string
   bundlePath?: string
   /**

@@ -3,6 +3,8 @@
  * Safely merges mcpServers.shelf into ~/.cursor/mcp.json without wiping other servers.
  */
 import fs from 'node:fs'
+import { configuredCommandExists } from './client-observation'
+import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
 import { mcpPathMigrationHint } from './mcp-server-path'
@@ -63,11 +65,9 @@ export function readCursorMcpConfig(configPath: string): CursorMcpConfigFile {
   }
 }
 
-function writeAtomic(configPath: string, data: CursorMcpConfigFile): void {
+function writeAtomic(configPath: string, data: CursorMcpConfigFile, previousText: string): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  const tmp = `${configPath}.tmp`
-  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
-  fs.renameSync(tmp, configPath)
+  replaceClientConfig(configPath, `${JSON.stringify(data, null, 2)}\n`, previousText)
 }
 
 function shelfEntry(
@@ -114,11 +114,12 @@ export async function getCursorMcpStatus(opts: {
 
   if (configExists) {
     try {
-      const config = readCursorMcpConfig(configPath)
+      const previousText = fs.readFileSync(configPath, 'utf8')
+  const config = readCursorMcpConfig(configPath)
       const entry = config.mcpServers?.[CURSOR_MCP_SERVER_KEY]
       if (entry) {
         connected = true
-        matches = entryMatches(entry, opts.serverPath)
+        matches = entryMatches(entry, opts.serverPath) && configuredCommandExists((entry as { command?: unknown }).command) && (entry as { disabled?: boolean; enabled?: boolean }).disabled !== true && (entry as { enabled?: boolean }).enabled !== false
         if (!matches) {
           const configured =
             entry && typeof entry === 'object' && Array.isArray((entry as CursorMcpServerEntry).args)
@@ -189,13 +190,7 @@ export async function connectCursorMcp(opts: {
   const next: CursorMcpConfigFile = { ...config, mcpServers }
   const nextText = `${JSON.stringify(next, null, 2)}\n`
 
-  let backupPath: string | undefined
-  if (existed && previousText.trim() !== nextText.trim()) {
-    backupPath = `${configPath}.shelf-backup`
-    fs.writeFileSync(backupPath, previousText, 'utf8')
-  }
-
-  writeAtomic(configPath, next)
+  const backupPath = replaceClientConfig(configPath, nextText, previousText)
 
   const status = await getCursorMcpStatus({
     serverPath: opts.serverPath,
@@ -222,10 +217,11 @@ export async function disconnectCursorMcp(opts: {
     return { status }
   }
 
+  const previousText = fs.readFileSync(configPath, 'utf8')
   const config = readCursorMcpConfig(configPath)
   if (config.mcpServers && CURSOR_MCP_SERVER_KEY in config.mcpServers) {
     delete config.mcpServers[CURSOR_MCP_SERVER_KEY]
-    writeAtomic(configPath, config)
+    writeAtomic(configPath, config, previousText)
   }
 
   const status = await getCursorMcpStatus({

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
 import { useLibrary } from '../hooks/useLibrary'
@@ -41,6 +41,8 @@ export function ToolFormPage() {
     prefilledCapabilities.join('\n'),
   )
   const [envText, setEnvText] = useState(() => envToText(existing?.env))
+  const baseRef = useRef<Tool | undefined>(existing)
+  const [conflicted, setConflicted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<ProjectImportSuggestion | null>(null)
@@ -52,6 +54,14 @@ export function ToolFormPage() {
   // Sync when library loads an existing tool after mount (Electron IPC is async).
   useEffect(() => {
     if (!existing) return
+    const base = baseRef.current
+    const dirty = base && base.id === existing.id && (
+      JSON.stringify(form) !== JSON.stringify(base) || tagsText !== base.tags.join(', ') ||
+      capabilitiesText !== base.capabilities.join('\n') || envText !== envToText(base.env)
+    )
+    if (dirty) { setConflicted(true); return }
+    baseRef.current = existing
+    setConflicted(false)
     setForm(existing)
     setTagsText(existing.tags.join(', '))
     setCapabilitiesText(existing.capabilities.join('\n'))
@@ -488,6 +498,19 @@ export function ToolFormPage() {
           />
 
           <div className="action-row" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
+            {conflicted && <div role="alert">
+              This tool changed elsewhere. Your edits are preserved. Reload to review the latest version before saving.
+              <button type="button" className="btn" onClick={() => {
+                if (!existing || !window.confirm('Discard your unsaved edits and load the latest version?')) return
+                baseRef.current = existing
+                setForm(existing)
+                setTagsText(existing.tags.join(', '))
+                setCapabilitiesText(existing.capabilities.join('\n'))
+                setEnvText(envToText(existing.env))
+                setConflicted(false)
+                setError(null)
+              }}>Reload latest</button>
+            </div>}
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add to library'}
             </button>

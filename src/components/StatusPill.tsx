@@ -3,6 +3,7 @@ import type { ToolStatus } from '../types'
 const TONE: Record<ToolStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   running: 'success',
   starting: 'warning',
+  stopping: 'warning',
   error: 'danger',
   stopped: 'neutral',
 }
@@ -10,6 +11,7 @@ const TONE: Record<ToolStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
 const LABEL: Record<ToolStatus, string> = {
   running: 'Running',
   starting: 'Starting',
+  stopping: 'Stopping',
   error: 'Error',
   stopped: 'Stopped',
 }

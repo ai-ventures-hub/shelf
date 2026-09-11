@@ -10,7 +10,7 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
-import { maskSecrets } from './types'
+import { maskSecrets, toolSecretValues } from './types'
 
 export interface LaunchFailureClassification {
   code: LaunchErrorCode
@@ -109,7 +109,7 @@ export function classifyLaunchFailure(
  * is the user's coding agent, so it leads with machine-usable facts.
  */
 export function buildErrorReport(
-  tool: Pick<Tool, 'name' | 'projectPath' | 'launchCommand' | 'port' | 'url'>,
+  tool: Pick<Tool, 'name' | 'projectPath' | 'launchCommand' | 'port' | 'url' | 'env' | 'stopCommand'>,
   state: Pick<ToolRuntimeState, 'status' | 'message' | 'exitCode' | 'code'>,
   logs: LogLine[],
 ): string {
@@ -135,5 +135,5 @@ export function buildErrorReport(
     `### Last ${Math.min(tail.length, REPORT_LOG_LINES)} output lines (secrets masked)`,
     tail.length > 0 ? tail.join('\n') : '(no output captured)',
   ]
-  return lines.filter((l) => l !== null).join('\n')
+  return maskSecrets(lines.filter((l) => l !== null).join('\n'), toolSecretValues(tool))
 }

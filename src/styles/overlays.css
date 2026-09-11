@@ -382,3 +382,8 @@
 .share-status strong {
   color:var(--ink);
 }
+
+/* Native dialog supplies focus containment and restoration for report review. */
+dialog.diagnostic-report { color:var(--ink); margin:auto; }
+dialog.diagnostic-report:not([open]) { display:none; }
+dialog.diagnostic-report::backdrop { background:rgb(0 0 0 / 65%); }

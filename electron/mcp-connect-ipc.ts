@@ -3,6 +3,7 @@
  * (Claude Desktop / Claude Code / Cursor / Codex).
  * Kept out of main.ts so window/bootstrap wiring stays readable.
  */
+import { clientObservation } from '../shared/client-observation'
 import { ipcMain } from 'electron'
 import {
   connectClaudeDesktop,
@@ -31,7 +32,7 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   ipcMain.handle('mcpClients:detect', () => detectInstalledClients())
 
   ipcMain.handle('claude:status', () =>
-    getClaudeDesktopStatus({ serverPath: resolveMcpServerPath() }),
+    getClaudeDesktopStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'claude') })),
   )
   ipcMain.handle('claude:connect', () =>
     connectClaudeDesktop({ serverPath: resolveMcpServerPath() }),
@@ -44,7 +45,7 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   })
 
   ipcMain.handle('claudeCode:status', () =>
-    getClaudeCodeMcpStatus({ serverPath: resolveMcpServerPath() }),
+    getClaudeCodeMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'claude-code') })),
   )
   ipcMain.handle('claudeCode:connect', () =>
     connectClaudeCodeMcp({ serverPath: resolveMcpServerPath() }),
@@ -54,7 +55,7 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   )
 
   ipcMain.handle('cursor:status', () =>
-    getCursorMcpStatus({ serverPath: resolveMcpServerPath() }),
+    getCursorMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'cursor') })),
   )
   ipcMain.handle('cursor:connect', () =>
     connectCursorMcp({ serverPath: resolveMcpServerPath() }),
@@ -67,7 +68,7 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   })
 
   ipcMain.handle('codex:status', () =>
-    getCodexMcpStatus({ serverPath: resolveMcpServerPath() }),
+    getCodexMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'codex') })),
   )
   ipcMain.handle('codex:connect', () =>
     connectCodexMcp({ serverPath: resolveMcpServerPath() }),
@@ -75,8 +76,8 @@ export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void 
   ipcMain.handle('codex:disconnect', () =>
     disconnectCodexMcp({ serverPath: resolveMcpServerPath() }),
   )
-  // Codex desktop lives inside ChatGPT.app; CLI shares the same config.toml.
+  // Codex desktop and CLI share the same config.toml.
   ipcMain.handle('codex:openApp', async () => {
-    await system.openApp('ChatGPT')
+    await system.openApp('Codex')
   })
 }

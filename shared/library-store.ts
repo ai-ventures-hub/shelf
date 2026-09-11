@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { storedToolSchema, storedCollectionSchema, FutureLibraryVersionError } from './library-validation'
+import { createHash, randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { resolveAppDataRoot, resolveShelfDataRoot } from './paths'
@@ -75,26 +76,40 @@ export class LibraryStore {
 
     withFileLockSync(this.filePath, () => {
       if (!fs.existsSync(this.filePath)) {
-        this.write({ version: 3, tools: [], collections: [] })
+        this.write({ version: 3, tools: [], collections: [] }, true)
         return
       }
 
       // Migrate v1 → v2 once. Preserve invalid data before starting clean.
+      let existing: Partial<LibraryFile> | null
       try {
-        const existing = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as
-          | Partial<LibraryFile>
-          | null
-        if (!existing || !Array.isArray(existing.tools)) {
-          this.backupCorruptLibrary()
-          this.write({ version: 3, tools: [], collections: [] })
-        } else if (existing.version !== 3) {
-          this.write(this.read())
-        }
-      } catch {
+        existing = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as Partial<LibraryFile> | null
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err
         this.backupCorruptLibrary()
-        this.write({ version: 3, tools: [], collections: [] })
+        this.write({ version: 3, tools: [], collections: [] }, true)
+        return
       }
+      if (typeof existing?.version === 'number' && existing.version > 3) throw new FutureLibraryVersionError()
+      if (!existing || !Array.isArray(existing.tools)) {
+        this.backupCorruptLibrary()
+        this.write({ version: 3, tools: [], collections: [] }, true)
+        return
+      }
+      // A validation or filesystem failure is not evidence that valid data
+      // should be replaced. Keep the original file and fail closed.
+      const clean = this.read()
+      if (existing.version !== 3 || JSON.stringify(existing) !== JSON.stringify(clean)) this.write(clean)
     })
+  }
+
+  recoveryNotice(): string | null {
+    const file = path.join(this.root, 'library-recovery.json')
+    if (!fs.existsSync(file)) return null
+    try {
+      const value = JSON.parse(fs.readFileSync(file, 'utf8'))
+      return `${value.invalidRecords} invalid library record(s) were set aside. Valid tools are available. The original data is preserved at ${value.backupPath}. Repair that backup before restoring records.`
+    } catch { return 'Shelf found a library recovery record. Check the application data folder before editing.' }
   }
 
   list(): Tool[] {
@@ -142,61 +157,77 @@ export class LibraryStore {
   }
 
   save(input: Tool): Tool {
+    return withFileLockSync(this.filePath, () => this.saveLocked(input))
+  }
+
+  patch(id: string, changes: Partial<Tool>, expectedRevision?: string): Tool {
     return withFileLockSync(this.filePath, () => {
-      const data = this.read()
-      const now = new Date().toISOString()
-      const existing = data.tools.findIndex((t) => t.id === input.id)
-
-      const nextCapabilities = normalizeCapabilities(input.capabilities)
-      const previous = existing >= 0 ? data.tools[existing] : undefined
-      // Stamp only real capability changes — renames, icon edits, port
-      // reassigns and launches must not re-qualify a tool for suggestions.
-      const capabilitiesChanged =
-        !previous || !sameCapabilitySet(previous.capabilities, nextCapabilities)
-
-      const cleanName = stripInvisibleChars(input.name).trim()
-      // Refuse rather than silently minting another "Untitled": a name made
-      // only of invisible characters would never match itself on the next
-      // lookup, so each call would add one more identical-looking tool.
-      if (!cleanName) throw new Error('Tool name is required.')
-
-      const tool: Tool = {
-        ...input,
-        id: input.id || randomUUID(),
-        name: cleanName,
-        tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
-        capabilities: normalizeCapabilities(input.capabilities),
-        agentAccess: normalizeAgentAccess(
-          (input.agentAccess || []).map((access) => ({
-            ...access,
-            id: access.id || randomUUID(),
-          })),
-        ),
-        favorite: Boolean(input.favorite),
-        launchCommand: input.launchCommand.trim(),
-        stopCommand: input.stopCommand?.trim() || undefined,
-        description: input.description?.trim() || undefined,
-        projectPath: input.projectPath?.trim() || undefined,
-        url: input.url?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-        iconPath: input.iconPath?.trim() || undefined,
-        iconLucide: input.iconLucide?.trim() || undefined,
-        iconColor: input.iconColor?.trim() || undefined,
-        iconBackground: input.iconBackground?.trim() || undefined,
-        source: normalizeSource(input.source),
-        updatedAt: now,
-        createdAt: previous ? previous.createdAt : input.createdAt || now,
-        capabilitiesUpdatedAt: capabilitiesChanged
-          ? now
-          : previous?.capabilitiesUpdatedAt || previous?.createdAt,
-      }
-
-      if (existing >= 0) data.tools[existing] = tool
-      else data.tools.push(tool)
-
-      this.write(data)
-      return tool
+      const current = this.get(id)
+      if (!current) throw new Error('Tool no longer exists.')
+      if (expectedRevision && current.updatedAt !== expectedRevision) throw new Error('Tool configuration changed during launch. Review the latest command and try again.')
+      return this.saveLocked({ ...current, ...changes, id, updatedAt: current.updatedAt })
     })
+  }
+
+  private saveLocked(input: Tool): Tool {
+    storedToolSchema.parse(input)
+    const data = this.read()
+    const previousTime = Date.parse(data.tools.find((t) => t.id === input.id)?.updatedAt || '')
+    const now = new Date(Math.max(Date.now(), Number.isFinite(previousTime) ? previousTime + 1 : 0)).toISOString()
+    const existing = data.tools.findIndex((t) => t.id === input.id)
+
+    const nextCapabilities = normalizeCapabilities(input.capabilities)
+    const previous = existing >= 0 ? data.tools[existing] : undefined
+    if (previous && input.updatedAt !== previous.updatedAt) {
+      throw new Error('This tool changed in another window or agent. Your edits are still here. Reload the latest version before saving.')
+    }
+    // Stamp only real capability changes — renames, icon edits, port
+    // reassigns and launches must not re-qualify a tool for suggestions.
+    const capabilitiesChanged =
+      !previous || !sameCapabilitySet(previous.capabilities, nextCapabilities)
+
+    const cleanName = stripInvisibleChars(input.name).trim()
+    // Refuse rather than silently minting another "Untitled": a name made
+    // only of invisible characters would never match itself on the next
+    // lookup, so each call would add one more identical-looking tool.
+    if (!cleanName) throw new Error('Tool name is required.')
+
+    const tool: Tool = {
+      ...input,
+      id: input.id || randomUUID(),
+      name: cleanName,
+      tags: (input.tags || []).map((t) => t.trim()).filter(Boolean),
+      capabilities: normalizeCapabilities(input.capabilities),
+      agentAccess: normalizeAgentAccess(
+        (input.agentAccess || []).map((access) => ({
+          ...access,
+          id: access.id || randomUUID(),
+        })),
+      ),
+      favorite: Boolean(input.favorite),
+      launchCommand: input.launchCommand.trim(),
+      stopCommand: input.stopCommand?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+      projectPath: input.projectPath?.trim() || undefined,
+      url: input.url?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      iconPath: input.iconPath?.trim() || undefined,
+      iconLucide: input.iconLucide?.trim() || undefined,
+      iconColor: input.iconColor?.trim() || undefined,
+      iconBackground: input.iconBackground?.trim() || undefined,
+      source: normalizeSource(input.source),
+      updatedAt: now,
+      createdAt: previous ? previous.createdAt : input.createdAt || now,
+      capabilitiesUpdatedAt: capabilitiesChanged
+        ? now
+        : previous?.capabilitiesUpdatedAt || previous?.createdAt,
+    }
+
+    if (existing >= 0) data.tools[existing] = tool
+    else data.tools.push(tool)
+
+    this.write(data)
+    return tool
   }
 
   delete(id: string): void {
@@ -218,7 +249,6 @@ export class LibraryStore {
       const tool = data.tools.find((t) => t.id === id)
       if (!tool) return
       tool.lastLaunchedAt = new Date().toISOString()
-      tool.updatedAt = tool.lastLaunchedAt
       this.write(data)
     })
   }
@@ -406,19 +436,33 @@ export class LibraryStore {
       const raw = fs.readFileSync(this.filePath, 'utf8')
       const parsed = JSON.parse(raw) as Partial<LibraryFile> & { version?: number }
       if (!parsed.tools || !Array.isArray(parsed.tools)) throw new Error('missing tools array')
+      if (typeof parsed.version === 'number' && parsed.version > 3) throw new FutureLibraryVersionError()
       const collections = Array.isArray(parsed.collections) ? parsed.collections : []
+      const validTools = parsed.tools.filter((item) => storedToolSchema.safeParse(item).success)
+      const validCollections = collections.filter((item) => storedCollectionSchema.safeParse(item).success)
+      if (validTools.length !== parsed.tools.length || validCollections.length !== collections.length) {
+        const hash = createHash('sha256').update(raw).digest('hex').slice(0, 16)
+        const backupPath = path.join(this.root, `library.quarantine-${hash}.json`)
+        if (!fs.existsSync(backupPath)) {
+          atomicWriteFileSync(backupPath, raw)
+          atomicWriteFileSync(path.join(this.root, 'library-recovery.json'), JSON.stringify({
+            backupPath, invalidRecords: parsed.tools.length - validTools.length + collections.length - validCollections.length,
+          }))
+        }
+      }
       return {
         version: 3,
-        tools: parsed.tools.map(normalizeTool),
-        collections: collections.map(normalizeCollection),
+        tools: validTools.map(normalizeTool),
+        collections: validCollections.map(normalizeCollection),
       }
     } catch (err) {
+      if (err instanceof FutureLibraryVersionError) throw err
       const detail = err instanceof Error ? err.message : String(err)
       throw new Error(`Shelf could not read library.json: ${detail}`)
     }
   }
 
-  private write(data: LibraryFile): void {
+  private write(data: LibraryFile, recoveredCorrupt = false): void {
     const normalized: LibraryFile = {
       version: 3,
       tools: data.tools.map(normalizeTool),
@@ -426,19 +470,25 @@ export class LibraryStore {
     }
 
     // Backup once when upgrading an existing v1 (or unknown) file.
+    if (recoveredCorrupt) {
+      atomicWriteFileSync(this.filePath, JSON.stringify(normalized, null, 2))
+      return
+    }
     if (fs.existsSync(this.filePath)) {
       try {
         const existing = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as {
           version?: number
         }
+        if (typeof existing.version === 'number' && existing.version > 3) throw new FutureLibraryVersionError()
         if (existing.version !== 3) {
           const stamp = new Date().toISOString().replace(/[:.]/g, '-')
           const fromVersion = Number.isInteger(existing.version) ? existing.version : 'legacy'
           const backup = path.join(this.root, `library.v${fromVersion}-backup-${stamp}.json`)
-          fs.copyFileSync(this.filePath, backup)
+          atomicWriteFileSync(backup, fs.readFileSync(this.filePath, 'utf8'))
         }
-      } catch {
-        // ignore backup failures; write still proceeds
+      } catch (err) {
+        if (err instanceof FutureLibraryVersionError) throw err
+        throw new Error('Shelf could not preserve the previous library before writing. No changes were saved.')
       }
     }
 
@@ -448,7 +498,7 @@ export class LibraryStore {
   private backupCorruptLibrary(): void {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backup = path.join(this.root, `library.corrupt-backup-${stamp}.json`)
-    fs.copyFileSync(this.filePath, backup)
+    atomicWriteFileSync(backup, fs.readFileSync(this.filePath, 'utf8'))
   }
 }
 

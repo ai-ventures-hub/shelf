@@ -48,11 +48,16 @@ export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean
   if (!open) return null
 
   async function apply(mode: 'fast_forward' | 'take_theirs', target: string, setupCommands: string[]) {
+    if (phase.kind !== 'checked' || !('ref' in phase.check) || !('workingTree' in phase.check)) return
+    const reviewed = phase.check
     setPhase({ kind: 'applying' })
     try {
       const result = await window.shelf.applyToolUpdate(tool.id, {
         mode,
         target,
+        expectedRef: reviewed.ref,
+        expectedTargetRef: reviewed.remoteRef,
+        expectedWorkingTree: reviewed.workingTree,
         runSetup: runSetup && setupCommands.length > 0,
         setupCommands: runSetup ? setupCommands : [],
       })
@@ -147,6 +152,20 @@ export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean
           </div>
         ) : null}
 
+        {phase.kind === 'checked' && phase.check.state === 'recovery_required' && <div className="warning-card" role="alert">
+          <p>{phase.check.message}</p>
+          <button className="btn btn-primary" type="button" onClick={async () => {
+            if (phase.kind !== 'checked' || phase.check.state !== 'recovery_required') return
+            const input = phase.check.input
+            setPhase({ kind: 'applying' })
+            try {
+              const result = await window.shelf.applyToolUpdate(tool.id, input)
+              await refresh()
+              setPhase({ kind: 'applied', result })
+            } catch (err) { setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) }) }
+          }}>Resume remaining update steps</button>
+        </div>}
+        {phase.kind === 'applied' && phase.result.restoreRef && <p className="consent-value">Local restore point: <code>{phase.result.restoreRef}</code></p>}
         <div className="consent-actions">
           {phase.kind === 'checked' && phase.check.state === 'updates_available' ? (
             <>

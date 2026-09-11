@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
 import { LogPanel } from '../components/LogPanel'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
@@ -50,6 +51,7 @@ export function ToolDetailPage() {
   const [logs, setLogs] = useState<LogLine[]>([])
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [reportPreview, setReportPreview] = useState<string | null>(null)
   const [reportCopied, setReportCopied] = useState(false)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
   const [readiness, setReadiness] = useState<ToolReadiness | null>(null)
@@ -73,14 +75,26 @@ export function ToolDetailPage() {
   useEffect(() => {
     if (!id) return
     let active = true
-    void getLogs(id).then((lines) => {
-      if (active) setLogs(lines)
-    })
+    setLogs([])
+    let fetching = false
+    const refreshLogs = async () => {
+      if (fetching) return
+      fetching = true
+      try {
+        const lines = await getLogs(id)
+        if (active) setLogs(lines.slice(-3000))
+      } catch {
+        if (active) setActionError('Could not read shared logs. Shelf will retry.')
+      } finally { fetching = false }
+    }
+    void refreshLogs()
+    const timer = window.setInterval(() => { void refreshLogs() }, 1000)
     const off = subscribeLogs(id, (line) => {
-      setLogs((prev) => [...prev, line])
+      if (active) setLogs((prev) => [...prev.filter((old) => !line.runId || !old.runId || old.runId === line.runId), line].slice(-3000))
     })
     return () => {
       active = false
+      window.clearInterval(timer)
       off()
     }
   }, [id, getLogs, subscribeLogs])
@@ -127,9 +141,9 @@ export function ToolDetailPage() {
   // Narrowed after the guard so nested handlers keep a definite Tool.
   const current = tool
   const toolId = id
-  const canStop = status === 'running' || status === 'starting'
+  const canStop = status === 'running' || status === 'starting' || status === 'stopping' || (status === 'error' && Boolean(state?.pid))
   const canStart = status === 'stopped' || status === 'error'
-  const showOpenUrlButton = canStop && Boolean(current.url)
+  const showOpenUrlButton = status === 'running' && Boolean(current.url)
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -387,11 +401,8 @@ export function ToolDetailPage() {
               onClick={() => {
                 void window.shelf.getErrorReport(toolId).then((report) => {
                   if (!report) return
-                  void navigator.clipboard.writeText(report).then(() => {
-                    setReportCopied(true)
-                    window.setTimeout(() => setReportCopied(false), 2400)
-                  })
-                })
+                  setReportPreview(report)
+                }).catch(() => setActionError('Could not prepare the diagnostic report. Try again.'))
               }}
             >
               {reportCopied ? 'Copied' : 'Copy report for your AI tool'}
@@ -457,7 +468,7 @@ export function ToolDetailPage() {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={busy}
+            disabled={status === 'stopping' || (busy && status !== 'starting')}
             onClick={() => void run(() => stopTool(toolId))}
           >
             Stop
@@ -688,6 +699,10 @@ export function ToolDetailPage() {
           />
         </div>
       </section>
+      <DiagnosticReportDialog report={reportPreview} onClose={() => setReportPreview(null)} onCopied={() => {
+        setReportCopied(true)
+        window.setTimeout(() => setReportCopied(false), 2400)
+      }} />
     </>
   )
 }

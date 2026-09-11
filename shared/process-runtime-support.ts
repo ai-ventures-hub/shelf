@@ -8,7 +8,9 @@ import {
 import { sniffLocalUrlFromText } from './ports'
 import type { ReceiptStore } from './receipt-store'
 import type { LogLine, RunReceipt, ToolRuntimeState } from './types'
-import { maskSecrets } from './types'
+import { randomUUID } from 'node:crypto'
+import { RunLogStore } from './run-log-store'
+import { maskSecrets, sanitizeOutput } from './types'
 
 const MAX_LOG_LINES = 3000
 
@@ -18,15 +20,30 @@ export type ProcessEventSink = (channel: string, payload: unknown) => void
 const MAX_RESIDUAL_CHARS = 8192
 
 export class ProcessRuntimeSupport {
+  private readonly failedLogWrites = new Set<string>()
+  private readonly knownSecrets = new Map<string, string[]>()
+  private readonly runIds = new Map<string, string>()
   private readonly states = new Map<string, ToolRuntimeState>()
   private readonly logs = new Map<string, LogLine[]>()
   /** Trailing partial line per toolId+stream, held until its newline arrives. */
+  private readonly discardingLine = new Set<string>()
   private readonly residual = new Map<string, string>()
 
   constructor(
     private readonly onEvent?: ProcessEventSink,
     private readonly receipts?: ReceiptStore,
+    private readonly secretValues: (toolId: string) => string[] = () => [],
+    private readonly sharedLogs?: RunLogStore,
   ) {}
+
+  private secretsFor(toolId: string): string[] {
+    const known = this.knownSecrets.get(toolId) || []
+    try {
+      const values = [...new Set([...known, ...this.secretValues(toolId)])]
+      this.knownSecrets.set(toolId, values)
+      return values
+    } catch { return known }
+  }
 
   peekState(toolId: string): ToolRuntimeState {
     return (
@@ -43,10 +60,17 @@ export class ProcessRuntimeSupport {
   }
 
   getLogs(toolId: string): LogLine[] {
-    return this.logs.get(toolId) || []
+    try {
+      if (!this.failedLogWrites.has(toolId)) return this.sharedLogs?.read(toolId, this.secretsFor(toolId)) || this.logs.get(toolId) || []
+    } catch { /* preserve this host's evidence when shared storage is unavailable */ }
+    return [...(this.logs.get(toolId) || []).slice(-MAX_LOG_LINES + 1), {
+      toolId, stream: 'system', at: new Date().toISOString(),
+      text: 'Shared log storage is unavailable. Showing recent output retained by this host.',
+    }]
   }
 
   clearLogs(toolId: string): void {
+    if (this.sharedLogs) this.runIds.set(toolId, this.sharedLogs.begin(toolId))
     this.logs.set(toolId, [])
   }
 
@@ -61,6 +85,12 @@ export class ProcessRuntimeSupport {
       return
     }
     const key = `${toolId}\u0000${stream}`
+    if (this.discardingLine.has(key)) {
+      const boundary = chunk.search(/[\r\n]/)
+      if (boundary < 0) return
+      chunk = chunk.slice(boundary + 1)
+      this.discardingLine.delete(key)
+    }
     // Bare \r is a line break too: spinner-style CLIs rewrite their ready
     // line with \r, and holding it as 'partial' would blind the ready-URL
     // sniffer until process exit.
@@ -68,10 +98,10 @@ export class ProcessRuntimeSupport {
     const lines = combined.split('\n')
     const partial = lines.pop() ?? ''
     if (partial.length > MAX_RESIDUAL_CHARS) {
-      // Pathological no-newline stream: commit the oversized residue. Known
-      // limitation: a KEY=value straddling this forced boundary is masked as
-      // two independent fragments (requires a single >8KB line mid-secret).
-      lines.push(partial)
+      // Drop the entire oversized line, including future chunks up to its
+      // newline, so a secret cannot leak across a forced flush boundary.
+      lines.push('[Oversized output line omitted]')
+      this.discardingLine.add(key)
       this.residual.delete(key)
     } else if (partial) {
       this.residual.set(key, partial)
@@ -95,32 +125,49 @@ export class ProcessRuntimeSupport {
   /** Drop everything held for a tool — call when its record is deleted. */
   forget(toolId: string): void {
     this.flushLogs(toolId)
+    this.sharedLogs?.forget(toolId)
+    this.failedLogWrites.delete(toolId)
+    this.runIds.delete(toolId)
+    this.knownSecrets.delete(toolId)
     this.states.delete(toolId)
     this.logs.delete(toolId)
     for (const stream of ['stdout', 'stderr'] as const) {
       this.residual.delete(`${toolId}\u0000${stream}`)
+      this.discardingLine.delete(`${toolId}\u0000${stream}`)
     }
   }
 
   private commitLines(toolId: string, stream: LogLine['stream'], lines: string[]): void {
     const bucket = this.logs.get(toolId) || []
     const at = new Date().toISOString()
+    const committed: LogLine[] = []
     for (const text of lines) {
       if (!text) continue
       const entry: LogLine = {
+        id: randomUUID(),
+        runId: this.runIds.get(toolId) || this.sharedLogs?.currentRun(toolId),
         toolId,
         stream,
-        text: maskSecrets(text),
+        text: text.length > MAX_RESIDUAL_CHARS ? '[Oversized output line omitted]' : maskSecrets(text, this.secretsFor(toolId)),
         at,
       }
+      committed.push(entry)
       bucket.push(entry)
       this.emit('logs:line', entry)
+    }
+    try {
+      this.sharedLogs?.append(toolId, committed, this.runIds.get(toolId))
+      this.failedLogWrites.delete(toolId)
+    } catch {
+      if (!this.failedLogWrites.has(toolId)) this.emit('logs:line', { toolId, stream: 'system', at, text: 'Shared log storage is unavailable. This host still retains recent output.' })
+      this.failedLogWrites.add(toolId)
     }
     while (bucket.length > MAX_LOG_LINES) bucket.shift()
     this.logs.set(toolId, bucket)
   }
 
   setState(toolId: string, state: ToolRuntimeState): ToolRuntimeState {
+    state = sanitizeOutput(state, this.secretsFor(toolId))
     this.states.set(toolId, state)
     this.emit('process:update', state)
     return state
@@ -129,7 +176,7 @@ export class ProcessRuntimeSupport {
   beginReceipt(input: Parameters<ReceiptStore['begin']>[0]): RunReceipt | undefined {
     if (!this.receipts) return undefined
     try {
-      const receipt = this.receipts.begin(input)
+      const receipt = this.receipts.begin(sanitizeOutput({ ...input, id: this.runIds.get(input.toolId) }, this.secretsFor(input.toolId)))
       this.emit('receipts:update', receipt)
       return receipt
     } catch (err) {
@@ -145,7 +192,7 @@ export class ProcessRuntimeSupport {
   ): void {
     if (!id || !this.receipts) return
     try {
-      const receipt = this.receipts.markRunning(id, patch)
+      const receipt = this.receipts.markRunning(id, sanitizeOutput(patch, this.secretsFor(this.receipts.get(id)?.toolId || '')))
       if (receipt) this.emit('receipts:update', receipt)
     } catch {
       // Receipt persistence is secondary to keeping the process supervised.
@@ -158,7 +205,7 @@ export class ProcessRuntimeSupport {
   ): void {
     if (!id || !this.receipts) return
     try {
-      const receipt = this.receipts.end(id, input)
+      const receipt = this.receipts.end(id, sanitizeOutput(input, this.secretsFor(this.receipts.get(id)?.toolId || '')))
       if (receipt) this.emit('receipts:update', receipt)
     } catch {
       // Receipt persistence is secondary to accurate process state.
@@ -168,7 +215,7 @@ export class ProcessRuntimeSupport {
   emitFailedReceipt(input: Parameters<ReceiptStore['recordFailed']>[0]): void {
     if (!this.receipts) return
     try {
-      const receipt = this.receipts.recordFailed(input)
+      const receipt = this.receipts.recordFailed(sanitizeOutput(input, this.secretsFor(input.toolId)))
       this.emit('receipts:update', receipt)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

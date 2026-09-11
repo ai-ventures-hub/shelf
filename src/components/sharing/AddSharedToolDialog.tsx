@@ -28,6 +28,7 @@ type Phase =
 
 interface AddSharedToolDialogProps {
   open: boolean
+  resumeStageId?: string
   initialRepo?: string
   initialBundlePath?: string
   /** Fetch the repo on open instead of waiting for a Fetch click (catalogs). */
@@ -41,6 +42,7 @@ function sourceLabel(stage: StagedShareView): string {
 
 export function AddSharedToolDialog({
   open,
+  resumeStageId,
   initialRepo,
   initialBundlePath,
   autoFetch,
@@ -85,7 +87,15 @@ export function AddSharedToolDialog({
     setEnv({})
     setRepo(initialRepo || '')
     setPhase({ kind: 'source' })
-    if (initialBundlePath) void fetchSource({ kind: 'bundle', bundlePath: initialBundlePath })
+    if (resumeStageId) {
+      const gen = genRef.current
+      void window.shelf.resumeImport(resumeStageId).then((stage) => {
+        if (gen !== genRef.current) return
+        stageRef.current = stage.stageId
+        setPhase({ kind: 'consent', stage, destination: stage.destination })
+      }).catch((err) => setError({ ok: false, code: 'import_incomplete', message: String(err) }))
+    }
+    else if (initialBundlePath) void fetchSource({ kind: 'bundle', bundlePath: initialBundlePath })
     // Install from a Team Tools catalog: the user subscribed to that catalog
     // themselves, so the Install click is the intent the Fetch click exists to
     // capture. The consent sheet below is still the only thing that can
@@ -94,7 +104,7 @@ export function AddSharedToolDialog({
     else if (initialRepo) window.setTimeout(() => fetchButtonRef.current?.focus(), 0)
     else window.setTimeout(() => inputRef.current?.focus(), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialRepo, initialBundlePath, autoFetch])
+  }, [open, initialRepo, initialBundlePath, autoFetch, resumeStageId])
 
   async function fetchSource(source: { kind: 'git'; repo: string } | { kind: 'bundle'; bundlePath: string }) {
     const gen = genRef.current
@@ -170,7 +180,7 @@ export function AddSharedToolDialog({
     if (gen !== genRef.current) return
     if (!outcome.ok) {
       setError(outcome)
-      if (outcome.code === 'destination_invalid') {
+      if (outcome.code === 'destination_invalid' || outcome.code === 'import_incomplete') {
         setPhase({ kind: 'consent', stage, destination })
       } else {
         stageRef.current = null

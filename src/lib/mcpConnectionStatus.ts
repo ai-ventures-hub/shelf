@@ -8,6 +8,7 @@ export type McpClientKind = 'claude' | 'claude-code' | 'cursor' | 'codex'
 /** Product-facing connection states shown in the UI. */
 export type McpUiState =
   | 'connected'
+  | 'configured'
   | 'update'
   | 'disconnected'
   | 'restart'
@@ -30,6 +31,7 @@ export interface McpClientSnapshot {
 }
 
 interface RawStatus {
+  lastSeenAt?: string
   connected: boolean
   matches: boolean
   serverOk: boolean
@@ -91,7 +93,7 @@ export function deriveMcpUiState(
   if (!status.nodeOk) {
     return {
       state: 'error',
-      detail: 'Node.js was not found on this Mac.',
+      detail: status.message || 'The configured executable is unavailable.',
       badge: 'Node needed',
       tone: 'danger',
       primaryLabel: 'Retry',
@@ -136,11 +138,14 @@ export function deriveMcpUiState(
   }
 
   if (status.connected && status.matches) {
+    const recent = status.lastSeenAt && Date.now() - Date.parse(status.lastSeenAt) < 5 * 60_000
     return {
-      state: 'connected',
-      detail: 'Shelf is available to this client.',
-      badge: 'Connected',
-      tone: 'success',
+      state: recent ? 'connected' : 'configured',
+      detail: status.lastSeenAt
+        ? `Last Shelf request: ${new Date(status.lastSeenAt).toLocaleString()}.`
+        : 'Configuration is installed. Ask this client to list your Shelf tools to verify it.',
+      badge: recent ? 'Client seen' : 'Configured',
+      tone: recent ? 'success' : 'neutral',
       primaryLabel: null,
       primaryKind: null,
     }
@@ -171,10 +176,7 @@ export function buildClientSnapshot(
           : { name: 'OpenAI Codex', mark: 'Cx' }
 
   const derived = deriveMcpUiState(status, opts)
-  const detail =
-    derived.state === 'connected'
-      ? `Shelf is available in ${meta.name}.`
-      : derived.detail
+  const detail = derived.detail
 
   // Claude Code is a terminal app: no app to reopen — a new session picks
   // up the config, so the restart state is informational only.

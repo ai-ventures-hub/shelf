@@ -3,6 +3,8 @@
  * Safely merges mcpServers.shelf into claude_desktop_config.json without wiping other servers.
  */
 import fs from 'node:fs'
+import { configuredCommandExists } from './client-observation'
+import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
 import { mcpPathMigrationHint } from './mcp-server-path'
@@ -75,11 +77,9 @@ export function readClaudeDesktopConfig(configPath: string): ClaudeDesktopConfig
   }
 }
 
-function writeAtomic(configPath: string, data: ClaudeDesktopConfigFile): void {
+function writeAtomic(configPath: string, data: ClaudeDesktopConfigFile, previousText: string): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  const tmp = `${configPath}.tmp`
-  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
-  fs.renameSync(tmp, configPath)
+  replaceClientConfig(configPath, `${JSON.stringify(data, null, 2)}\n`, previousText)
 }
 
 function shelfEntry(
@@ -148,11 +148,12 @@ export async function getClaudeDesktopStatus(opts: {
 
   if (configExists) {
     try {
-      const config = readClaudeDesktopConfig(configPath)
+      const previousText = fs.readFileSync(configPath, 'utf8')
+  const config = readClaudeDesktopConfig(configPath)
       const entry = config.mcpServers?.[CLAUDE_MCP_SERVER_KEY]
       if (entry) {
         connected = true
-        matches = entryMatches(entry, opts.serverPath)
+        matches = entryMatches(entry, opts.serverPath) && configuredCommandExists((entry as { command?: unknown }).command) && (entry as { disabled?: boolean; enabled?: boolean }).disabled !== true && (entry as { enabled?: boolean }).enabled !== false
         if (!matches) {
           const configured =
             entry && typeof entry === 'object' && Array.isArray((entry as ClaudeMcpServerEntry).args)
@@ -227,13 +228,7 @@ export async function connectClaudeDesktop(opts: {
   const next: ClaudeDesktopConfigFile = { ...config, mcpServers }
   const nextText = `${JSON.stringify(next, null, 2)}\n`
 
-  let backupPath: string | undefined
-  if (existed && previousText.trim() !== nextText.trim()) {
-    backupPath = `${configPath}.shelf-backup`
-    fs.writeFileSync(backupPath, previousText, 'utf8')
-  }
-
-  writeAtomic(configPath, next)
+  const backupPath = replaceClientConfig(configPath, nextText, previousText)
 
   const status = await getClaudeDesktopStatus({
     serverPath: opts.serverPath,
@@ -260,10 +255,11 @@ export async function disconnectClaudeDesktop(opts: {
     return { status }
   }
 
+  const previousText = fs.readFileSync(configPath, 'utf8')
   const config = readClaudeDesktopConfig(configPath)
   if (config.mcpServers && CLAUDE_MCP_SERVER_KEY in config.mcpServers) {
     delete config.mcpServers[CLAUDE_MCP_SERVER_KEY]
-    writeAtomic(configPath, config)
+    writeAtomic(configPath, config, previousText)
   }
 
   const status = await getClaudeDesktopStatus({

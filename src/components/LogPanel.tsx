@@ -12,7 +12,7 @@ export function LogPanel({ lines }: { lines: LogLine[] }) {
     <div className="log-panel" role="log" aria-live="polite" aria-relevant="additions">
       {lines.length === 0 ? (
         <p className="log-line" data-stream="system">
-          No output yet. Launch the tool to stream logs here.
+          No output has been recorded for this run. Tools started before this Shelf update may not have shared logs.
         </p>
       ) : (
         lines.map((line, index) => (

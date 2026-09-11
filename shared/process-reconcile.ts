@@ -34,24 +34,24 @@ export async function reconcileExternalTool(
 
   const current = opts.runtime.peekState(toolId)
   // Don't interrupt an in-flight local start.
-  if (current.status === 'starting') return
+  if (current.status === 'starting' && current.origin === 'local') return
 
   // Portless tools: a live receipt from another Shelf process is the proof.
   if (!tool.port) {
     const receipt = opts.findActiveReceipt(toolId)
     if (receipt?.pid) {
-      if (current.status !== 'running' || current.pid !== receipt.pid) {
+      if (current.status !== (receipt.outcome === 'starting' ? 'starting' : 'running') || current.pid !== receipt.pid) {
         opts.runtime.setState(toolId, {
           toolId,
-          status: 'running',
+          status: receipt.outcome === 'starting' ? 'starting' : 'running',
           pid: receipt.pid,
-          message: `Running · pid ${receipt.pid} (external)`,
+          message: `${receipt.outcome === 'starting' ? 'Starting' : 'Process running'} · pid ${receipt.pid} (external)`,
           port: receipt.port,
           origin: 'external',
           startedBy: receipt.startedBy,
         })
       }
-    } else if (current.status === 'running' && current.origin === 'external') {
+    } else if ((current.status === 'running' || current.status === 'starting') && current.origin === 'external') {
       opts.runtime.setState(toolId, {
         toolId,
         status: 'stopped',
@@ -65,7 +65,7 @@ export async function reconcileExternalTool(
   if (occupants.length > 0) {
     const owner = await opts.trustedExternalOwner(toolId, tool.port, occupants)
     if (!owner) {
-      if (current.status === 'running' && current.origin === 'external') {
+      if ((current.status === 'running' || current.status === 'starting') && current.origin === 'external') {
         opts.runtime.setState(toolId, {
           toolId,
           status: 'stopped',
@@ -89,7 +89,7 @@ export async function reconcileExternalTool(
   }
 
   // Clear stale external-running badges when the listener is gone.
-  if (current.status === 'running' && current.origin === 'external') {
+  if ((current.status === 'running' || current.status === 'starting') && current.origin === 'external') {
     opts.runtime.setState(toolId, {
       toolId,
       status: 'stopped',
