@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Local tool library for macOS — launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",
@@ -64,7 +64,7 @@
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
     "electron": "^44.3.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "26.16.1",
     "esbuild": "^0.28.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
