@@ -1,18 +1,7 @@
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
+import { formatRelativeTime } from '../lib/relativeTime'
 import type { ReceiptOutcome, RunReceipt } from '../types'
-
-function formatRelative(iso?: string): string {
-  if (!iso) return '—'
-  const then = Date.parse(iso)
-  if (!Number.isFinite(then)) return '—'
-  const mins = Math.round((Date.now() - then) / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
-}
 
 function formatDuration(ms?: number): string {
   if (ms == null || !Number.isFinite(ms)) return '—'
@@ -151,7 +140,7 @@ export function ReceiptHistory({
                   </Link>
                 ) : null}
                 <span className="receipt-when" title={r.startedAt}>
-                  {formatRelative(r.startedAt)}
+                  {formatRelativeTime(r.startedAt, '—')}
                 </span>
                 <span className="receipt-duration">{formatDuration(r.durationMs)}</span>
                 {r.port ? <span className="receipt-port">:{r.port}</span> : null}

@@ -1,77 +1,22 @@
+export type { BootstrapResult, BootstrapStep } from './contracts'
+import type { BootstrapResult, BootstrapStep } from './contracts'
 /**
  * One-time project setup (dependency install) with explicit caller consent.
  * detectBootstrapNeeds is pure; runBootstrap streams output, enforces a hard
  * timeout, never uses sudo, and is cancellable. The engine NEVER installs
  * silently — the GUI asks the user, the MCP tool requires runSetup: true.
  */
-import fs from 'node:fs'
-import path from 'node:path'
 import { spawnLoginShell, terminateProcess } from './process-lifecycle'
-
-export interface BootstrapStep {
-  /** Shell command run from the project folder (login zsh, no sudo). */
-  command: string
-  /** Plain-language description shown in the consent prompt. */
-  label: string
-}
-
-export interface BootstrapResult {
-  ok: boolean
-  exitCode: number | null
-  /** 'timeout' | 'cancelled' | undefined on natural exit. */
-  endedBy?: 'timeout' | 'cancelled'
-}
+import { projectInstallCommands, readProjectFacts, type ProjectFacts } from './project-facts'
 
 export const BOOTSTRAP_TIMEOUT_MS = 600_000
 
-/** Dependency-less package.json (fixtures, tiny scripts) needs no install. */
-function declaresNodeDeps(projectPath: string): boolean {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'),
-    ) as { dependencies?: object; devDependencies?: object }
-    return (
-      Object.keys(pkg.dependencies || {}).length > 0 ||
-      Object.keys(pkg.devDependencies || {}).length > 0
-    )
-  } catch {
-    return false
-  }
-}
-
-/**
- * What (if anything) this project needs before first launch.
- * v1 scope: Node package install by lockfile, Python venv + requirements.
- */
-export function detectBootstrapNeeds(projectPath: string): BootstrapStep[] {
-  const has = (rel: string) => fs.existsSync(path.join(projectPath, rel))
-  const steps: BootstrapStep[] = []
-
-  if (has('package.json') && !has('node_modules') && declaresNodeDeps(projectPath)) {
-    const manager = has('pnpm-lock.yaml')
-      ? 'pnpm'
-      : has('yarn.lock')
-        ? 'yarn'
-        : has('bun.lockb') || has('bun.lock')
-          ? 'bun'
-          : 'npm'
-    steps.push({
-      command: `${manager} install`,
-      label: 'Install this project’s packages',
-    })
-  }
-
-  const declaresPython =
-    has('requirements.txt') || has('pyproject.toml') || has('Pipfile')
-  if (declaresPython && !has('.venv') && has('requirements.txt')) {
-    steps.push({
-      command:
-        'python3 -m venv .venv && .venv/bin/pip install -r requirements.txt',
-      label: 'Set up this project’s Python environment',
-    })
-  }
-
-  return steps
+/** Missing setup steps use the same project facts as import and preflight. */
+export function detectBootstrapNeeds(projectPath: string, observed?: ProjectFacts): BootstrapStep[] {
+  return projectInstallCommands(observed ?? readProjectFacts(projectPath), 'missing').map((command) => ({
+    command,
+    label: command.includes('requirements.txt') ? 'Set up this project’s Python environment' : 'Install this project’s packages',
+  }))
 }
 
 /**

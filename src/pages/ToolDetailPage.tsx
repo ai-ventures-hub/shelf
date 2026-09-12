@@ -1,3 +1,4 @@
+import { Share2, Sparkles, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
@@ -13,22 +14,8 @@ import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
 import { friendlyLaunchError } from '../lib/launchErrorCopy'
-import { Share2, Sparkles, Star } from 'lucide-react'
+import { formatRelativeTime } from '../lib/relativeTime'
 import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
-
-function formatRelative(iso?: string): string {
-  if (!iso) return 'Unknown'
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return 'Unknown'
-  const delta = Date.now() - then
-  const mins = Math.round(delta / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  return `${days}d ago`
-}
 
 export function ToolDetailPage() {
   const { id } = useParams()
@@ -326,13 +313,13 @@ export function ToolDetailPage() {
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             {state?.message ||
               (current.lastLaunchedAt
-                ? `Stopped · last launch ${formatRelative(current.lastLaunchedAt)}`
+                ? `Stopped · last launch ${formatRelativeTime(current.lastLaunchedAt)}`
                 : 'Stopped · never launched')}
           </p>
           {state?.pid ? (
             <p style={{ margin: 0, color: 'var(--subtle)', fontSize: '0.82rem' }}>
               pid {state.pid}
-              {state.startedAt ? ` · started ${formatRelative(state.startedAt)}` : ''}
+              {state.startedAt ? ` · started ${formatRelativeTime(state.startedAt)}` : ''}
             </p>
           ) : null}
         </div>
@@ -625,8 +612,8 @@ export function ToolDetailPage() {
                   )}
                 </p>
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--subtle)', fontSize: '0.8rem' }}>
-                  Added {formatRelative(tool.source.addedAt)}
-                  {tool.source.updatedAt ? ` · updated ${formatRelative(tool.source.updatedAt)}` : ''}
+                  Added {formatRelativeTime(tool.source.addedAt)}
+                  {tool.source.updatedAt ? ` · updated ${formatRelativeTime(tool.source.updatedAt)}` : ''}
                   {tool.source.ref ? ` · ${tool.source.ref.slice(0, 10)}` : ''}
                 </p>
                 {tool.source.kind === 'git' ? (

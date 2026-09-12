@@ -80,8 +80,7 @@ application cannot control local tools silently.
 ## MCP — giving agents your shelf
 
 **Easiest path:** open Shelf → **MCP Connections** → Connect Claude, Cursor, or Codex. Shelf writes
-the client MCP config for you (Claude: quit and reopen; Cursor: reload MCP; Codex: restart / new CLI
-session), then ask *"List my Shelf tools."*
+the client MCP config for you (Claude: quit and reopen; Cursor: reload MCP; Codex: restart the client or start a new session), then ask *"List my Shelf tools."*
 
 Shelf exposes a local stdio MCP server that reads and writes the **same** library as the GUI, and can
 launch and stop tools. The packaged app ships a standalone bundle at
@@ -230,8 +229,8 @@ CI runs `npm run typecheck` and `npm run smoke:all` on macOS for pushes and PRs 
 
 ## Status
 
-v0.5.x. Early — built solo, and used seriously by roughly one person so far. Issues and blunt feedback
-are welcome.
+See the [latest release](https://github.com/ai-ventures-hub/shelf/releases/latest)
+and [changelog](changelog.md) for the shipped version. Issues and feedback are welcome.
 
 ## License
 

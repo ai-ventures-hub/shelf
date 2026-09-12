@@ -1,3 +1,5 @@
+export type { CatalogEntry } from './contracts'
+import type { CatalogEntry } from './contracts'
 /**
  * Team Tools catalog format (v1.4, docs/SHARING.md stage 2).
  *
@@ -17,8 +19,8 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { stripInvisibleChars } from './types'
 import { validateRepoUrl } from './tool-share'
+import { stripInvisibleChars } from './types'
 
 export const CATALOG_FILENAME = 'catalog.json'
 export const CATALOG_VERSION = 1 as const
@@ -32,14 +34,6 @@ const MAX_CAPABILITY = 200
 const MAX_REPO = 2048
 /** Warnings shown to the user; the rest are summarized as a count. */
 const MAX_WARNINGS = 10
-
-/** One tool in a team catalog. `repo` is the only actionable field. */
-export interface CatalogEntry {
-  name: string
-  description?: string
-  capabilities: string[]
-  repo: string
-}
 
 export interface TeamCatalogFile {
   shelfCatalog: typeof CATALOG_VERSION

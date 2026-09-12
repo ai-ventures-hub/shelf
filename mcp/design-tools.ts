@@ -7,20 +7,20 @@
  * descriptions, so the get tool's description is the contract that makes a
  * zero-context agent find the user's brand.
  */
-import { z } from 'zod'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
 import { containsLikelySecret } from '../shared/capability-intelligence'
-import type { DesignProfileStore } from '../shared/design-profile-store'
 import {
   buildDesignBrief,
   flattenTokens,
   summarizeDesignProfile,
 } from '../shared/design-brief'
-import { resolveDesignProfile } from '../shared/design-resolve'
 import { resolveDesignMd } from '../shared/design-md'
+import type { DesignProfileStore } from '../shared/design-profile-store'
+import { resolveDesignProfile } from '../shared/design-resolve'
 import type { LibraryStore } from '../shared/library-store'
-import { maskSecrets } from '../shared/types'
 import type { DesignMdResult, DesignTokenGroup } from '../shared/types'
+import { maskSecrets } from '../shared/types'
 import { errorResult, textResult } from './result'
 
 function isTokenGroup(value: unknown): value is DesignTokenGroup {
@@ -39,7 +39,7 @@ interface DesignToolHost {
   profiles: DesignProfileStore
 }
 
-/** Register the read-only Design Engine MCP surface. */
+/** Register design reads and guarded agent-draft operations. */
 export function registerDesignTools({ server, store, profiles }: DesignToolHost): void {
   server.registerTool(
     'shelf_list_design_profiles',

@@ -1,3 +1,5 @@
+export type { TeamCatalog } from './contracts'
+import type { TeamCatalog } from './contracts'
 /**
  * Subscribed team catalogs (team-catalogs.json — never mixed into
  * library.json). Same durability contract as the other stores: atomic writes,
@@ -10,31 +12,13 @@
  * hand-edited record can't point Shelf's git commands at an arbitrary
  * directory.
  */
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { resolveShelfDataRoot } from './paths'
-import { stripInvisibleChars } from './types'
 import type { CatalogEntry } from './team-catalog'
-
-/** A subscribed catalog as persisted and as the renderer sees it. */
-export interface TeamCatalog {
-  id: string
-  /** Clone URL, already through validateRepoUrl when it was added. */
-  url: string
-  /** The catalog file's own name when it has one, else derived from the URL. */
-  name: string
-  addedAt: string
-  lastFetchedAt?: string
-  /** Last refresh failure in plain language; cleared by the next success. */
-  lastError?: string
-  /** Normalizer warnings from the last successful read (skipped rows, caps). */
-  warnings?: string[]
-  /** True when a local "Share with team" commit has not reached the remote. */
-  hasUnpushedEntry?: boolean
-  entries: CatalogEntry[]
-}
+import { stripInvisibleChars } from './types'
 
 export interface TeamCatalogsFile {
   version: 1

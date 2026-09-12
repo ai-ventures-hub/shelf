@@ -1,3 +1,4 @@
+import { GLOBAL_SHORTCUT_PRESETS } from '../../shared/global-shortcut'
 import { useEffect, useState } from 'react'
 import { ColorField } from '../components/ColorField'
 import { LucideIconPicker } from '../components/LucideIconPicker'
@@ -25,13 +26,6 @@ const EXPERIENCE: { id: UiMode; label: string; hint: string }[] = [
   },
 ]
 
-/** Presets mirrored from shared/global-shortcut.ts for the renderer bundle. */
-const SHORTCUT_PRESETS = [
-  { accelerator: 'Command+Shift+Space', label: '⌘⇧Space' },
-  { accelerator: 'Alt+Space', label: '⌥Space' },
-  { accelerator: 'Control+Shift+S', label: '⌃⇧S' },
-  { accelerator: 'Command+Option+Space', label: '⌘⌥Space' },
-] as const
 
 export function SettingsPage() {
   const { prefs, updatePrefs, resolvedTheme, shortcutStatus } = usePrefs()
@@ -239,7 +233,7 @@ export function SettingsPage() {
             <div className="warning-card" role="alert">
               <strong>Shortcut not active.</strong> {shortcutStatus.error}
               <div className="shortcut-preset-row" style={{ marginTop: '0.75rem' }}>
-                {SHORTCUT_PRESETS.filter((p) => p.accelerator !== shortcutStatus.accelerator)
+                {GLOBAL_SHORTCUT_PRESETS.filter((p) => p.accelerator !== shortcutStatus.accelerator)
                   .slice(0, 3)
                   .map((preset) => (
                     <button
@@ -276,7 +270,7 @@ export function SettingsPage() {
               placeholder="Command+Shift+Space"
             />
             <div className="shortcut-preset-row" aria-label="Shortcut presets">
-              {SHORTCUT_PRESETS.map((preset) => (
+              {GLOBAL_SHORTCUT_PRESETS.map((preset) => (
                 <button
                   key={preset.accelerator}
                   type="button"
@@ -419,9 +413,8 @@ export function SettingsPage() {
             {tools.length} tools · {collections.length} collections · local-first · no account
           </p>
           <p style={{ margin: '0.75rem 0 0', color: 'var(--subtle)', fontSize: '0.85rem' }}>
-            Shelf Community includes the full personal library, process lifecycle, MCP tools,
-            organization, and project DESIGN.md bridge. Shelf Profiles (reusable design
-            governance) is a future separately licensed add-on — not required for core use.
+            Shelf includes your personal tool library, process controls, MCP connections,
+            collections, and reusable design profiles. Your library stays on this Mac.
           </p>
         </div>
       </section>

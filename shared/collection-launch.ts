@@ -1,3 +1,5 @@
+export type { CollectionActionResult, CollectionToolOutcome, CollectionToolResult } from './contracts'
+import type { CollectionActionResult, CollectionToolOutcome, CollectionToolResult } from './contracts'
 /**
  * Start/stop every member of a collection ("stack"). Launches run concurrently
  * with a small stagger — the per-tool in-flight mutex and the library write
@@ -5,31 +7,8 @@
  * tool, not the sum. Already-running members are never restarted.
  */
 import type { LibraryStore } from './library-store'
-import type { ProcessManager, StartOptions } from './process-manager'
 import { sleep } from './process-lifecycle'
-import type { ToolRuntimeState } from './types'
-
-export type CollectionToolOutcome =
-  | 'started'
-  | 'already_running'
-  | 'failed'
-  | 'stopped'
-  | 'not_running'
-  /** Running listener Shelf does not own — left alone (stop_refused_not_owner). */
-  | 'skipped_external'
-
-export interface CollectionToolResult {
-  toolId: string
-  name: string
-  outcome: CollectionToolOutcome
-  state?: ToolRuntimeState
-}
-
-export interface CollectionActionResult {
-  collectionId: string
-  name: string
-  results: CollectionToolResult[]
-}
+import type { ProcessManager, StartOptions } from './process-manager'
 
 export interface CollectionDeps {
   store: LibraryStore

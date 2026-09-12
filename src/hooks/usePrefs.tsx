@@ -12,22 +12,7 @@ import {
 } from 'react'
 import type { AppearanceMode, ShortcutStatus, UiPrefs } from '../types'
 
-const DEFAULTS: UiPrefs = {
-  appearance: 'system',
-  viewMode: 'grid',
-  sort: 'name',
-  uiMode: 'developer',
-  sidebarWidth: 250,
-  sidebarCollapsed: false,
-  defaultIconLucide: 'Box',
-  defaultIconColor: '#ffffff',
-  defaultIconBackground: '#3b82f6',
-  menuBarEnabled: true,
-  closeToMenuBar: true,
-  launchAtLogin: false,
-  globalShortcutEnabled: true,
-  globalShortcut: 'Command+Shift+Space',
-}
+import { DEFAULT_UI_PREFS } from '../../shared/types'
 
 interface PrefsContextValue {
   prefs: UiPrefs
@@ -47,7 +32,7 @@ function resolveTheme(mode: AppearanceMode): 'light' | 'dark' {
 }
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const [prefs, setPrefs] = useState<UiPrefs>(DEFAULTS)
+  const [prefs, setPrefs] = useState<UiPrefs>(DEFAULT_UI_PREFS)
   const [loading, setLoading] = useState(true)
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatus | null>(null)
   const [systemLight, setSystemLight] = useState(

@@ -1,3 +1,6 @@
+import { portSchema } from './tool-validation'
+export type { ManifestFieldDiff, ToolManifest } from './contracts'
+import type { ManifestFieldDiff, ToolManifest } from './contracts'
 /**
  * Tool Sharing (1.2) — the `shelf.json` manifest that travels with a project.
  *
@@ -17,37 +20,12 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { containsLikelySecret, normalizeAgentAccess } from './capability-intelligence'
-import { normalizeCapabilities } from './capability-intelligence'
+import { containsLikelySecret, normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { urlForPort } from './ports'
 import type { AgentAccess, Tool } from './types'
 
 export const MANIFEST_FILENAME = 'shelf.json'
 export const MANIFEST_VERSION = 1 as const
-
-/** The on-disk manifest. Unknown fields are preserved on read (see `extra`). */
-export interface ToolManifest {
-  shelfManifest: typeof MANIFEST_VERSION
-  name: string
-  description?: string
-  /** Relative to the project root; rendered verbatim on the consent sheet. */
-  launchCommand: string
-  port?: number
-  /** Loopback template; port-rewritten on receive by the existing healing. */
-  url?: string
-  tags: string[]
-  capabilities: string[]
-  agentAccess: AgentAccess[]
-  /** Setup the receiver must consent to before anything runs. Verbatim. */
-  bootstrap: string[]
-  /** Env SCHEMA: key → human hint. Never a value. */
-  env: Record<string, string>
-  notes?: string
-  exportedBy?: string
-  exportedAt?: string
-  /** Fields this Shelf does not understand, carried through untouched. */
-  extra?: Record<string, unknown>
-}
 
 export interface NormalizedManifest {
   manifest: ToolManifest
@@ -191,7 +169,7 @@ export function normalizeManifest(raw: unknown): NormalizedManifest {
   let port: number | undefined
   if (input.port !== undefined) {
     const n = typeof input.port === 'number' ? input.port : Number(input.port)
-    if (Number.isInteger(n) && n >= 1 && n <= 65535) port = n
+    if (portSchema.safeParse(n).success) port = n
     else warnings.push(`Ignored an invalid port (${String(input.port)}).`)
   }
 
@@ -468,12 +446,6 @@ export function writeManifest(projectPath: string, manifest: ToolManifest): stri
   const file = path.join(projectPath, MANIFEST_FILENAME)
   fs.writeFileSync(file, serializeManifest(manifest), 'utf8')
   return file
-}
-
-export interface ManifestFieldDiff {
-  field: string
-  before?: string
-  after?: string
 }
 
 function show(value: unknown): string | undefined {

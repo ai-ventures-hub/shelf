@@ -14,24 +14,24 @@ import {
   type BrowserWindow,
 } from 'electron'
 import path from 'node:path'
+import { startCollection, stopCollection } from '../shared/collection-launch'
 import {
   DEFAULT_GLOBAL_SHORTCUT,
   type ShortcutStatus,
 } from '../shared/global-shortcut'
-import { startCollection, stopCollection } from '../shared/collection-launch'
 import type { PrefsStore } from '../shared/prefs-store'
 import { parseShelfUrl } from '../shared/shelf-url'
 import type { LibraryStore } from './library-store'
 import type { ProcessManager } from './process-manager'
-import { launchOriginLabel } from './types'
 import type { ToolRuntimeState, UiPrefs } from './types'
+import { launchOriginLabel } from './types'
 
-export { parseShelfUrl } from '../shared/shelf-url'
 export {
   DEFAULT_GLOBAL_SHORTCUT,
   GLOBAL_SHORTCUT_PRESETS,
-  type ShortcutStatus,
+  type ShortcutStatus
 } from '../shared/global-shortcut'
+export { parseShelfUrl } from '../shared/shelf-url'
 
 export interface DesktopIntegrationHost {
   prefs: PrefsStore
@@ -166,10 +166,10 @@ function trayLabelForRunning(
   return label
 }
 
-async function rebuildTrayMenu(host: DesktopIntegrationHost): Promise<void> {
+async function rebuildTrayMenu(host: DesktopIntegrationHost, snapshot?: ToolRuntimeState[]): Promise<void> {
   if (!tray) return
   // Probe ports so MCP-launched tools appear under Running / Stop.
-  const states = await host.processes.getStates()
+  const states = snapshot ?? await host.processes.getStates()
   const stateById = new Map(states.map((s) => [s.toolId, s]))
   const runningIds = new Set(
     states.filter((s) => s.status === 'running').map((s) => s.toolId),
@@ -360,13 +360,13 @@ export function setupTray(host: DesktopIntegrationHost): void {
   void rebuildTrayMenu(host)
 }
 
-export function refreshTray(host: DesktopIntegrationHost): void {
+export function refreshTray(host: DesktopIntegrationHost, snapshot?: ToolRuntimeState[]): void {
   if (!host.prefs.get().menuBarEnabled) {
     destroyTray()
     return
   }
   if (!tray) setupTray(host)
-  else void rebuildTrayMenu(host)
+  else void rebuildTrayMenu(host, snapshot)
 }
 
 export function destroyTray(): void {

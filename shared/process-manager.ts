@@ -1,17 +1,11 @@
-import { RunLogStore } from './run-log-store'
-import { ProcessOperations } from './process-operation'
-import { toolSecretValues } from './types'
 import type { ChildProcess } from 'node:child_process'
+import type { StartOptions } from './contracts'
+import { classifyLaunchFailure, remedyFor } from './launch-diagnostics'
 import type { LibraryStore } from './library-store'
 import {
-  findFreePort,
   findPortOccupants,
-  killPortOccupant,
-  urlForPort,
-  withForcedPort,
+  killPortOccupant
 } from './ports'
-import { invalidateProcessSnapshot, verifyOccupantsOwnedBy } from './process-ownership'
-import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
 import {
   PORT_TIMEOUT_MS,
   runOnce,
@@ -21,9 +15,13 @@ import {
   terminateProcess,
   waitForPort,
 } from './process-lifecycle'
+import { ProcessOperations } from './process-operation'
+import { resolvePortConflict } from './process-port-policy'
+import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
+import { ProcessRunOwnership } from './process-run-ownership'
 import { ProcessRuntimeSupport } from './process-runtime-support'
-import { classifyLaunchFailure, remedyFor } from './launch-diagnostics'
 import type { ReceiptStore } from './receipt-store'
+import { RunLogStore } from './run-log-store'
 import type {
   LaunchErrorCode,
   LaunchOrigin,
@@ -33,6 +31,8 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
+import { toolSecretValues } from './types'
+export type { PortConflictPolicy, StartOptions } from './contracts'
 
 interface ManagedProcess {
   child: ChildProcess
@@ -41,19 +41,6 @@ interface ManagedProcess {
   pgid?: number
   /** Open run receipt id while this process is managed. */
   receiptId?: string
-}
-
-export type PortConflictPolicy = 'fail' | 'reassign'
-
-export interface StartOptions {
-  /**
-   * When the configured port is busy:
-   * - fail (default): refuse to start
-   * - reassign: pick a free port, rewrite launch/url, persist, then start
-   */
-  onPortConflict?: PortConflictPolicy
-  /** Who initiated this launch; falls back to the manager's defaultOrigin. */
-  origin?: LaunchOrigin
 }
 
 export interface ProcessManagerOptions {
@@ -83,6 +70,8 @@ export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>()
   private readonly options: ProcessManagerOptions
   private readonly operations: ProcessOperations
+  private readonly ownership: ProcessRunOwnership
+  private reconciliation: Promise<void> | null = null
   private readonly runtime: ProcessRuntimeSupport
   /**
    * Coalesces concurrent start() calls per tool. The `processes.has` guard
@@ -105,6 +94,7 @@ export class ProcessManager {
     this.options = options
     this.operations = new ProcessOperations(store.getRoot())
     this.runtime = new ProcessRuntimeSupport(options.onEvent, options.receipts, (id) => toolSecretValues(this.store.get(id)), new RunLogStore(store.getRoot()))
+    this.ownership = new ProcessRunOwnership(options.receipts, this.runtime)
   }
 
   /**
@@ -118,6 +108,11 @@ export class ProcessManager {
   /** Probe port occupancy for tools this manager does not own, then return states. */
   async getStates(): Promise<ToolRuntimeState[]> {
     await this.reconcileExternals()
+    return this.peekStates()
+  }
+
+  /** Current evidence without another OS probe, for event-driven tray refreshes. */
+  peekStates(): ToolRuntimeState[] {
     const seen = new Set<string>()
     const out: ToolRuntimeState[] = []
     for (const tool of this.store.list()) {
@@ -216,7 +211,7 @@ export class ProcessManager {
     if (!tool.port) {
       // Portless tool already launched by another Shelf process (MCP/GUI):
       // adopt via its live receipt instead of spawning a duplicate.
-      const external = this.findActiveReceipt(toolId)
+      const external = this.ownership.findActiveReceipt(toolId)
       if (external?.pid) {
         this.runtime.appendLog(
           toolId,
@@ -240,7 +235,7 @@ export class ProcessManager {
       // the persisted rewrite must be atomic per manager, or two concurrent
       // stack launches can both claim the same free port.
       const resolution = await this.enqueueLibraryWrite(() =>
-        this.resolvePortConflict(tool as Tool, onPortConflict, origin),
+        resolvePortConflict({ store: this.store, runtime: this.runtime, trustedExternalOwner: (id, port, occupants) => this.ownership.trustedExternalOwner(id, port, occupants) }, tool as Tool, onPortConflict, origin),
       )
       if (resolution.state) return resolution.state
       tool = resolution.tool
@@ -384,11 +379,11 @@ export class ProcessManager {
         if (!this.processes.has(toolId)) {
           return this.runtime.peekState(toolId)
         }
-        const ready = listening && await this.ownsListener(tool.port, child.pid)
+        const ready = listening && await this.ownership.ownsListener(tool.port, child.pid)
         if (!ready) {
           // Framework may have hopped ports; sniff logs before giving up.
           const sniffed = this.runtime.sniffReadyUrl(toolId)
-          if (sniffed && await this.ownsListener(sniffed.port, child.pid)) {
+          if (sniffed && await this.ownership.ownsListener(sniffed.port, child.pid)) {
             const updated = await this.enqueueLibraryWrite(() =>
               this.store.patch(toolId, {
                 url: sniffed.url,
@@ -457,7 +452,7 @@ export class ProcessManager {
         // No configured port: still try to learn URL from framework ready logs.
         const candidate = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId) && !cancelled())
         if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
-        const sniffed = candidate && await this.ownsListener(candidate.port, child.pid) ? candidate : null
+        const sniffed = candidate && await this.ownership.ownsListener(candidate.port, child.pid) ? candidate : null
         if (candidate && !sniffed) {
           await this.stopInternal(toolId, 'The advertised service URL has no verified listener.', { code: 'port_timeout', remedy: 'copy_ai_report' })
           return this.runtime.setState(toolId, { toolId, status: 'error', code: 'port_timeout', message: 'The process printed a URL, but Shelf could not verify its service.', remedy: 'copy_ai_report' })
@@ -568,7 +563,7 @@ export class ProcessManager {
     if (!managed && tool?.port) {
       const occupants = await findPortOccupants(tool.port)
       if (occupants.length > 0) {
-        externalOwner = await this.trustedExternalOwner(toolId, tool.port, occupants)
+        externalOwner = await this.ownership.trustedExternalOwner(toolId, tool.port, occupants)
         if (externalOwner) {
           receiptId = externalOwner.receiptId
         } else {
@@ -577,7 +572,7 @@ export class ProcessManager {
       }
     } else if (!managed && tool && !tool.port) {
       // Portless external: the live receipt is both the proof and the target.
-      externalReceipt = this.findActiveReceipt(toolId)
+      externalReceipt = this.ownership.findActiveReceipt(toolId)
       if (externalReceipt?.pid) receiptId = externalReceipt.id
       else externalReceipt = undefined
     }
@@ -757,7 +752,13 @@ export class ProcessManager {
 
   /** Mark tools running when their configured port is occupied by another manager. */
   async reconcileExternals(): Promise<void> {
-    await Promise.all(this.store.list().map((tool) => this.reconcileTool(tool.id)))
+    if (!this.reconciliation) {
+      this.reconciliation = Promise.resolve()
+        .then(() => Promise.all(this.store.list().map((tool) => this.reconcileTool(tool.id))))
+        .then(() => undefined)
+        .finally(() => { this.reconciliation = null })
+    }
+    return this.reconciliation
   }
 
   private async reconcileTool(toolId: string): Promise<void> {
@@ -767,7 +768,7 @@ export class ProcessManager {
     if (managed) {
       const port = state.port
       if (!port || (state.status !== 'running' && !(state.status === 'error' && state.code === 'port_timeout'))) return
-      const healthy = await this.ownsListener(port, managed.child.pid)
+      const healthy = await this.ownership.ownsListener(port, managed.child.pid)
       if (this.processes.get(toolId) !== managed || this.runtime.peekState(toolId) !== state) return
       if (!healthy && state.status === 'running') {
         this.runtime.setState(toolId, { ...state, status: 'error', code: 'port_timeout', remedy: 'copy_ai_report', message: `Process is alive, but its service on port ${port} is unavailable.` })
@@ -781,8 +782,8 @@ export class ProcessManager {
       runtime: this.runtime,
       isLocallyManaged: (id) => this.processes.has(id),
       trustedExternalOwner: (id, port, occupants) =>
-        this.trustedExternalOwner(id, port, occupants),
-      findActiveReceipt: (id) => this.findActiveReceipt(id),
+        this.ownership.trustedExternalOwner(id, port, occupants),
+      findActiveReceipt: (id) => this.ownership.findActiveReceipt(id),
     })
   }
 
@@ -794,140 +795,6 @@ export class ProcessManager {
       () => undefined,
     )
     return run
-  }
-
-  /**
-   * Occupied-port handling for a launch: adopt a trusted Shelf owner, refuse
-   * with port_in_use, or (reassign policy) pick a free port and persist the
-   * rewritten entry. Runs inside enqueueLibraryWrite — see start().
-   */
-  private async resolvePortConflict(
-    tool: Tool,
-    onPortConflict: PortConflictPolicy,
-    origin?: LaunchOrigin,
-  ): Promise<{ tool: Tool; state?: ToolRuntimeState; reassignedFrom?: number }> {
-    const toolId = tool.id
-    const port = tool.port as number
-    const occupants = await findPortOccupants(port)
-    if (occupants.length === 0) return { tool }
-
-    {
-      const owner = await this.trustedExternalOwner(toolId, port, occupants)
-      if (owner) {
-        this.runtime.appendLog(
-          toolId,
-          'system',
-          `Adopted Shelf process on port ${port} (owner pid ${owner.ownerPid}).`,
-        )
-        return {
-          tool,
-          state: this.runtime.setState(toolId, {
-            toolId,
-            status: 'running',
-            pid: owner.ownerPid,
-            message: `Running · port ${port} (external)`,
-            port,
-            origin: 'external',
-            startedBy: owner.startedBy,
-          }),
-        }
-      }
-
-    }
-    if (onPortConflict !== 'reassign') {
-      const message = `Port ${port} is already in use by another process.`
-      this.runtime.emitFailedReceipt({
-        toolId,
-        toolName: tool.name,
-        launchCommand: tool.launchCommand,
-        port,
-        url: tool.url,
-        message,
-        startedBy: origin,
-      })
-      return {
-        tool,
-        state: this.runtime.setState(toolId, {
-          toolId,
-          status: 'error',
-          message,
-          code: 'port_in_use',
-          remedy: remedyFor('port_in_use'),
-        }),
-      }
-    }
-
-    // Pick a free port and persist so GUI + future launches stay aligned.
-    const previousPort = port
-    const free = await findFreePort({ preferred: previousPort, from: 3000, to: 4999 })
-    const nextPort = free.port
-    const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
-    const nextUrl = urlForPort(tool.url, nextPort)
-    const saved = this.store.patch(toolId, {
-      port: nextPort,
-      url: nextUrl,
-      launchCommand: nextLaunch,
-      env: { ...(tool.env || {}), PORT: String(nextPort) },
-    }, tool.updatedAt)
-    return { tool: saved, reassignedFrom: previousPort }
-  }
-
-  /** Newest open receipt with a live pid for this tool, from any Shelf process. */
-  private findActiveReceipt(toolId: string, port?: number): RunReceipt | undefined {
-    try {
-      return (
-        this.options.receipts?.findActiveProcess(toolId, port) ??
-        // Port drift (edited config, log-sniffed port) must not break ownership:
-        // ancestry against the receipt pid is the real proof, not port equality.
-        this.options.receipts?.findActiveProcess(toolId)
-      )
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      this.runtime.appendLog(toolId, 'system', `Receipt lookup failed: ${message}`)
-      return undefined
-    }
-  }
-
-  /**
-   * Resolve a trusted owner for an externally-launched tool, or null. Trust =
-   * an open Shelf receipt with a live pid whose process tree contains EVERY
-   * current listener on the port (pgid match or bounded ancestry walk).
-   */
-  private async trustedExternalOwner(
-    toolId: string,
-    port: number,
-    occupants: number[],
-  ): Promise<ExternalOwner | null> {
-    try {
-      const receipt = this.findActiveReceipt(toolId, port)
-      if (!receipt?.pid) return null
-      const owned = await verifyOccupantsOwnedBy(occupants, receipt.pid)
-      if (!owned) return null
-      if (receipt.port !== port) {
-        this.runtime.appendLog(
-          toolId,
-          'system',
-          `Adopting via receipt with port ${receipt.port ?? 'unset'} (tool now configured for ${port}).`,
-        )
-        this.runtime.markReceiptRunning(receipt.id, { port })
-      }
-      return {
-        ownerPid: receipt.pid,
-        receiptId: receipt.id,
-        receiptPort: receipt.port,
-        startedBy: receipt.startedBy,
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      this.runtime.appendLog(toolId, 'system', `Ownership check failed: ${message}`)
-      return null
-    }
-  }
-
-  private async ownsListener(port: number, pid?: number): Promise<boolean> {
-    if (!pid) return false
-    invalidateProcessSnapshot()
-    return verifyOccupantsOwnedBy(await findPortOccupants(port), pid)
   }
 
   private async openReadyUrl(toolId: string, url: string): Promise<void> {

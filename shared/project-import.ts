@@ -1,3 +1,4 @@
+import { readProjectFacts, type ProjectFacts } from './project-facts'
 /**
  * Smart project import — inspect a folder and suggest Shelf tool fields.
  * Pure filesystem + port helpers; no process spawning beyond port probes.
@@ -10,15 +11,6 @@ import { detectAgentAccess } from './project-import-mcp'
 import type { LaunchAlternative, ProjectImportSuggestion } from './types'
 
 export type { LaunchAlternative, ProjectImportSuggestion }
-
-interface PackageJsonLike {
-  name?: string
-  description?: string
-  bin?: string | Record<string, string>
-  scripts?: Record<string, string>
-  dependencies?: Record<string, string>
-  devDependencies?: Record<string, string>
-}
 
 const SCRIPT_PRIORITY = [
   'dev',
@@ -35,6 +27,7 @@ const SCRIPT_PRIORITY = [
  */
 export async function inspectProject(
   projectPath: string,
+  observed?: ProjectFacts,
 ): Promise<ProjectImportSuggestion> {
   const resolved = path.resolve(projectPath.trim())
   const base: ProjectImportSuggestion = {
@@ -52,8 +45,8 @@ export async function inspectProject(
     return base
   }
 
-  const entries = safeReaddir(resolved)
-  const entrySet = new Set(entries)
+  const facts = observed ?? readProjectFacts(resolved)
+  const entrySet = facts.entries
   const signals: string[] = []
   const tags = new Set<string>()
   let alternatives: LaunchAlternative[] = []
@@ -70,17 +63,14 @@ export async function inspectProject(
   }
 
   // —— Node / JS ——
-  let pkg: PackageJsonLike | null = null
-  const pkgPath = path.join(resolved, 'package.json')
-  if (entrySet.has('package.json') && fs.existsSync(pkgPath)) {
-    pkg = readJson(pkgPath) as PackageJsonLike | null
-
+  const pkg = facts.packageJson
+  if (entrySet.has('package.json')) {
     if (pkg) {
       signals.push('Found package.json')
       if (pkg.name) name = humanizePackageName(pkg.name)
       if (pkg.description?.trim()) description = pkg.description.trim()
 
-      const pm = detectPackageManager(entrySet)
+      const pm = facts.packageManager
       const scripts = pkg.scripts || {}
       const scriptNames = Object.keys(scripts)
       const primaryScript =
@@ -186,7 +176,7 @@ export async function inspectProject(
 
   // —— Agent interfaces the project provides (MCP etc.) ——
   const detected = detectAgentAccess(resolved, entrySet, pkg, {
-    packageManager: detectPackageManager(entrySet),
+    packageManager: facts.packageManager,
     venvPython: hasPy ? resolveVenvPython(resolved, entrySet) : undefined,
   })
   signals.push(...detected.signals)
@@ -276,22 +266,6 @@ function shouldPinPort(command: string): boolean {
   return /\b(npm|pnpm|yarn|bun)\s+run\b/.test(command) || /\b(next|vite|flask)\b/.test(command)
 }
 
-function safeReaddir(dir: string): string[] {
-  try {
-    return fs.readdirSync(dir)
-  } catch {
-    return []
-  }
-}
-
-function readJson(filePath: string): unknown | null {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-  } catch {
-    return null
-  }
-}
-
 function titleFromFolder(dir: string): string {
   const base = path.basename(dir)
   return humanizePackageName(base)
@@ -304,13 +278,6 @@ function humanizePackageName(raw: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function detectPackageManager(entries: Set<string>): string {
-  if (entries.has('pnpm-lock.yaml')) return 'pnpm'
-  if (entries.has('yarn.lock')) return 'yarn'
-  if (entries.has('bun.lockb') || entries.has('bun.lock')) return 'bun'
-  return 'npm'
 }
 
 function extractPortFromScripts(scripts: Record<string, string>): number | undefined {

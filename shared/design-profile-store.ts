@@ -1,21 +1,22 @@
+export type { SaveDesignProfileInput } from './contracts'
+import type { SaveDesignProfileInput } from './contracts'
 /**
  * Design Engine profile store (design-profiles.json — never mixed into
  * library.json). Same durability contract as CapabilityGapStore: atomic
  * writes, cross-process file lock, corrupt-backup-reset.
  *
- * Write methods exist for the seed script and the v1.0 GUI editor phase;
- * the MCP surface is read-only — agents apply branding, Shelf serves it.
+ * The GUI manages profiles and defaults. MCP clients can save agent drafts;
+ * user-owned profiles and default selection remain under user control.
  *
  * Single-default invariant: save()/setDefault() keep at most one profile
  * with isDefault. A hand-edited file with several defaults is tolerated on
  * read (getDefault picks the first) and re-normalized on the next write.
  */
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { resolveShelfDataRoot } from './paths'
-import { foldDisplayName, stripInvisibleChars } from './types'
 import type {
   DesignAsset,
   DesignAssetKind,
@@ -23,6 +24,7 @@ import type {
   DesignProfilesFile,
   DesignTokenGroup,
 } from './types'
+import { foldDisplayName, stripInvisibleChars } from './types'
 
 const ASSET_MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
@@ -37,24 +39,6 @@ const ASSET_MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
-}
-
-export interface SaveDesignProfileInput {
-  id?: string
-  name: string
-  isDefault?: boolean
-  tokens?: DesignTokenGroup
-  modes?: { light?: DesignTokenGroup; dark?: DesignTokenGroup }
-  direction?: string
-  assets?: DesignAsset[]
-  /**
-   * 'agent' marks/keeps the profile agent-owned; 'user' transfers ownership
-   * to the user (any GUI save passes this); omitted preserves the current
-   * owner. GUI/seed callers use save(); the agent write path must go through
-   * upsertFromAgent(), which enforces the ownership policy under the lock.
-   */
-  origin?: 'agent' | 'user'
-  sourceNote?: string
 }
 
 export interface AgentUpsertInput {

@@ -1,3 +1,4 @@
+import { formatRelativeTime } from '../lib/relativeTime'
 /**
  * Team Tools (1.4) — the catalogs this Mac subscribes to and what's in them.
  *
@@ -12,18 +13,6 @@ import { Link } from 'react-router-dom'
 import { useLibrary } from '../hooks/useLibrary'
 import { requestAddShared } from '../lib/sharingEvents'
 import type { CatalogEntry, ShareFailure, TeamCatalog } from '../types'
-
-function relativeTime(iso?: string): string {
-  if (!iso) return 'never fetched'
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return 'never fetched'
-  const mins = Math.round((Date.now() - then) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
-}
 
 function FailureCard({ failure }: { failure: ShareFailure }) {
   return (
@@ -220,7 +209,7 @@ export function TeamToolsPage() {
               <h2 className="team-catalog-name">{catalog.name}</h2>
               <p className="team-catalog-meta">
                 {catalog.entries.length} {catalog.entries.length === 1 ? 'tool' : 'tools'} ·
-                fetched {relativeTime(catalog.lastFetchedAt)}
+                fetched {formatRelativeTime(catalog.lastFetchedAt, 'never fetched', 24)}
               </p>
             </div>
             <div className="team-catalog-actions">
