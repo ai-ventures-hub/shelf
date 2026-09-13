@@ -32,7 +32,7 @@ interface LibraryContextValue {
   startTool: (id: string, options?: StartOptions) => Promise<void>
   stopTool: (id: string) => Promise<void>
   restartTool: (id: string) => Promise<void>
-  getLogs: (id: string) => Promise<LogLine[]>
+  getLogs: (id: string, runId?: string) => Promise<LogLine[]>
   subscribeLogs: (id: string, cb: (line: LogLine) => void) => () => void
 }
 
@@ -172,8 +172,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     setStates((prev) => ({ ...prev, [id]: state }))
   }, [])
 
-  const getLogs = useCallback(async (id: string) => {
-    return window.shelf.getLogs(id)
+  const getLogs = useCallback(async (id: string, runId?: string) => {
+    return window.shelf.getLogs(id, runId)
   }, [])
 
   const subscribeLogs = useCallback((id: string, cb: (line: LogLine) => void) => {

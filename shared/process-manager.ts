@@ -17,6 +17,7 @@ import {
 } from './process-lifecycle'
 import { ProcessOperations } from './process-operation'
 import { resolvePortConflict } from './process-port-policy'
+import { listPortOccupants } from './ports'
 import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
 import { ProcessRunOwnership } from './process-run-ownership'
 import { ProcessRuntimeSupport } from './process-runtime-support'
@@ -130,8 +131,8 @@ export class ProcessManager {
     return this.runtime.peekState(toolId)
   }
 
-  getLogs(toolId: string): LogLine[] {
-    return this.runtime.getLogs(toolId)
+  getLogs(toolId: string, runId?: string): LogLine[] {
+    return this.runtime.getLogs(toolId, runId)
   }
 
   /** Append to a tool's log buffer (e.g. streamed bootstrap/install output). */
@@ -671,7 +672,7 @@ export class ProcessManager {
       const message = reason || (externalPid ? 'Stopped (external)' : 'Stopped')
       // Timeouts / forced stops count as failed runs; intentional stops as stopped.
       const outcome =
-        reason && /timed out|quit|failed/i.test(reason) ? 'failed' : 'stopped'
+        reason && /timed out|failed/i.test(reason) ? 'failed' : 'stopped'
       // For external stops, receiptId is the OTHER manager's receipt — the
       // store is shared, so finalizing here keeps launch history truthful
       // instead of leaving an open receipt for closeOrphans to mark interrupted.
@@ -754,21 +755,25 @@ export class ProcessManager {
   async reconcileExternals(): Promise<void> {
     if (!this.reconciliation) {
       this.reconciliation = Promise.resolve()
-        .then(() => Promise.all(this.store.list().map((tool) => this.reconcileTool(tool.id))))
+        .then(async () => {
+          const tools = this.store.list()
+          const snapshot = tools.some((tool) => tool.port) ? await listPortOccupants() : null
+          await Promise.all(tools.map((tool) => this.reconcileTool(tool.id, snapshot)))
+        })
         .then(() => undefined)
         .finally(() => { this.reconciliation = null })
     }
     return this.reconciliation
   }
 
-  private async reconcileTool(toolId: string): Promise<void> {
+  private async reconcileTool(toolId: string, snapshot?: Map<number, number[]> | null): Promise<void> {
     const managed = this.processes.get(toolId)
     const state = this.runtime.peekState(toolId)
     if (state.status === 'stopping') return
     if (managed) {
       const port = state.port
       if (!port || (state.status !== 'running' && !(state.status === 'error' && state.code === 'port_timeout'))) return
-      const healthy = await this.ownership.ownsListener(port, managed.child.pid)
+      const healthy = await this.ownership.ownsListener(port, managed.child.pid, snapshot ? snapshot.get(port) || [] : undefined)
       if (this.processes.get(toolId) !== managed || this.runtime.peekState(toolId) !== state) return
       if (!healthy && state.status === 'running') {
         this.runtime.setState(toolId, { ...state, status: 'error', code: 'port_timeout', remedy: 'copy_ai_report', message: `Process is alive, but its service on port ${port} is unavailable.` })
@@ -777,7 +782,9 @@ export class ProcessManager {
       }
       return
     }
+    const port = this.store.get(toolId)?.port
     await reconcileExternalTool(toolId, {
+      occupants: snapshot && port ? snapshot.get(port) || [] : undefined,
       store: this.store,
       runtime: this.runtime,
       isLocallyManaged: (id) => this.processes.has(id),

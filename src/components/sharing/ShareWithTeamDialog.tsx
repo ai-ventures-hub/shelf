@@ -1,3 +1,4 @@
+import { Modal } from '../Modal'
 /**
  * "Share with team" (1.4) — publish this tool's entry into a catalog repo.
  *
@@ -70,19 +71,13 @@ export function ShareWithTeamDialog({
   }
 
   return (
-    <div
+    <Modal open={open} onDismiss={onClose} busy={busy} aria-labelledby="share-team-title"
       className="name-prompt-backdrop consent-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose()
-      }}
     >
       <div
         ref={sheetRef}
         tabIndex={-1}
         className="consent-sheet"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="share-team-title"
         onKeyDown={(e) => {
           if (e.key === 'Escape' && !busy) {
@@ -204,6 +199,6 @@ export function ShareWithTeamDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

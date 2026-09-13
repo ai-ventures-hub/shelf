@@ -1,5 +1,4 @@
 import { ExternalLink, Play, Square, Star, TriangleAlert } from 'lucide-react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
 import { formatRelativeTime } from '../lib/relativeTime'
@@ -67,19 +66,11 @@ export function ToolCard({
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
   const hasControls = Boolean(onLaunch || onStop)
 
-  // The whole card is a Link; controls must not trigger navigation.
-  const control = (action?: () => void) => (e: ReactMouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    action?.()
-  }
-
   return (
-    <Link
-      to={`/tools/${tool.id}`}
+    <article
       className="tool-card"
       data-status={status}
-      aria-label={`${tool.name}, ${status}`}
+      aria-label={tool.name}
     >
       <div className="tool-card-top">
         <ToolIcon
@@ -92,9 +83,9 @@ export function ToolCard({
         <StatusPill status={status} message={state?.message} />
       </div>
       <div>
-        <h3 className="tool-name">{tool.name}</h3>
+        <h3 className="tool-name"><Link className="tool-card-link" to={`/tools/${tool.id}`} aria-label={`${tool.name}, ${status}`}>{tool.name}</Link></h3>
         <p className="tool-desc">
-          {tool.description || state?.message || 'No description yet.'}
+          {status === 'error' ? state?.message || 'Open this tool to review the last failure.' : tool.description || tool.capabilities[0] || 'Add a short description to explain what this tool does.'}
         </p>
       </div>
       <div className="tool-card-footer">
@@ -131,7 +122,7 @@ export function ToolCard({
                     : `Add ${tool.name} to favorites`
                 }
                 aria-pressed={tool.favorite}
-                onClick={control(onToggleFavorite)}
+                onClick={onToggleFavorite}
               >
                 <Star
                   size={13}
@@ -147,7 +138,7 @@ export function ToolCard({
                 title="Stop"
                 aria-label={`Stop ${tool.name}`}
                 disabled={status === 'stopping'}
-                onClick={control(onStop)}
+                onClick={onStop}
               >
                 <Square size={13} aria-hidden />
               </button>
@@ -157,7 +148,7 @@ export function ToolCard({
                 className="btn btn-quiet btn-sm btn-icon control-launch"
                 title="Launch"
                 aria-label={`Launch ${tool.name}`}
-                onClick={control(onLaunch)}
+                onClick={onLaunch}
               >
                 {/* Triangles lean left; 1px nudge optically centers it. */}
                 <Play size={13} aria-hidden style={{ marginLeft: 1 }} />
@@ -169,7 +160,7 @@ export function ToolCard({
                 className="btn btn-quiet btn-sm btn-icon control-open"
                 title="Open in browser"
                 aria-label={`Open ${tool.name} in browser`}
-                onClick={control(onOpenUrl)}
+                onClick={onOpenUrl}
               >
                 <ExternalLink size={13} aria-hidden />
               </button>
@@ -177,7 +168,7 @@ export function ToolCard({
           </div>
         ) : null}
       </div>
-    </Link>
+    </article>
   )
 }
 
@@ -248,11 +239,11 @@ export function ToolListRow({
       <td className="tool-list-actions">
         <div className="tool-list-actions-row">
           {canStop ? (
-            <button type="button" className="btn btn-quiet btn-sm" onClick={onStop}>
+            <button type="button" className="btn btn-quiet btn-sm" aria-label={`Stop ${tool.name}`} disabled={status === 'stopping'} onClick={onStop}>
               Stop
             </button>
           ) : (
-            <button type="button" className="btn btn-primary btn-sm" onClick={onLaunch}>
+            <button type="button" className="btn btn-primary btn-sm" aria-label={`Launch ${tool.name}`} onClick={onLaunch}>
               Launch
             </button>
           )}

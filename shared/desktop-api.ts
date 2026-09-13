@@ -1,6 +1,8 @@
 /// <reference lib="dom" />
 /** The desktop bridge contract, checked by both preload and renderer. */
 import type {
+  ToolEnvironment,
+  AppUpdateState,
   AgentAccessKind,
   ApplyUpdateInput,
   ApplyUpdateResult,
@@ -50,6 +52,10 @@ import type {
 } from './contracts'
 
 export interface ShelfApi {
+  inspectToolEnvironment: (id: string) => Promise<ToolEnvironment>
+  getAppUpdateState: () => Promise<AppUpdateState>
+  checkAppUpdates: () => Promise<AppUpdateState>
+  onAppUpdateState: (cb: (state: AppUpdateState) => void) => () => void
   getPendingImports: () => Promise<{ id: string; name: string; destination: string }[]>
   resumeImport: (id: string) => Promise<StagedShareView>
   getLibraryRecovery: () => Promise<string | null>
@@ -111,6 +117,8 @@ export interface ShelfApi {
   discardSharedTool: (stageId: string) => Promise<void>
   checkToolUpdates: (id: string) => Promise<UpdateCheck>
   applyToolUpdate: (id: string, input: ApplyUpdateInput) => Promise<ApplyUpdateResult>
+  prepareCatalogStarter: (name: string, toolIds: string[]) => Promise<{ content: string; warnings: string[] }>
+  exportCatalogStarter: (content: string) => Promise<{ saved: boolean; path?: string }>
   listTeamCatalogs: () => Promise<TeamCatalog[]>
   addTeamCatalog: (url: string) => Promise<CatalogSyncView | ShareFailure>
   refreshTeamCatalog: (id: string) => Promise<CatalogSyncView | ShareFailure>
@@ -155,8 +163,8 @@ export interface ShelfApi {
   startTool: (id: string, options?: StartOptions) => Promise<ToolRuntimeState>
   stopTool: (id: string) => Promise<ToolRuntimeState>
   restartTool: (id: string) => Promise<ToolRuntimeState>
-  getLogs: (id: string) => Promise<LogLine[]>
-  getErrorReport: (id: string) => Promise<string | null>
+  getLogs: (id: string, runId?: string) => Promise<LogLine[]>
+  getErrorReport: (id: string, runId?: string) => Promise<string | null>
   listReceipts: (opts?: {
     toolId?: string
     limit?: number

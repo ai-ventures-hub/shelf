@@ -1,3 +1,5 @@
+import { prepareCatalogStarter, validateCatalogStarter } from '../shared/catalog-starter'
+import { atomicWriteFileSync } from '../shared/atomic-file'
 import {
   app,
   BrowserWindow,
@@ -23,7 +25,7 @@ import { resolveProfileForGap } from '../shared/design-resolve'
 import { buildGapBrief } from '../shared/gap-brief'
 import { suggestGapResolutions } from '../shared/gap-suggest'
 import { finishImport, importMarker, pendingImportIds, readImport } from '../shared/import-journal'
-import { buildErrorReport } from '../shared/launch-diagnostics'
+import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
 import { adoptCollection } from '../shared/library-store'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
@@ -67,7 +69,8 @@ import {
   type ShareSource,
   type StagedShare,
 } from '../shared/tool-share'
-import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
+import { inspectToolEnvironment } from '../shared/tool-environment'
+import { getAppUpdateState, checkAppUpdates, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -109,6 +112,8 @@ let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let teamCatalogs: TeamCatalogStore
 let isQuitting = false
+let quitDiscardApproved = false
+let quitPreparing = false
 /** Staged (fetched, not yet approved) shared-tool adds, by stageId. */
 const stagedShares = new Map<string, StagedShare>()
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
@@ -253,6 +258,18 @@ function createWindow(): void {
     void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
   mainWindow.webContents.on('did-finish-load', flushRendererMessages)
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    if (quitDiscardApproved) { event.preventDefault(); return }
+    if (!mainWindow) return
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning', title: 'Leave this page?',
+      message: 'There are unsaved changes or an operation in progress.',
+      detail: 'Stay to finish saving or let the operation complete. Leaving discards the form; an operation already started may continue in the background.',
+      buttons: ['Stay', 'Leave page'], defaultId: 0, cancelId: 0,
+    })
+    if (choice === 1) event.preventDefault()
+    else isQuitting = false
+  })
 
   // Persist window geometry after interaction settles; move/resize can emit
   // hundreds of events and preferences use synchronous atomic disk writes.
@@ -712,21 +729,49 @@ function registerIpc(): void {
     return `data:${mime};base64,${buf.toString('base64')}`
   })
 
+  ipcMain.handle('catalog:prepareStarter', (_e, name: string, toolIds: string[]) => {
+    if (!Array.isArray(toolIds) || toolIds.length > 500 || toolIds.some((id) => typeof id !== 'string')) throw new Error('Choose up to 500 tools.')
+    const selected = [...new Set(toolIds)].map((id) => {
+      const tool = store.get(id)
+      if (!tool) throw new Error('A selected tool was removed. Review your selection.')
+      return tool
+    })
+    return prepareCatalogStarter(name, selected)
+  })
+  ipcMain.handle('catalog:exportStarter', async (_e, content: string) => {
+    const validated = validateCatalogStarter(content)
+    const result = await dialog.showSaveDialog({ title: 'Save team catalog', defaultPath: 'catalog.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return { saved: false }
+    atomicWriteFileSync(result.filePath, validated)
+    return { saved: true, path: result.filePath }
+  })
+  ipcMain.handle('tools:environment', (_e, id: string) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error('Tool not found.')
+    return inspectToolEnvironment(tool)
+  })
+  ipcMain.handle('app:updateState', () => getAppUpdateState())
+  ipcMain.handle('app:checkUpdates', () => checkAppUpdates())
   ipcMain.handle('process:states', () => processes.getStates())
   // Launchability glyphs for library cards — one lsof call for all tools.
   ipcMain.handle('tools:health', async () =>
-    deriveLibraryHealth(store.list(), await processes.getStates()),
+    deriveLibraryHealth(store.list(), processes.peekStates()),
   )
   ipcMain.handle('process:start', (_e, id: string, options?: StartOptions) =>
     processes.start(id, options),
   )
   ipcMain.handle('process:stop', (_e, id: string) => processes.stop(id))
   ipcMain.handle('process:restart', (_e, id: string) => processes.restart(id))
-  ipcMain.handle('process:logs', (_e, id: string) => processes.getLogs(id))
+  ipcMain.handle('process:logs', (_e, id: string, runId?: string) => processes.getLogs(id, runId))
   // Paste-ready failure report for "Copy report for your AI tool".
-  ipcMain.handle('process:errorReport', async (_e, id: string) => {
+  ipcMain.handle('process:errorReport', async (_e, id: string, runId?: string) => {
     const tool = store.get(id)
     if (!tool) return null
+    if (runId) {
+      const receipt = receipts.get(runId)
+      if (!receipt || receipt.toolId !== id) throw new Error('This run is no longer available for the selected tool.')
+      return buildReceiptReport(tool, receipt, processes.getLogs(id, runId))
+    }
     const state = await processes.getState(id)
     return buildErrorReport(tool, state, processes.getLogs(id))
   })
@@ -1016,18 +1061,36 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('app:installUpdate', async () => {
-    // Bypass the before-quit interception: stop tools here, then hand the
-    // quit to Squirrel so the downloaded update installs and relaunches.
-    isQuitting = true
+    if (isQuitting || quitPreparing) return
+    if (getAppUpdateState().status !== 'ready') throw new Error('No downloaded update is ready.')
+    quitPreparing = true
     try {
-      // Only our own children — agent-launched tools survive the update restart.
+      if (!await confirmPendingChanges('Restart and update')) return
       await processes.stopAll('Shelf is updating.', { scope: 'local' })
-    } catch {
-      // Updating matters more than a clean tool shutdown at this point.
-    }
-    installDownloadedUpdate()
+      isQuitting = true
+      installDownloadedUpdate()
+    } catch (error) {
+      isQuitting = false
+      quitDiscardApproved = false
+      throw error
+    } finally { quitPreparing = false }
   })
   registerMcpConnectIpc(resolveMcpServerPath)
+}
+
+/** Consult the renderer's active form before stopping services or invoking the updater. */
+async function confirmPendingChanges(action: string): Promise<boolean> {
+  const canLeave = !mainWindow || mainWindow.isDestroyed() || await mainWindow.webContents
+    .executeJavaScript("window.dispatchEvent(new Event('shelf:before-quit', { cancelable: true }))")
+    .catch(() => false)
+  if (canLeave) return true
+  const choice = await dialog.showMessageBox({
+    type: 'warning', message: 'There are unsaved changes or an operation in progress.',
+    detail: 'Stay to finish saving or let the operation complete. Leaving discards unsaved form changes.',
+    buttons: ['Stay', action], defaultId: 0, cancelId: 0,
+  })
+  quitDiscardApproved = choice.response === 1
+  return quitDiscardApproved
 }
 
 if (gotLock) {
@@ -1142,12 +1205,22 @@ if (gotLock) {
 
   app.on('before-quit', (event) => {
     if (isQuitting) return
-    isQuitting = true
     event.preventDefault()
-    // scope 'local': quitting the GUI must not kill tools an agent's MCP
-    // server launched — that server still owns and manages them.
-    void processes.stopAll('Shelf is quitting.', { scope: 'local' }).finally(() => {
-      app.exit(0)
+    if (quitPreparing) return
+    quitPreparing = true
+    // scope 'local': quitting the GUI must not kill agent-owned tools.
+    void (async () => {
+      if (!await confirmPendingChanges('Quit Shelf')) { quitPreparing = false; return }
+      await processes.stopAll('Shelf is quitting.', { scope: 'local' })
+      // A natural quit honors window lifecycle and update installation hooks.
+      isQuitting = true
+      quitPreparing = false
+      app.quit()
+    })().catch((error) => {
+      isQuitting = false
+      quitPreparing = false
+      quitDiscardApproved = false
+      void dialog.showMessageBox({ type: 'error', message: 'Shelf could not finish stopping its tools.', detail: error instanceof Error ? error.message : String(error), buttons: ['Stay in Shelf'] })
     })
   })
 }

@@ -49,6 +49,36 @@ export async function findPortOccupants(port: number): Promise<number[]> {
   }
 }
 
+/** Parse lsof field output without depending on table spacing or IPv4 formatting. */
+export function parsePortOccupants(output: string): Map<number, number[]> {
+  const listeners = new Map<number, number[]>()
+  let pid = 0
+  for (const line of output.split('\n')) {
+    if (/^p\d+$/.test(line)) pid = Number(line.slice(1))
+    if (!pid || !line.startsWith('n')) continue
+    const match = /:(\d+)$/.exec(line)
+    if (!match) continue
+    const port = Number(match[1])
+    if (port < 1 || port > 65535) continue
+    const pids = listeners.get(port) || []
+    if (!pids.includes(pid)) pids.push(pid)
+    listeners.set(port, pids)
+  }
+  return listeners
+}
+
+/** One listener snapshot per reconciliation; null means inspection failed, not free. */
+export async function listPortOccupants(): Promise<Map<number, number[]> | null> {
+  try {
+    const { stdout } = await execFileAsync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 })
+    return parsePortOccupants(stdout)
+  } catch (error) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string }
+    if (failure.code === 1 && !failure.stdout && !failure.stderr) return new Map()
+    return null
+  }
+}
+
 /**
  * Returns the first LISTEN pid on a TCP port, or null when free.
  */

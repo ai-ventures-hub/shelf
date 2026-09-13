@@ -17,7 +17,7 @@ export const HOW_CARDS = [
   {
     n: '02',
     title: 'Shelf reads the setup',
-    body: 'Shelf finds the launch command, installs the packages, moves the port when it’s busy, and remembers all of it.',
+    body: 'Shelf detects the launch and setup commands. You review them before installation or launch; Shelf handles busy ports.',
   },
   {
     n: '03',
@@ -62,7 +62,7 @@ export const HONEST_CARDS = [
     statusTone: 'neutral',
     edge: 'neutral',
     line: 'one-shot · .venv/bin/python convert.py',
-    body: 'A one-shot script with no port. You can run it. Agents never see it.',
+    body: 'A one-shot script with no port. Agents can find and launch it through Shelf, even without a separate agent interface.',
     readiness: 'Manual only',
     readinessTone: 'neutral',
     action: 'Run once',

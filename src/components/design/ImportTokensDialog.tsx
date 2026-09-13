@@ -1,3 +1,4 @@
+import { Modal } from '../Modal'
 /**
  * Phase 3 assist: pull the design tokens a project literally declares (CSS
  * custom properties, Tailwind config literals) into the profile draft.
@@ -63,19 +64,13 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
   const total = result ? extractionTotal(result) : 0
 
   return (
-    <div
+    <Modal open={open} onDismiss={onCancel} busy={busy} aria-labelledby="import-tokens-title"
       className="name-prompt-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel()
-      }}
     >
       <div
         ref={dialogRef}
         tabIndex={-1}
         className="name-prompt import-tokens"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="import-tokens-title"
         onKeyDown={onKeyDown}
       >
@@ -135,6 +130,6 @@ export function ImportTokensDialog({ open, onCancel, onApply }: ImportTokensDial
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

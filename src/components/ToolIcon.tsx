@@ -1,4 +1,5 @@
-import { getLucideIcon } from '../lib/lucideCatalog'
+import { Suspense } from 'react'
+import { selectedIcon } from '../lib/selectedIcon'
 import { useToolIcon } from '../hooks/useToolIcon'
 
 /** Shared tool mark: Lucide → custom image → letter fallback. */
@@ -19,7 +20,7 @@ export function ToolIcon({
 }) {
   const { src, failed } = useToolIcon(iconPath)
   const initial = name.trim().charAt(0).toUpperCase() || 'T'
-  const Lucide = getLucideIcon(iconLucide)
+  const Lucide = selectedIcon(iconLucide)
 
   if (Lucide) {
     return (
@@ -31,7 +32,7 @@ export function ToolIcon({
           color: iconColor || '#081021',
         }}
       >
-        <Lucide className="tool-icon-lucide-svg" strokeWidth={2} />
+        <Suspense fallback={initial}><Lucide className="tool-icon-lucide-svg" strokeWidth={2} /></Suspense>
       </div>
     )
   }

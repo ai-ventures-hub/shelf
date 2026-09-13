@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   filterLucideNames,
   getLucideIcon,
@@ -23,6 +23,7 @@ export function LucideIconPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const listId = useId()
@@ -37,7 +38,7 @@ export function LucideIconPicker({
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') { setOpen(false); triggerRef.current?.focus() }
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -52,9 +53,9 @@ export function LucideIconPicker({
   return (
     <div className="lucide-picker" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="lucide-picker-trigger"
-        aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
@@ -63,7 +64,7 @@ export function LucideIconPicker({
           className="lucide-picker-preview"
           style={{ background: iconBackground, color: iconColor }}
         >
-          {Selected ? <Selected size={18} strokeWidth={2} /> : <span>?</span>}
+          {Selected ? <Suspense fallback={<span>…</span>}><Selected size={18} strokeWidth={2} /></Suspense> : <span>?</span>}
         </span>
         <span className="lucide-picker-label">{label}</span>
       </button>
@@ -82,7 +83,7 @@ export function LucideIconPicker({
           <div
             id={listId}
             className="lucide-picker-grid"
-            role="listbox"
+            role="group"
             aria-label="Lucide icons"
           >
             {names.length === 0 ? (
@@ -91,22 +92,23 @@ export function LucideIconPicker({
               names.map((name) => {
                 const Icon = getLucideIcon(name)
                 if (!Icon) return null
-                const active = name === value
+                const active = name.toLowerCase() === value?.toLowerCase()
                 return (
                   <button
                     key={name}
                     type="button"
-                    role="option"
-                    aria-selected={active}
+                    aria-label={humanizeLucideName(name)}
+                    aria-pressed={active}
                     title={humanizeLucideName(name)}
                     className={`lucide-picker-cell${active ? ' is-active' : ''}`}
                     onClick={() => {
                       onChange(name)
                       setOpen(false)
+                      triggerRef.current?.focus()
                       setQuery('')
                     }}
                   >
-                    <Icon size={18} strokeWidth={1.85} />
+                    <Suspense fallback={<span>…</span>}><Icon size={18} strokeWidth={1.85} /></Suspense>
                   </button>
                 )
               })

@@ -17,6 +17,8 @@ import { DEFAULT_UI_PREFS } from '../../shared/types'
 interface PrefsContextValue {
   prefs: UiPrefs
   loading: boolean
+  error: string | null
+  refresh: () => Promise<void>
   updatePrefs: (patch: Partial<UiPrefs>) => Promise<void>
   resolvedTheme: 'light' | 'dark'
   /** Latest global hotkey registration result (null until main reports). */
@@ -33,6 +35,7 @@ function resolveTheme(mode: AppearanceMode): 'light' | 'dark' {
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<UiPrefs>(DEFAULT_UI_PREFS)
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatus | null>(null)
   const [systemLight, setSystemLight] = useState(
@@ -41,19 +44,13 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       window.matchMedia('(prefers-color-scheme: light)').matches,
   )
 
-  useEffect(() => {
-    if (!window.shelf) {
-      setLoading(false)
-      return
-    }
-    void window.shelf.getPrefs().then((next) => {
-      setPrefs(next)
-      setLoading(false)
-    })
-    if (window.shelf.getShortcutStatus) {
-      void window.shelf.getShortcutStatus().then(setShortcutStatus)
-    }
+  const refresh = useCallback(async () => {
+    if (!window.shelf) { setLoading(false); return }
+    try { const [next, shortcut] = await Promise.all([window.shelf.getPrefs(), window.shelf.getShortcutStatus()]); setPrefs(next); setShortcutStatus(shortcut); setError(null) }
+    catch { setError('Could not read preferences. Retry before changing settings.') }
+    finally { setLoading(false) }
   }, [])
+  useEffect(() => { void refresh() }, [refresh])
 
   useEffect(() => {
     if (!window.shelf?.onShortcutStatus) return
@@ -93,14 +90,17 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       setPrefs((prev) => ({ ...prev, ...patch }))
       return
     }
-    const result = await window.shelf.updatePrefs(patch)
-    setPrefs(result.prefs)
-    if (result.shortcutStatus) setShortcutStatus(result.shortcutStatus)
+    try {
+      const result = await window.shelf.updatePrefs(patch)
+      setPrefs(result.prefs)
+      if (result.shortcutStatus) setShortcutStatus(result.shortcutStatus)
+      setError(null)
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }, [])
 
   const value = useMemo(
-    () => ({ prefs, loading, updatePrefs, resolvedTheme, shortcutStatus }),
-    [prefs, loading, updatePrefs, resolvedTheme, shortcutStatus],
+    () => ({ prefs, loading, error, refresh, updatePrefs, resolvedTheme, shortcutStatus }),
+    [prefs, loading, error, refresh, updatePrefs, resolvedTheme, shortcutStatus],
   )
 
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>

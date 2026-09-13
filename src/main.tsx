@@ -1,13 +1,12 @@
 import { createRoot } from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
+import { createHashRouter, RouterProvider } from 'react-router-dom'
 import App from './App'
+import { AppErrorPage } from './components/AppErrorPage'
 import './styles/tokens.css'
 import './styles/app.css'
 import './styles/mcp-connect.css'
 
-// HashRouter keeps routes working when Electron loads file:// production builds.
+// Hash routing keeps routes working when Electron loads file:// production builds.
 createRoot(document.getElementById('root')!).render(
-  <HashRouter>
-    <App />
-  </HashRouter>,
+  <RouterProvider router={createHashRouter([{ path: '*', element: <App />, errorElement: <AppErrorPage /> }])} />,
 )

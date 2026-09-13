@@ -1,3 +1,4 @@
+import { Modal } from '../Modal'
 /**
  * New-profile wizard (Design Engine Phase 3c): name → source → preview →
  * create. A project-sourced profile is seeded ONLY with the extracted
@@ -93,19 +94,13 @@ export function NewProfileWizard({ open, onCancel, onCreate }: NewProfileWizardP
   const total = result ? extractionTotal(result) : 0
 
   return (
-    <div
+    <Modal open={open} onDismiss={onCancel} busy={busy} aria-labelledby="new-profile-title"
       className="name-prompt-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel()
-      }}
     >
       <div
         ref={dialogRef}
         tabIndex={-1}
         className="name-prompt import-tokens"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="new-profile-title"
         onKeyDown={onKeyDown}
       >
@@ -241,6 +236,6 @@ export function NewProfileWizard({ open, onCancel, onCreate }: NewProfileWizardP
           </>
         ) : null}
       </div>
-    </div>
+    </Modal>
   )
 }

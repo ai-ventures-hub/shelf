@@ -1,3 +1,4 @@
+import { Modal } from './Modal'
 import {
   useEffect,
   useMemo,
@@ -375,17 +376,11 @@ export function QuickOpen({
   if (!open) return null
 
   return (
-    <div
+    <Modal open={open} onDismiss={() => setOpen(false)} busy={false} aria-label="Quick Open"
       className="quick-open-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false)
-      }}
     >
       <div
         className="quick-open"
-        role="dialog"
-        aria-modal="true"
         aria-label="Quick Open"
         onKeyDown={onKeyDown}
       >
@@ -474,6 +469,6 @@ export function QuickOpen({
           </span>
         </footer>
       </div>
-    </div>
+    </Modal>
   )
 }

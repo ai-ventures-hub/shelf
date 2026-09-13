@@ -1,3 +1,4 @@
+import { CatalogStarterDialog } from '../components/sharing/CatalogStarterDialog'
 import { formatRelativeTime } from '../lib/relativeTime'
 /**
  * Team Tools (1.4) — the catalogs this Mac subscribes to and what's in them.
@@ -83,6 +84,8 @@ function EntryRow({
 
 export function TeamToolsPage() {
   const { tools } = useLibrary()
+  const [starterOpen, setStarterOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [catalogs, setCatalogs] = useState<TeamCatalog[]>([])
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState('')
@@ -91,9 +94,10 @@ export function TeamToolsPage() {
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const list = await window.shelf.listTeamCatalogs()
-    setCatalogs(list)
-    setLoading(false)
+    setLoading(true)
+    try { setCatalogs(await window.shelf.listTeamCatalogs()); setError(null) }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -111,44 +115,28 @@ export function TeamToolsPage() {
   const installedIdFor = (repo: string): string | undefined =>
     installedByRepo.get(repo.toLowerCase().replace(/\.git$/, ''))
 
-  async function addCatalog(e: FormEvent) {
-    e.preventDefault()
-    const value = url.trim()
-    if (!value) return
-    setBusy('add')
-    setFailure(null)
-    setNotice(null)
-    const result = await window.shelf.addTeamCatalog(value)
-    setBusy(null)
-    if (!result.ok) {
-      setFailure(result)
-      return
-    }
-    setUrl('')
-    if (result.empty) {
-      setNotice(
-        `${result.catalog.name} has no catalog.json yet. Share a tool with the team to start it.`,
-      )
-    }
-    await load()
+  async function run(key: string, action: () => Promise<void>) {
+    if (busy) return
+    setBusy(key); setError(null); setFailure(null); setNotice(null)
+    try { await action() } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setBusy(null) }
   }
-
+  async function addCatalog(event: FormEvent) {
+    event.preventDefault()
+    if (!url.trim()) return
+    await run('add', async () => {
+      const result = await window.shelf.addTeamCatalog(url.trim())
+      if (!result.ok) { setFailure(result); return }
+      setUrl('')
+      if (result.empty) setNotice(`${result.catalog.name} has no catalog.json yet. Share a tool with the team to start it.`)
+      await load()
+    })
+  }
   async function refresh(catalog: TeamCatalog) {
-    setBusy(catalog.id)
-    setFailure(null)
-    setNotice(null)
-    const result = await window.shelf.refreshTeamCatalog(catalog.id)
-    setBusy(null)
-    if (!result.ok) setFailure(result)
-    await load()
+    await run(catalog.id, async () => { const result = await window.shelf.refreshTeamCatalog(catalog.id); if (!result.ok) setFailure(result); await load() })
   }
-
   async function remove(catalog: TeamCatalog) {
-    setBusy(catalog.id)
-    await window.shelf.removeTeamCatalog(catalog.id)
-    setBusy(null)
-    setNotice(`Unsubscribed from ${catalog.name}. Tools you installed from it stay on your shelf.`)
-    await load()
+    await run(catalog.id, async () => { await window.shelf.removeTeamCatalog(catalog.id); setNotice(`Unsubscribed from ${catalog.name}. Installed tools stay on your shelf.`); await load() })
   }
 
   return (
@@ -165,6 +153,8 @@ export function TeamToolsPage() {
         </div>
       </header>
 
+      <section className="panel"><div className="panel-body stack"><h2>Start a team library</h2><p>Generate a catalog from tools already on your shelf, then publish it through your Git host.</p><button className="btn" disabled={Boolean(busy)} onClick={() => setStarterOpen(true)}>Create a team catalog</button></div></section>
+      <h2>Open an existing team catalog</h2>
       <form className="team-add" onSubmit={addCatalog}>
         <input
           type="text"
@@ -174,14 +164,17 @@ export function TeamToolsPage() {
           aria-label="Catalog repository URL"
           autoComplete="off"
           spellCheck={false}
-          disabled={busy === 'add'}
+          disabled={Boolean(busy)}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <button type="submit" className="btn btn-primary" disabled={busy === 'add' || !url.trim()}>
+        <button type="submit" className="btn btn-primary" disabled={Boolean(busy) || !url.trim()}>
           {busy === 'add' ? 'Fetching…' : 'Add catalog'}
         </button>
       </form>
 
+      {loading && <p role="status">Loading team catalogs…</p>}
+      {error && <p role="alert" className="form-error">{error} <button className="btn" disabled={Boolean(busy) || loading} onClick={() => void load()}>Retry</button></p>}
+      {starterOpen && <CatalogStarterDialog tools={tools} onClose={() => setStarterOpen(false)} />}
       {failure ? <FailureCard failure={failure} /> : null}
       {notice ? (
         <div className="share-status" role="status">
@@ -194,8 +187,7 @@ export function TeamToolsPage() {
           <div>
             <h2>No team catalogs yet</h2>
             <p>
-              Create a repo your team can read, add a <code>catalog.json</code> to it, and paste
-              the clone URL above. Anyone who can clone that repo is on the team, so access is
+              Use Create a team catalog to generate the file, or paste an existing team’s repository URL above. Anyone who can clone that repo is on the team, so access is
               whatever your git host already says it is.
             </p>
           </div>
@@ -216,7 +208,7 @@ export function TeamToolsPage() {
               <button
                 type="button"
                 className="btn btn-quiet btn-sm"
-                disabled={busy === catalog.id}
+                disabled={Boolean(busy)}
                 onClick={() => void refresh(catalog)}
               >
                 {busy === catalog.id ? 'Refreshing…' : 'Refresh'}
@@ -224,7 +216,7 @@ export function TeamToolsPage() {
               <button
                 type="button"
                 className="btn btn-quiet btn-sm"
-                disabled={busy === catalog.id}
+                disabled={Boolean(busy)}
                 onClick={() => void remove(catalog)}
               >
                 Unsubscribe
