@@ -1,3 +1,4 @@
+export type { ProjectMemory, ProjectMemoryFields, SaveProjectMemoryInput, ProjectHandoffOptions, ProjectHandoff } from './project-context-contracts'
 export type { AgentAccess, AgentAccessKind, McpTransport, Tool, ToolSource } from './tool-validation'
 import type { AgentAccess, AgentAccessKind, Tool, ToolSource } from './tool-validation'
 /** Browser-safe data contracts shared by renderer, Electron, and MCP.

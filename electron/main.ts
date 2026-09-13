@@ -1,3 +1,6 @@
+import { ProjectMemoryStore } from '../shared/project-memory-store'
+import { prepareProjectHandoff } from '../shared/project-handoff'
+import type { SaveProjectMemoryInput, ProjectHandoffOptions } from '../shared/project-context-contracts'
 import { prepareCatalogStarter, validateCatalogStarter } from '../shared/catalog-starter'
 import { atomicWriteFileSync } from '../shared/atomic-file'
 import {
@@ -107,6 +110,7 @@ let mainWindow: BrowserWindow | null = null
 let store: LibraryStore
 let processes: ProcessManager
 let prefs: PrefsStore
+let projectMemory: ProjectMemoryStore
 let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
@@ -418,6 +422,17 @@ function resolveMcpServerPath(): string {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('context:getMemory', (_e, id: string) => {
+    if (!store.get(id)) throw new Error('This tool is no longer in the library.')
+    return projectMemory.get(id)
+  })
+  ipcMain.handle('context:saveMemory', (_e, input: SaveProjectMemoryInput) => {
+    if (!store.get(input?.toolId)) throw new Error('This tool is no longer in the library.')
+    return projectMemory.save(input)
+  })
+  ipcMain.handle('context:handoff', (_e, id: string, options: ProjectHandoffOptions) =>
+    prepareProjectHandoff({ library: store, memory: projectMemory, receipts, design: designProfiles }, id, options))
+
   ipcMain.handle('tools:list', () => store.list())
   ipcMain.handle('tools:recovery', () => store.recoveryNotice())
   ipcMain.handle('tools:save', (_e, tool: Tool) => store.save(tool))
@@ -1098,6 +1113,7 @@ if (gotLock) {
     prefs = new PrefsStore()
     store = new LibraryStore()
     receipts = new ReceiptStore()
+    projectMemory = new ProjectMemoryStore(store.getRoot())
     capabilityGaps = new CapabilityGapStore()
     designProfiles = new DesignProfileStore()
     teamCatalogs = new TeamCatalogStore()
@@ -1156,6 +1172,7 @@ if (gotLock) {
     const watchedFiles = new Set([
       'library.json',
       'receipts.json',
+      'project-memory.json',
       'capability-gaps.json',
       'design-profiles.json',
     ])

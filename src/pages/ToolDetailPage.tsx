@@ -309,6 +309,9 @@ export function ToolDetailPage() {
               <Share2 size={15} aria-hidden /> Share
             </button>
           ) : null}
+          <Link className="btn btn-primary" to={`/tools/${toolId}/context${selectedRun ? `?run=${encodeURIComponent(selectedRun)}` : ''}`}>
+            Memory &amp; handoff
+          </Link>
           <Link className="btn btn-quiet" to={`/tools/${toolId}/edit`}>
             Edit
           </Link>
