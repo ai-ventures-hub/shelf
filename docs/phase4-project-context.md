@@ -1,6 +1,6 @@
 # Phase 4: Project memory and agent handoffs
 
-This first Phase 4 increment implements project memory and reviewable handoffs on `codex/phase4-project-context`, based on Shelf 1.7.0. Reusable workflow execution remains a later increment. No dependencies, library migrations, or release/version changes are included.
+This first Phase 4 increment implements project memory and reviewable handoffs on `codex/phase4-project-context`, based on Shelf 1.7.0, and is prepared for the signed 1.8.0 release. Reusable workflow execution remains a later increment. No dependencies or library migrations are added. The release workflow separately gates signing, notarization, and publication.
 
 ## User flow
 
