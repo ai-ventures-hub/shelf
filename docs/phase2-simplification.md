@@ -49,7 +49,7 @@ Final verification on September 12, 2026:
 - The desktop fixture disabled OS login items, global shortcut registration, and menu-bar integration. Its test wrapper suppressed protocol-handler registration to preserve the installed app's association. These OS integrations were not retested visually in this phase.
 - `git diff --check` passed. The existing Vite large-chunk warning remains.
 
-This phase is a local implementation, not a published release.
+Phase 2 is prepared for the signed 1.6.0 release. The results above describe local implementation checks; the release workflow separately gates signing, notarization, and publication.
 
 ## Deliberate limits
 
