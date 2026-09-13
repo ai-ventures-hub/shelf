@@ -1,3 +1,5 @@
+export type { CatalogSyncView, PublishResult } from './contracts'
+import type { PublishResult } from './contracts'
 /**
  * Git side of the Team Tools catalog (v1.4). Clone, refresh, and publish an
  * entry, reusing tool-share's hardened git invocation rather than growing a
@@ -12,18 +14,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  ShareError,
-  classifyCloneFailure,
-  cloneFailure,
-  gitFailure,
-  type GitRun,
-  githubHelperArgs,
-  requireGit,
-  resolveGhBinary,
-  runGit,
-  validateRepoUrl,
-} from './tool-share'
-import {
   CATALOG_FILENAME,
   emptyRawCatalog,
   mergeRawEntries,
@@ -31,10 +21,21 @@ import {
   readRawCatalog,
   upsertRawEntry,
   writeRawCatalog,
-  type CatalogEntry,
-  type RawCatalog,
+  type CatalogEntry
 } from './team-catalog'
 import type { TeamCatalog, TeamCatalogStore } from './team-catalog-store'
+import {
+  ShareError,
+  classifyCloneFailure,
+  cloneFailure,
+  gitFailure,
+  githubHelperArgs,
+  requireGit,
+  resolveGhBinary,
+  runGit,
+  validateRepoUrl,
+  type GitRun,
+} from './tool-share'
 
 const CLONE_TIMEOUT_MS = 120_000
 const GIT_TIMEOUT_MS = 60_000
@@ -75,14 +76,6 @@ function isGitRepo(dir: string): boolean {
   } catch {
     return false
   }
-}
-
-/** IPC shape for catalog:add / catalog:refresh (the ok side). */
-export interface CatalogSyncView {
-  ok: true
-  catalog: TeamCatalog
-  warnings: string[]
-  empty: boolean
 }
 
 export interface CatalogSyncResult {
@@ -264,17 +257,6 @@ export async function addCatalog(
     if (!existing) store.remove(record.id)
     throw err
   }
-}
-
-export interface PublishResult {
-  action: 'added' | 'updated'
-  /** False when the commit is local because the push failed or was refused. */
-  pushed: boolean
-  /** Why the push didn't happen, in plain language. */
-  pushProblem?: string
-  pushRemedy?: string
-  pushRemedyCommand?: string
-  count: number
 }
 
 /**

@@ -28,10 +28,10 @@ const invokedChannels = new Set(
 )
 
 // --- renderer contract: ShelfApi interface keys ---
-const rendererTypes = read('src/types.ts')
+const rendererTypes = read('shared/desktop-api.ts')
 const shelfApiBody = rendererTypes.slice(
   rendererTypes.indexOf('export interface ShelfApi {'),
-  rendererTypes.indexOf('declare global'),
+  rendererTypes.length,
 )
 const contractKeys = new Set(
   [...shelfApiBody.matchAll(/^  (\w+):/gm)].map((m) => m[1]),

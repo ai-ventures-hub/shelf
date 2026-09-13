@@ -1,3 +1,6 @@
+import type { PreflightIssue } from './contracts'
+import { readProjectFacts, type ProjectFacts } from './project-facts'
+export type { PreflightIssue } from './contracts'
 /**
  * Pure pre-launch checks: does the folder exist, are dependencies installed,
  * is the Docker daemon reachable? No side effects — callers decide what to do
@@ -5,19 +8,12 @@
  */
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import path from 'node:path'
-import type { LaunchErrorCode } from './types'
-
-export interface PreflightIssue {
-  code: LaunchErrorCode
-  /** Plain-language, non-developer wording; the GUI shows this verbatim. */
-  message: string
-}
 
 /** Sync filesystem checks. Docker is async — see checkDockerDaemon. */
 export function preflightProject(
   projectPath: string | undefined,
   launchCommand: string | undefined,
+  observed?: ProjectFacts,
 ): PreflightIssue[] {
   const issues: PreflightIssue[] = []
   if (projectPath && !fs.existsSync(projectPath)) {
@@ -28,7 +24,7 @@ export function preflightProject(
     return issues
   }
   if (projectPath) {
-    issues.push(...missingDependencyIssues(projectPath, launchCommand))
+    issues.push(...missingDependencyIssues(projectPath, launchCommand, observed))
   }
   return issues
 }
@@ -36,37 +32,16 @@ export function preflightProject(
 function missingDependencyIssues(
   projectPath: string,
   launchCommand: string | undefined,
+  observed?: ProjectFacts,
 ): PreflightIssue[] {
   const issues: PreflightIssue[] = []
-  const has = (rel: string) => fs.existsSync(path.join(projectPath, rel))
-
-  // Node projects: a package.json with dependencies but no node_modules is
-  // the single most common failure for freshly generated projects.
-  if (has('package.json') && !has('node_modules')) {
-    try {
-      const pkg = JSON.parse(
-        fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'),
-      ) as { dependencies?: object; devDependencies?: object }
-      if (
-        Object.keys(pkg.dependencies || {}).length > 0 ||
-        Object.keys(pkg.devDependencies || {}).length > 0
-      ) {
-        issues.push({
-          code: 'deps_missing',
-          message: "This project's packages aren't installed yet.",
-        })
-      }
-    } catch {
-      // Unreadable package.json — let the launch surface the real error.
-    }
+  const facts = observed ?? readProjectFacts(projectPath)
+  if (facts.hasNodeDependencies && !facts.nodeModulesPresent) {
+    issues.push({ code: 'deps_missing', message: "This project's packages aren't installed yet." })
   }
 
-  // Python projects that declare requirements but have no venv, when the
-  // launch command expects one.
-  const declaresPython =
-    has('requirements.txt') || has('pyproject.toml') || has('Pipfile')
   const expectsVenv = Boolean(launchCommand && launchCommand.includes('.venv/'))
-  if (declaresPython && expectsVenv && !has('.venv')) {
+  if (facts.declaresPython && expectsVenv && !facts.venvPresent) {
     issues.push({
       code: 'deps_missing',
       message: "This project's Python environment isn't set up yet.",

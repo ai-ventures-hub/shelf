@@ -1,38 +1,33 @@
-import { readImport, pendingImportIds, finishImport, importMarker } from '../shared/import-journal'
 import {
   app,
   BrowserWindow,
-  Menu,
   clipboard,
   dialog,
   globalShortcut,
   ipcMain,
+  Menu,
 } from 'electron'
-import path from 'node:path'
 import fs from 'node:fs'
-import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
-import { startCollection, stopCollection } from '../shared/collection-launch'
-import { resolveDesignMd } from '../shared/design-md'
-import { extractProjectTokens } from '../shared/design-extract'
-import { deriveLibraryHealth } from '../shared/tool-health'
-import { buildDesignBrief } from '../shared/design-brief'
-import { buildGapBrief } from '../shared/gap-brief'
-import { suggestGapResolutions } from '../shared/gap-suggest'
-import { deriveToolReadiness } from '../shared/capability-intelligence'
+import path from 'node:path'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
+import { containsLikelySecret, deriveToolReadiness } from '../shared/capability-intelligence'
+import { startCollection, stopCollection } from '../shared/collection-launch'
+import { buildDesignBrief } from '../shared/design-brief'
+import { extractProjectTokens } from '../shared/design-extract'
+import { resolveDesignMd } from '../shared/design-md'
 import {
   DesignProfileStore,
   type SaveDesignProfileInput,
 } from '../shared/design-profile-store'
 import { resolveProfileForGap } from '../shared/design-resolve'
+import { buildGapBrief } from '../shared/gap-brief'
+import { suggestGapResolutions } from '../shared/gap-suggest'
+import { finishImport, importMarker, pendingImportIds, readImport } from '../shared/import-journal'
+import { buildErrorReport } from '../shared/launch-diagnostics'
+import { adoptCollection } from '../shared/library-store'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
-import { buildErrorReport } from '../shared/launch-diagnostics'
 import { inspectProject } from '../shared/project-import'
-import {
-  registerProject,
-  type RegisterProjectOptions,
-} from '../shared/register-project'
 import {
   receiptsToCsv,
   receiptsToJson,
@@ -40,14 +35,28 @@ import {
 } from '../shared/receipt-export'
 import { ReceiptStore } from '../shared/receipt-store'
 import {
+  registerProject,
+  type RegisterProjectOptions,
+} from '../shared/register-project'
+import type { CatalogEntry } from '../shared/team-catalog'
+import { TeamCatalogStore, type TeamCatalog } from '../shared/team-catalog-store'
+import {
+  addCatalog,
+  publishToCatalog,
+  syncCatalog,
+  type PublishResult,
+} from '../shared/team-catalog-sync'
+import { deriveLibraryHealth } from '../shared/tool-health'
+import { folderNameFor } from '../shared/tool-manifest'
+import {
   applyToolUpdate,
   checkToolUpdates,
   cleanStagingRoot,
   confirmStagedShare,
   detectGitRemote,
   discardStagedShare,
-  prepareToolBundle,
   exportToolManifest,
+  prepareToolBundle,
   ShareError,
   stageSharedTool,
   uniqueDestination,
@@ -58,16 +67,7 @@ import {
   type ShareSource,
   type StagedShare,
 } from '../shared/tool-share'
-import { folderNameFor } from '../shared/tool-manifest'
-import { containsLikelySecret } from '../shared/capability-intelligence'
-import { TeamCatalogStore, type TeamCatalog } from '../shared/team-catalog-store'
-import {
-  addCatalog,
-  publishToCatalog,
-  syncCatalog,
-  type PublishResult,
-} from '../shared/team-catalog-sync'
-import type { CatalogEntry } from '../shared/team-catalog'
+import { initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -84,7 +84,6 @@ import {
   toggleWindow,
   type DesktopIntegrationHost,
 } from './desktop-integration'
-import { adoptCollection } from '../shared/library-store'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { registerMcpConnectIpc } from './mcp-connect-ipc'
 import { flushPendingOnboarding, submitOnboarding } from './onboarding-relay'
@@ -1048,7 +1047,7 @@ if (gotLock) {
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
         if (channel === 'process:update') {
-          refreshTray(getDesktopHost())
+          refreshTray(getDesktopHost(), processes.peekStates())
         }
       },
     })
@@ -1079,7 +1078,7 @@ if (gotLock) {
       reconcileInFlight = true
       void processes
         .getStates()
-        .then(() => refreshTray(getDesktopHost()))
+        .then((states) => refreshTray(getDesktopHost(), states))
         .finally(() => {
           reconcileInFlight = false
         })

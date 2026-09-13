@@ -1,17 +1,19 @@
+export type { ClaudeConnectResult, ClaudeDesktopStatus } from './contracts'
+export { resolveNodeCommand } from './node-resolve'
+import type { ClaudeConnectResult, ClaudeDesktopStatus } from './contracts'
 /**
  * One-click Claude Desktop MCP install.
  * Safely merges mcpServers.shelf into claude_desktop_config.json without wiping other servers.
  */
 import fs from 'node:fs'
-import { configuredCommandExists } from './client-observation'
-import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
+import { replaceClientConfig } from './client-config-file'
+import { configuredCommandExists } from './client-observation'
 import { mcpPathMigrationHint } from './mcp-server-path'
 import { resolveNodeCommand } from './node-resolve'
 
 export const CLAUDE_MCP_SERVER_KEY = 'shelf'
-export { resolveNodeCommand } from './node-resolve'
 
 export interface ClaudeMcpServerEntry {
   command: string
@@ -22,32 +24,6 @@ export interface ClaudeMcpServerEntry {
 export interface ClaudeDesktopConfigFile {
   mcpServers?: Record<string, ClaudeMcpServerEntry | unknown>
   [key: string]: unknown
-}
-
-export interface ClaudeDesktopStatus {
-  /** Shelf entry present in claude_desktop_config.json. */
-  connected: boolean
-  /** True when shelf entry exists and points at this Shelf MCP bundle. */
-  matches: boolean
-  /**
-   * True when Claude’s MCP logs show it actually spawned Shelf.
-   * Config can be installed while Claude still needs a full Quit/relaunch.
-   */
-  claudeLoaded: boolean
-  configPath: string
-  configExists: boolean
-  serverPath: string
-  serverOk: boolean
-  nodeCommand: string
-  nodeOk: boolean
-  nodePath?: string
-  message: string
-}
-
-export interface ClaudeConnectResult {
-  status: ClaudeDesktopStatus
-  /** Written only when we overwrite an existing config file. */
-  backupPath?: string
 }
 
 export function resolveClaudeDesktopConfigPath(home = os.homedir()): string {
@@ -148,8 +124,7 @@ export async function getClaudeDesktopStatus(opts: {
 
   if (configExists) {
     try {
-      const previousText = fs.readFileSync(configPath, 'utf8')
-  const config = readClaudeDesktopConfig(configPath)
+      const config = readClaudeDesktopConfig(configPath)
       const entry = config.mcpServers?.[CLAUDE_MCP_SERVER_KEY]
       if (entry) {
         connected = true

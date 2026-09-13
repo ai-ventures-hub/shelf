@@ -1,3 +1,6 @@
+import { flattenTokens } from './design-tokens'
+export { flattenTokens, type FlatToken } from './design-tokens'
+import type { FlatToken } from './design-tokens'
 /**
  * Paste-ready brand brief for a design profile — the markdown half of
  * shelf_get_design_profile and the shelf://design/profiles/{id} resource.
@@ -8,7 +11,7 @@
  * maskSecrets before reaching agents; tokens and asset paths are structured.
  */
 import { maskSecrets } from './types'
-import type { DesignMdResult, DesignProfile, DesignToken, DesignTokenGroup } from './types'
+import type { DesignMdResult, DesignProfile, DesignTokenGroup } from './types'
 import { isDesignToken } from './types'
 import type { GapBriefSection } from './gap-brief'
 
@@ -16,29 +19,6 @@ export interface DesignBriefSection {
   id: string
   title: string
   body: string
-}
-
-export interface FlatToken {
-  path: string
-  value: string | number
-  type?: string
-}
-
-/** Depth-first flatten of a DTCG group into dot-path leaves. */
-export function flattenTokens(group: DesignTokenGroup, prefix = ''): FlatToken[] {
-  const out: FlatToken[] = []
-  for (const [key, node] of Object.entries(group)) {
-    // Hand-edited files can hold nulls/primitives where groups belong — skip,
-    // never throw (agents read these through briefs).
-    if (!node || typeof node !== 'object' || Array.isArray(node)) continue
-    const tokenPath = prefix ? `${prefix}.${key}` : key
-    if (isDesignToken(node)) {
-      out.push({ path: tokenPath, value: (node as DesignToken).$value, type: node.$type })
-    } else {
-      out.push(...flattenTokens(node as DesignTokenGroup, tokenPath))
-    }
-  }
-  return out
 }
 
 function tokensInGroup(profile: DesignProfile, group: string): FlatToken[] {

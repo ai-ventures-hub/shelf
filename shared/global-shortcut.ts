@@ -1,3 +1,4 @@
+export type { ShortcutStatus } from './contracts'
 /**
  * Global show/hide shortcut presets shared by main process and Settings UI.
  * Keep accelerators in Electron syntax so register/unregister stay consistent.
@@ -18,10 +19,3 @@ export const GLOBAL_SHORTCUT_PRESETS: GlobalShortcutPreset[] = [
   { accelerator: 'Control+Shift+S', label: '⌃⇧S' },
   { accelerator: 'Command+Option+Space', label: '⌘⌥Space' },
 ]
-
-export interface ShortcutStatus {
-  ok: boolean
-  accelerator: string
-  /** Present when registration failed (usually another app owns the key). */
-  error?: string
-}

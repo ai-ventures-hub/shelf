@@ -1,3 +1,11 @@
+import type { RegisterOverrides, RegisterProjectOptions, RegisterProjectResult } from './contracts'
+import { readProjectFacts } from './project-facts'
+export type {
+  RegisterOutcome,
+  RegisterOverrides,
+  RegisterProjectOptions,
+  RegisterProjectResult,
+} from './contracts'
 /**
  * One-shot project registration: inspect → gate → save → (consented) setup →
  * launch. Shared by the Electron GUI and the MCP server so both produce
@@ -6,112 +14,26 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import type { LibraryStore } from './library-store'
-import { inspectProject } from './project-import'
-import {
-  detectBootstrapNeeds,
-  runBootstrap,
-  type BootstrapResult,
-  type BootstrapStep,
-} from './project-bootstrap'
 import {
   checkDockerDaemon,
   preflightProject,
   usesDocker,
   type PreflightIssue,
 } from './launch-preflight'
-import type { PortConflictPolicy, ProcessManager } from './process-manager'
-import type { AgentAccess, ProjectImportSuggestion, Tool, ToolRuntimeState, ToolSource } from './types'
-
-/**
- * Fields seeded from a shared manifest (Tool Sharing, 1.2). Applied on top
- * of inspection for NEW entries; an existing entry for the same folder keeps
- * its own values (mergeIntoExisting rules). `env` here is the receiver's
- * own typed values — a manifest never carries values.
- */
-export interface RegisterOverrides {
-  name?: string
-  description?: string
-  launchCommand?: string
-  port?: number
-  url?: string
-  tags?: string[]
-  capabilities?: string[]
-  agentAccess?: AgentAccess[]
-  notes?: string
-  env?: Record<string, string>
-}
-
-export type RegisterOutcome =
-  /** Saved and running; url (when known) is on the tool. */
-  | 'launched'
-  /** Saved; launch skipped because autoLaunch was false. */
-  | 'saved'
-  /** Saved; needs dependency install / Docker before it can run. */
-  | 'needs_setup'
-  /** Saved as a draft; detection was not confident enough to auto-run. */
-  | 'saved_needs_review'
-  /** Saved; launch (or consented setup) was attempted and failed. */
-  | 'saved_launch_failed'
-  /** Nothing saved; the folder does not exist or is not a directory. */
-  | 'invalid_folder'
-  /** Nothing saved; inspection-only run (dryRun). */
-  | 'dry_run'
-
-export interface RegisterProjectOptions {
-  /** Launch after saving (default true). */
-  autoLaunch?: boolean
-  /** Default 'reassign' — the one-shot flow heals port conflicts silently. */
-  onPortConflict?: PortConflictPolicy
-  /** Force the review outcome even at high confidence. */
-  forceReview?: boolean
-  /**
-   * Consent to run detected setup steps (package install). Without it,
-   * setup needs surface as 'needs_setup' and nothing is executed.
-   */
-  runSetup?: boolean
-  /** Inspect and gate only; save nothing, launch nothing. */
-  dryRun?: boolean
-  /** Icon defaults applied to newly created tools (GUI passes prefs). */
-  toolDefaults?: Partial<
-    Pick<Tool, 'iconLucide' | 'iconColor' | 'iconBackground'>
-  >
-  /** Manifest-seeded fields (shared tools). */
-  overrides?: RegisterOverrides
-  /**
-   * Exactly the setup steps to run when `runSetup` is true — replaces
-   * detection so what a consent sheet showed is what executes. An empty
-   * array means "run nothing".
-   */
-  setupSteps?: BootstrapStep[]
-  /** Provenance recorded on the saved tool (shared tools). */
-  source?: ToolSource
-}
+import type { LibraryStore } from './library-store'
+import type { ProcessManager } from './process-manager'
+import {
+  detectBootstrapNeeds,
+  runBootstrap,
+  type BootstrapResult,
+  type BootstrapStep,
+} from './project-bootstrap'
+import { inspectProject } from './project-import'
+import type { ProjectImportSuggestion, Tool, ToolSource } from './types'
 
 export interface RegisterProjectDeps {
   store: LibraryStore
   processes: ProcessManager
-}
-
-export interface RegisterProjectResult {
-  outcome: RegisterOutcome
-  /** Saved tool (present for every outcome that persisted). */
-  tool?: Tool
-  /** Runtime state after a launch attempt. */
-  state?: ToolRuntimeState
-  /** Raw inspection result (Developer Mode shows this in full). */
-  suggestion?: ProjectImportSuggestion
-  /** Whether the gate allowed auto-run, and why. */
-  autoRunnable: boolean
-  autoRunReason: string
-  /** Detected setup steps (empty when none). */
-  setupNeeds: BootstrapStep[]
-  /** Results of consented setup runs, in order. */
-  bootstrap?: { step: BootstrapStep; result: BootstrapResult }[]
-  /** Preflight problems in plain language. */
-  issues: PreflightIssue[]
-  /** True when a new library entry was created (vs updating an existing one). */
-  created: boolean
 }
 
 /** The one Python hint that means "the launch command is a guess". */
@@ -230,7 +152,8 @@ export async function registerProject(
     }
   }
 
-  const suggestion = await inspectProject(resolved)
+  const facts = readProjectFacts(resolved)
+  const suggestion = await inspectProject(resolved, facts)
   const existing = deps.store.findByProjectPath(resolved)
   const overrides = options.overrides
   const gateResult = existing?.launchCommand
@@ -245,10 +168,10 @@ export async function registerProject(
         }
       : gate(suggestion)
 
-  const setupNeeds = options.setupSteps ?? detectBootstrapNeeds(resolved)
+  const setupNeeds = options.setupSteps ?? detectBootstrapNeeds(resolved, facts)
   const launchCommand =
     existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
-  const issues: PreflightIssue[] = preflightProject(resolved, launchCommand)
+  const issues: PreflightIssue[] = preflightProject(resolved, launchCommand, facts)
   if (usesDocker(launchCommand)) {
     const docker = await checkDockerDaemon()
     if (docker) issues.push(docker)

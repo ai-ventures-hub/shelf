@@ -1,31 +1,23 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import type { ShelfApi } from '../shared/desktop-api'
 import type {
+  AgentAccessKind,
   ApplyUpdateInput,
   ApplyUpdateResult,
-  ConfirmShareInput,
-  ConfirmShareResult,
+  CapabilityGap,
+  CapabilityGapStatus,
   CatalogPublishResult,
   CatalogSyncView,
-  ShareFailure,
-  ShareSource,
-  StagedShare,
-  TeamCatalog,
-  UpdateCheck,
-  RegisterProjectOptions,
-  RegisterProjectResult,
-  StartOptions,
   ClaudeCodeConnectResult,
   ClaudeCodeMcpStatus,
   ClaudeConnectResult,
   ClaudeDesktopStatus,
-  McpClientDetection,
-  AgentAccessKind,
-  CapabilityGap,
-  CapabilityGapStatus,
   CodexConnectResult,
   CodexMcpStatus,
   Collection,
   CollectionActionResult,
+  ConfirmShareInput,
+  ConfirmShareResult,
   CursorConnectResult,
   CursorMcpStatus,
   DesignAsset,
@@ -34,18 +26,27 @@ import type {
   DesignProfile,
   ExtractedTokens,
   GapResolveSuggestion,
-  SaveDesignProfileInput,
   LogLine,
+  McpClientDetection,
   OnboardingSubmissionInput,
   ProjectImportSuggestion,
   ReceiptOutcome,
+  RegisterProjectOptions,
+  RegisterProjectResult,
   RunReceipt,
+  SaveDesignProfileInput,
+  ShareFailure,
+  ShareSource,
   ShortcutStatus,
+  StagedShare,
+  StartOptions,
+  TeamCatalog,
   Tool,
   ToolHealth,
   ToolReadiness,
   ToolRuntimeState,
   UiPrefs,
+  UpdateCheck,
 } from './types'
 
 /**
@@ -346,4 +347,6 @@ const api = {
   installUpdate: (): Promise<void> => ipcRenderer.invoke('app:installUpdate'),
 }
 
-contextBridge.exposeInMainWorld('shelf', api)
+// Compile-time parity includes payloads and callbacks, not only channel names.
+const checkedApi: ShelfApi = api
+contextBridge.exposeInMainWorld('shelf', checkedApi)

@@ -1,36 +1,8 @@
-/**
- * Renderer-side DTCG token utilities for the Design editor. The renderer
- * cannot import shared/, so isDesignToken/flatten logic is mirrored here
- * (source of truth: shared/types.ts + shared/design-brief.ts).
- */
+/** Editor-specific token operations; traversal is shared with agent briefs. */
 import type { DesignToken, DesignTokenGroup } from '../types'
-
-export interface FlatToken {
-  path: string
-  value: string | number
-  type?: string
-}
-
-export function isDesignToken(node: DesignToken | DesignTokenGroup): node is DesignToken {
-  return typeof node === 'object' && node !== null && '$value' in node
-}
-
-/** Depth-first flatten into dot-path leaves. */
-export function flattenGroup(group: DesignTokenGroup, prefix = ''): FlatToken[] {
-  const out: FlatToken[] = []
-  for (const [key, node] of Object.entries(group)) {
-    // Skip nulls/primitives from hand-edited or agent-written files — the
-    // editor must render whatever the store tolerates.
-    if (!node || typeof node !== 'object' || Array.isArray(node)) continue
-    const tokenPath = prefix ? `${prefix}.${key}` : key
-    if (isDesignToken(node)) {
-      out.push({ path: tokenPath, value: node.$value, type: node.$type })
-    } else {
-      out.push(...flattenGroup(node, tokenPath))
-    }
-  }
-  return out
-}
+import { isDesignToken, flattenTokens as flattenGroup } from '../../shared/design-tokens'
+import type { FlatToken } from '../../shared/design-tokens'
+export { isDesignToken, flattenTokens as flattenGroup, type FlatToken } from '../../shared/design-tokens'
 
 /** Leaves under one group path (e.g. 'color' or 'typography.font-family'). */
 export function leavesOf(tokens: DesignTokenGroup, groupPath: string): FlatToken[] {

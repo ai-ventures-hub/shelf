@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { agentAccessKindSchema } from '../shared/tool-validation'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
 import type { DesignProfileStore } from '../shared/design-profile-store'
@@ -37,7 +38,7 @@ export function registerCapabilityTools({
         'Find Shelf tools for a natural-language task. Returns explainable ranked matches, declared readiness, and each match\'s declared access entrypoints. Readiness describes the tool\'s own agent interface — launching via shelf_launch_tool is always available for every match.',
       inputSchema: {
         task: z.string().min(1).describe('Task or capability needed'),
-        accessKind: z.enum(['cli', 'mcp', 'http-api']).optional(),
+        accessKind: agentAccessKindSchema.optional(),
         limit: z.number().int().positive().max(10).optional(),
       },
     },
@@ -85,7 +86,7 @@ export function registerCapabilityTools({
         capabilities: z.array(z.string().min(1)).min(1),
         reason: z.string().min(1).describe('Why existing Shelf tools are insufficient'),
         relatedToolIds: z.array(z.string()).optional(),
-        suggestedAccess: z.enum(['cli', 'mcp', 'http-api']).optional(),
+        suggestedAccess: agentAccessKindSchema.optional(),
       },
     },
     async (args) => {

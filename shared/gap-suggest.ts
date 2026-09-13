@@ -1,3 +1,5 @@
+export type { GapResolveSuggestion } from './contracts'
+import type { GapResolveSuggestion } from './contracts'
 /**
  * Suggest-only gap resolution matching (PLAN-0.9.md): when a tool's
  * capabilities overlap an open/planned gap's, surface a suggestion the USER
@@ -10,16 +12,6 @@
  * insufficient then).
  */
 import type { CapabilityGap, Tool } from './types'
-
-export interface GapResolveSuggestion {
-  gapId: string
-  toolId: string
-  toolName: string
-  /** Gap capabilities (display form) the tool covers. */
-  matched: string[]
-  /** Total capabilities the gap requested. */
-  total: number
-}
 
 export function suggestGapResolutions(
   gaps: CapabilityGap[],

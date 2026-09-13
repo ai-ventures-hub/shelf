@@ -1,12 +1,14 @@
+export type { CursorConnectResult, CursorMcpStatus } from './contracts'
+import type { CursorConnectResult, CursorMcpStatus } from './contracts'
 /**
  * One-click Cursor MCP install.
  * Safely merges mcpServers.shelf into ~/.cursor/mcp.json without wiping other servers.
  */
 import fs from 'node:fs'
-import { configuredCommandExists } from './client-observation'
-import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
+import { replaceClientConfig } from './client-config-file'
+import { configuredCommandExists } from './client-observation'
 import { mcpPathMigrationHint } from './mcp-server-path'
 import { resolveNodeCommand } from './node-resolve'
 
@@ -21,27 +23,6 @@ export interface CursorMcpServerEntry {
 export interface CursorMcpConfigFile {
   mcpServers?: Record<string, CursorMcpServerEntry | unknown>
   [key: string]: unknown
-}
-
-export interface CursorMcpStatus {
-  /** Shelf entry present in ~/.cursor/mcp.json. */
-  connected: boolean
-  /** True when shelf entry exists and points at this Shelf MCP bundle. */
-  matches: boolean
-  configPath: string
-  configExists: boolean
-  serverPath: string
-  serverOk: boolean
-  nodeCommand: string
-  nodeOk: boolean
-  nodePath?: string
-  message: string
-}
-
-export interface CursorConnectResult {
-  status: CursorMcpStatus
-  /** Written only when we overwrite an existing config file. */
-  backupPath?: string
 }
 
 export function resolveCursorMcpConfigPath(home = os.homedir()): string {
@@ -114,8 +95,7 @@ export async function getCursorMcpStatus(opts: {
 
   if (configExists) {
     try {
-      const previousText = fs.readFileSync(configPath, 'utf8')
-  const config = readCursorMcpConfig(configPath)
+      const config = readCursorMcpConfig(configPath)
       const entry = config.mcpServers?.[CURSOR_MCP_SERVER_KEY]
       if (entry) {
         connected = true

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0 - 2026-09-13
+
+- Archive creation and extraction run in a worker so large shared tools do
+  not block the desktop's main event loop. Failed or cancelled archive work
+  stops before partial files are cleaned up; exports retain the exact bytes reviewed.
+- Simultaneous library status requests share one reconciliation pass, and
+  tray updates reuse existing runtime evidence. Later requests still refresh status.
+- Import, setup, preflight, and update planning use the same project facts
+  and package-manager detection. Tool validation and desktop bridge contracts
+  are shared across the renderer, Electron, and MCP.
+- Sharing and process ownership policies now live in focused modules while
+  preserving existing APIs, local storage, and interrupted-operation recovery.
+- Consolidates preference defaults, shortcut presets, design-token traversal,
+  launch labels, and relative-time formatting. Adds regression checks for
+  browser-safe contracts, concurrent status reads, and archive failure recovery.
+
 ## 1.5.1 - 2026-09-11
 
 - Includes all Phase 1 stabilization changes below. The 1.5.0 packaging run

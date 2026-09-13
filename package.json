@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "description": "Local tool library for macOS — launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",
@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "electron:dev": "env -u ELECTRON_RUN_AS_NODE SHELF_DEV=1 concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && tsc -p tsconfig.electron.json && electron .\"",
     "electron:build": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
-    "mcp:build": "esbuild mcp/server.ts --bundle --platform=node --format=cjs --outfile=dist-mcp/mcp/server.js --external:electron",
+    "mcp:build": "esbuild mcp/server.ts --bundle --platform=node --format=cjs --outfile=dist-mcp/mcp/server.js --external:electron && esbuild shared/archive-worker.ts --bundle --platform=node --format=cjs --outfile=dist-mcp/mcp/archive-worker.js",
     "mcp": "npm run mcp:build && node dist-mcp/mcp/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.shared.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.mcp.json --noEmit",
     "smoke": "node scripts/smoke-process.mjs",

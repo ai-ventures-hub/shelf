@@ -1,3 +1,5 @@
+export type { ClaudeCodeConnectResult, ClaudeCodeMcpStatus } from './contracts'
+import type { ClaudeCodeConnectResult, ClaudeCodeMcpStatus } from './contracts'
 /**
  * One-click Claude Code MCP install (user scope: every project).
  * ~/.claude.json is Claude Code's live state file — it holds much more than
@@ -5,10 +7,10 @@
  * preserve every unknown key and only ever touch mcpServers.shelf.
  */
 import fs from 'node:fs'
-import { configuredCommandExists } from './client-observation'
-import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
+import { replaceClientConfig } from './client-config-file'
+import { configuredCommandExists } from './client-observation'
 import { mcpPathMigrationHint } from './mcp-server-path'
 import { resolveNodeCommand } from './node-resolve'
 
@@ -23,27 +25,6 @@ export interface ClaudeCodeMcpServerEntry {
 export interface ClaudeCodeConfigFile {
   mcpServers?: Record<string, ClaudeCodeMcpServerEntry | unknown>
   [key: string]: unknown
-}
-
-export interface ClaudeCodeMcpStatus {
-  /** Shelf entry present in ~/.claude.json. */
-  connected: boolean
-  /** True when shelf entry exists and points at this Shelf MCP bundle. */
-  matches: boolean
-  configPath: string
-  configExists: boolean
-  serverPath: string
-  serverOk: boolean
-  nodeCommand: string
-  nodeOk: boolean
-  nodePath?: string
-  message: string
-}
-
-export interface ClaudeCodeConnectResult {
-  status: ClaudeCodeMcpStatus
-  /** Written only when we overwrite an existing config file. */
-  backupPath?: string
 }
 
 export function resolveClaudeCodeConfigPath(home = os.homedir()): string {
@@ -126,8 +107,7 @@ export async function getClaudeCodeMcpStatus(opts: {
 
   if (configExists) {
     try {
-      const previousText = fs.readFileSync(configPath, 'utf8')
-  const config = readClaudeCodeConfig(configPath)
+      const config = readClaudeCodeConfig(configPath)
       const entry = config.mcpServers?.[CLAUDE_CODE_MCP_SERVER_KEY]
       if (entry) {
         connected = true

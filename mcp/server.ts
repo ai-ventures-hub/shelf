@@ -1,40 +1,40 @@
+import { agentAccessInputSchema, portSchema, toolSchema } from '../shared/tool-validation'
 /**
  * Shelf MCP stdio server — same library + process manager as the Electron app.
  * Log only to stderr; stdout is reserved for MCP JSON-RPC.
  */
-import { recordClientObservation } from '../shared/client-observation'
-import { randomUUID } from 'node:crypto'
-import pkg from '../package.json'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { resolveDesignMd } from '../shared/design-md'
-import { resolveDesignProfile } from '../shared/design-resolve'
-import { summarizeDesignProfile } from '../shared/design-brief'
+import pkg from '../package.json'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
-import { DesignProfileStore } from '../shared/design-profile-store'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
+import { recordClientObservation } from '../shared/client-observation'
+import { summarizeDesignProfile } from '../shared/design-brief'
+import { resolveDesignMd } from '../shared/design-md'
+import { DesignProfileStore } from '../shared/design-profile-store'
+import { resolveDesignProfile } from '../shared/design-resolve'
 import { LibraryStore } from '../shared/library-store'
-import { ProcessManager } from '../shared/process-manager'
 import {
   findFreePort,
   findPortOccupant,
   urlForPort,
   withForcedPort,
 } from '../shared/ports'
+import { ProcessManager } from '../shared/process-manager'
 import { inspectProject } from '../shared/project-import'
-import { registerProject } from '../shared/register-project'
 import { ReceiptStore } from '../shared/receipt-store'
+import { registerProject } from '../shared/register-project'
 import { exportToolManifest, ShareError } from '../shared/tool-share'
 import {
   sanitizeToolForOutput,
   type AgentAccess,
   type Tool,
 } from '../shared/types'
-import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { errorResult, textResult, setRequestObserver } from './result'
 import { registerCapabilityTools } from './capability-tools'
 import { registerDesignTools } from './design-tools'
+import { errorResult, setRequestObserver, textResult } from './result'
 
 const store = new LibraryStore()
 const receipts = new ReceiptStore()
@@ -68,14 +68,7 @@ setRequestObserver(() => {
   lastObservation = Date.now()
 })
 
-const agentAccessSchema = z.object({
-  id: z.string().optional(),
-  kind: z.enum(['cli', 'mcp', 'http-api']),
-  entrypoint: z.string().min(1),
-  transport: z.enum(['stdio', 'streamable-http']).optional(),
-  setupRequired: z.boolean().optional(),
-  notes: z.string().optional(),
-})
+const agentAccessSchema = agentAccessInputSchema.extend({ entrypoint: agentAccessInputSchema.shape.entrypoint.min(1) })
 
 server.registerTool(
   'shelf_list_tools',
@@ -131,14 +124,10 @@ server.registerTool(
     description:
       'Find free localhost TCP ports for registering or launching Shelf tools. Prefer this before upserting a web app.',
     inputSchema: {
-      preferred: z
-        .number()
-        .int()
-        .positive()
-        .optional()
+      preferred: portSchema.optional()
         .describe('Preferred port (returned when free)'),
-      from: z.number().int().positive().optional().describe('Scan start (default 3000)'),
-      to: z.number().int().positive().optional().describe('Scan end (default 3999)'),
+      from: portSchema.optional().describe('Scan start (default 3000)'),
+      to: portSchema.optional().describe('Scan end (default 3999)'),
       count: z
         .number()
         .int()
@@ -169,27 +158,25 @@ server.registerTool(
     description:
       'Create or update a Shelf tool. Provide id to update an existing tool, or name to update by name / create when missing. By default checks port conflicts and returns warnings + suggestedPort without blocking the save.',
     inputSchema: {
-      id: z.string().optional().describe('Existing tool id (optional)'),
-      name: z.string().min(1).describe('Display name'),
-      description: z.string().optional(),
-      tags: z.array(z.string()).optional(),
-      capabilities: z.array(z.string()).optional(),
+      id: toolSchema.shape.id.optional().describe('Existing tool id (optional)'),
+      name: toolSchema.shape.name.min(1).describe('Display name'),
+      description: toolSchema.shape.description,
+      tags: toolSchema.shape.tags.optional(),
+      capabilities: toolSchema.shape.capabilities.optional(),
       agentAccess: z.array(agentAccessSchema).optional(),
-      favorite: z.boolean().optional(),
-      projectPath: z.string().optional().describe('Absolute project folder path'),
-      launchCommand: z.string().min(1).describe('Shell command to launch the tool'),
-      stopCommand: z.string().optional(),
-      url: z.string().optional(),
-      port: z.number().int().positive().optional(),
-      env: z.record(z.string(), z.string()).optional(),
-      notes: z.string().optional(),
-      iconPath: z.string().optional(),
-      iconLucide: z
-        .string()
-        .optional()
+      favorite: toolSchema.shape.favorite.optional(),
+      projectPath: toolSchema.shape.projectPath.describe('Absolute project folder path'),
+      launchCommand: toolSchema.shape.launchCommand.min(1).describe('Shell command to launch the tool'),
+      stopCommand: toolSchema.shape.stopCommand,
+      url: toolSchema.shape.url,
+      port: portSchema.optional(),
+      env: toolSchema.shape.env,
+      notes: toolSchema.shape.notes,
+      iconPath: toolSchema.shape.iconPath,
+      iconLucide: toolSchema.shape.iconLucide
         .describe('Lucide icon PascalCase name, e.g. Wrench'),
-      iconColor: z.string().optional().describe('Hex color for Lucide glyph'),
-      iconBackground: z.string().optional().describe('Hex background behind Lucide glyph'),
+      iconColor: toolSchema.shape.iconColor.describe('Hex color for Lucide glyph'),
+      iconBackground: toolSchema.shape.iconBackground.describe('Hex background behind Lucide glyph'),
       checkPort: z
         .boolean()
         .optional()
@@ -765,7 +752,7 @@ server.registerTool(
       'Resolve a project-local DESIGN.md for a Shelf tool or absolute projectPath. Returns found:false when none exists (not an error).',
     inputSchema: {
       id: z.string().optional().describe('Shelf tool id'),
-      projectPath: z.string().optional().describe('Absolute project folder path'),
+      projectPath: toolSchema.shape.projectPath.describe('Absolute project folder path'),
     },
   },
   async ({ id, projectPath }) => {

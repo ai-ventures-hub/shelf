@@ -1,13 +1,15 @@
+export type { CodexConnectResult, CodexMcpStatus } from './contracts'
+import type { CodexConnectResult, CodexMcpStatus } from './contracts'
 /**
  * One-click Codex MCP install.
  * Upserts [mcp_servers.shelf] in ~/.codex/config.toml without rewriting other tables.
  * Shared by Codex CLI, IDE extension, and ChatGPT desktop Codex.
  */
 import fs from 'node:fs'
-import { configuredCommandExists } from './client-observation'
-import { replaceClientConfig } from './client-config-file'
 import os from 'node:os'
 import path from 'node:path'
+import { replaceClientConfig } from './client-config-file'
+import { configuredCommandExists } from './client-observation'
 import { mcpPathMigrationHint } from './mcp-server-path'
 import { resolveNodeCommand } from './node-resolve'
 import {
@@ -22,26 +24,6 @@ import {
 
 export const CODEX_MCP_SERVER_KEY = 'shelf'
 export const CODEX_MCP_TABLE = `mcp_servers.${CODEX_MCP_SERVER_KEY}`
-
-export interface CodexMcpStatus {
-  /** Shelf table present in config.toml. */
-  connected: boolean
-  /** True when shelf points at this Shelf MCP bundle. */
-  matches: boolean
-  configPath: string
-  configExists: boolean
-  serverPath: string
-  serverOk: boolean
-  nodeCommand: string
-  nodeOk: boolean
-  nodePath?: string
-  message: string
-}
-
-export interface CodexConnectResult {
-  status: CodexMcpStatus
-  backupPath?: string
-}
 
 export function resolveCodexConfigPath(home = os.homedir()): string {
   return path.join(home, '.codex', 'config.toml')

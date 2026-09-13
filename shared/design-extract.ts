@@ -1,3 +1,5 @@
+export type { ExtractedTokens } from './contracts'
+import type { ExtractedTokens } from './contracts'
 /**
  * Deterministic design-token extraction from a project folder (Design Engine
  * Phase 3: "extract tokens from this project"). Parses what the project
@@ -15,17 +17,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { DesignToken, DesignTokenGroup } from './types'
-
-export interface ExtractedTokens {
-  tokens: DesignTokenGroup
-  modes: { light: DesignTokenGroup; dark: DesignTokenGroup }
-  /** Leaf counts, for the GUI summary. */
-  counts: { color: number; typography: number; dimension: number; light: number; dark: number }
-  /** Relative file paths that contributed declarations, in scan order. */
-  sources: Array<{ file: string; declarations: number }>
-  /** Human-readable notes on what was deliberately not extracted. */
-  skipped: string[]
-}
 
 const SKIP_DIRS = new Set([
   'node_modules',

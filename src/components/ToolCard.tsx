@@ -2,6 +2,7 @@ import { ExternalLink, Play, Square, Star, TriangleAlert } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
+import { formatRelativeTime } from '../lib/relativeTime'
 import type { Tool, ToolHealth, ToolRuntimeState } from '../types'
 import { StatusPill } from './StatusPill'
 import { ToolIcon } from './ToolIcon'
@@ -38,18 +39,6 @@ function OriginChip({ state }: { state?: ToolRuntimeState }) {
       {label}
     </span>
   )
-}
-
-function formatRelative(iso?: string): string {
-  if (!iso) return 'Never'
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return 'Never'
-  const mins = Math.round((Date.now() - then) / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
 }
 
 export function ToolCard({
@@ -117,7 +106,7 @@ export function ToolCard({
           {!hideChips ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
-              <span className="meta-chip">{formatRelative(tool.lastLaunchedAt)}</span>
+              <span className="meta-chip">{formatRelativeTime(tool.lastLaunchedAt, 'Never')}</span>
               {visibleTags.map((tag) => (
                 <span key={tag} className="tag-chip">
                   {tag}
@@ -254,7 +243,7 @@ export function ToolListRow({
           {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
         </div>
       </td>
-      <td className="tabular">{formatRelative(tool.lastLaunchedAt)}</td>
+      <td className="tabular">{formatRelativeTime(tool.lastLaunchedAt, 'Never')}</td>
       {/* Inner flex row — never put display:flex on the <td> (breaks table layout). */}
       <td className="tool-list-actions">
         <div className="tool-list-actions-row">
