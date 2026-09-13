@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReceiptOutcome, RunReceipt } from '../types'
 
 export interface UseReceiptsOpts {
@@ -8,82 +8,67 @@ export interface UseReceiptsOpts {
   query?: string
 }
 
-/** Load + live-update run receipts from the main process. */
 export function useReceipts(opts: UseReceiptsOpts = {}) {
   const [receipts, setReceipts] = useState<RunReceipt[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const generation = useRef(0)
   const outcomesKey = opts.outcomes?.slice().sort().join(',') || ''
-
   const refresh = useCallback(async () => {
-    if (!window.shelf?.listReceipts) {
-      setReceipts([])
+    if (!window.shelf) {
       setLoading(false)
       return
     }
+    const ticket = ++generation.current
+    setLoading(true)
     try {
       const next = await window.shelf.listReceipts({
         toolId: opts.toolId,
         limit: opts.limit ?? 40,
-        outcomes: opts.outcomes,
+        outcomes: outcomesKey ? (outcomesKey.split(',') as ReceiptOutcome[]) : undefined,
         query: opts.query,
       })
-      setReceipts(next)
+      if (ticket === generation.current) {
+        setReceipts(next)
+        setError(null)
+      }
+    } catch (err) {
+      if (ticket === generation.current) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setLoading(false)
+      if (ticket === generation.current) setLoading(false)
     }
   }, [opts.toolId, opts.limit, outcomesKey, opts.query])
 
   useEffect(() => {
+    setReceipts([])
     void refresh()
-  }, [refresh])
-
-  // Receipts written by the MCP server (agent launches) arrive via the
-  // main-process file watcher rather than in-window receipt events.
-  useEffect(() => {
-    if (!window.shelf?.onExternalDataChange) return
-    return window.shelf.onExternalDataChange((filename) => {
+    // Requery after receipt events: filter membership and chronological order can change.
+    if (!window.shelf) return
+    const offReceipt = window.shelf.onReceiptUpdate(() => {
+      void refresh()
+    })
+    const offFile = window.shelf.onExternalDataChange((filename) => {
       if (filename === 'receipts.json') void refresh()
     })
+    return () => {
+      generation.current++
+      offReceipt()
+      offFile()
+    }
   }, [refresh])
-
-  useEffect(() => {
-    if (!window.shelf?.onReceiptUpdate) return
-    return window.shelf.onReceiptUpdate((receipt) => {
-      // Ignore updates for other tools when filtered.
-      if (opts.toolId && receipt.toolId !== opts.toolId) return
-      if (opts.outcomes?.length && !opts.outcomes.includes(receipt.outcome)) return
-      if (opts.query?.trim()) {
-        const q = opts.query.trim().toLowerCase()
-        const hay = [receipt.toolName, receipt.launchCommand, receipt.message || '']
-          .join(' ')
-          .toLowerCase()
-        if (!hay.includes(q)) return
-      }
-      setReceipts((prev) => {
-        const without = prev.filter((r) => r.id !== receipt.id)
-        return [receipt, ...without].slice(0, opts.limit ?? 40)
-      })
-    })
-  }, [opts.toolId, opts.limit, outcomesKey, opts.query])
-
   const clear = useCallback(async () => {
-    if (!window.shelf?.clearReceipts) return
     await window.shelf.clearReceipts({ toolId: opts.toolId })
     await refresh()
   }, [opts.toolId, refresh])
-
   const exportReceipts = useCallback(
-    async (format: 'json' | 'csv') => {
-      if (!window.shelf?.exportReceipts) return { saved: false as const }
-      return window.shelf.exportReceipts({
+    (format: 'json' | 'csv') =>
+      window.shelf.exportReceipts({
         format,
         toolId: opts.toolId,
-        outcomes: opts.outcomes,
+        outcomes: outcomesKey ? (outcomesKey.split(',') as ReceiptOutcome[]) : undefined,
         query: opts.query,
-      })
-    },
+      }),
     [opts.toolId, outcomesKey, opts.query],
   )
-
-  return { receipts, loading, refresh, clear, exportReceipts }
+  return { receipts, loading, error, refresh, clear, exportReceipts }
 }

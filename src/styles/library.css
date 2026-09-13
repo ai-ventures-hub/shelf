@@ -516,3 +516,10 @@
   border-color: color-mix(in srgb, var(--warning) 45%, transparent);
   color: var(--warning);
 }
+
+.tool-card { position: relative; }
+.tool-card-link { color: inherit; text-decoration: none; }
+.tool-card-link::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.tool-card-link:focus-visible { outline: none; }
+.tool-card:has(.tool-card-link:focus-visible) { outline: 2px solid var(--brand); outline-offset: 3px; }
+.tool-card-controls { position: relative; z-index: 1; }

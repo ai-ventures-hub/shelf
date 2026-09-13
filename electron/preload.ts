@@ -1,3 +1,4 @@
+import type { AppUpdateState } from '../shared/contracts'
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { ShelfApi } from '../shared/desktop-api'
 import type {
@@ -54,6 +55,14 @@ import type {
  * No Node APIs are exposed directly — all file/process work goes through IPC.
  */
 const api = {
+  inspectToolEnvironment: (id: string) => ipcRenderer.invoke('tools:environment', id),
+  getAppUpdateState: () => ipcRenderer.invoke('app:updateState'),
+  checkAppUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
+  onAppUpdateState: (cb: (state: AppUpdateState) => void) => {
+    const listener = (_event: IpcRendererEvent, state: AppUpdateState) => cb(state)
+    ipcRenderer.on('app:update-state', listener)
+    return () => ipcRenderer.removeListener('app:update-state', listener)
+  },
   getPendingImports: (): Promise<{ id: string; name: string; destination: string }[]> => ipcRenderer.invoke('share:pendingImports'),
   resumeImport: (id: string): Promise<Omit<StagedShare, 'stagePath'>> => ipcRenderer.invoke('share:resumeImport', id),
   getLibraryRecovery: (): Promise<string | null> => ipcRenderer.invoke('tools:recovery'),
@@ -160,6 +169,8 @@ const api = {
   applyToolUpdate: (id: string, input: ApplyUpdateInput): Promise<ApplyUpdateResult> =>
     ipcRenderer.invoke('share:applyUpdate', id, input),
   /** Team Tools catalogs (1.4): subscribe, refresh, publish an entry. */
+  prepareCatalogStarter: (name: string, toolIds: string[]) => ipcRenderer.invoke('catalog:prepareStarter', name, toolIds),
+  exportCatalogStarter: (content: string) => ipcRenderer.invoke('catalog:exportStarter', content),
   listTeamCatalogs: (): Promise<TeamCatalog[]> => ipcRenderer.invoke('catalog:list'),
   addTeamCatalog: (url: string): Promise<CatalogSyncView | ShareFailure> =>
     ipcRenderer.invoke('catalog:add', url),
@@ -237,10 +248,10 @@ const api = {
     ipcRenderer.invoke('process:stop', id),
   restartTool: (id: string): Promise<ToolRuntimeState> =>
     ipcRenderer.invoke('process:restart', id),
-  getLogs: (id: string): Promise<LogLine[]> => ipcRenderer.invoke('process:logs', id),
+  getLogs: (id: string, runId?: string): Promise<LogLine[]> => ipcRenderer.invoke('process:logs', id, runId),
   /** Paste-ready failure report (secrets already masked). */
-  getErrorReport: (id: string): Promise<string | null> =>
-    ipcRenderer.invoke('process:errorReport', id),
+  getErrorReport: (id: string, runId?: string): Promise<string | null> =>
+    ipcRenderer.invoke('process:errorReport', id, runId),
   listReceipts: (opts?: {
     toolId?: string
     limit?: number

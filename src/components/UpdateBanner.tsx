@@ -1,3 +1,4 @@
+import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useEffect, useState } from 'react'
 
 /**
@@ -6,17 +7,12 @@ import { useEffect, useState } from 'react'
  * is safe — the update still installs on the next natural quit.
  */
 export function UpdateBanner() {
-  const [version, setVersion] = useState<string | null>(null)
+  const { state, error, install } = useAppUpdate()
+  const version = state?.status === 'ready' ? state.version : null
   const [dismissed, setDismissed] = useState(false)
   const [installing, setInstalling] = useState(false)
 
-  useEffect(() => {
-    if (!window.shelf?.onUpdateReady) return
-    return window.shelf.onUpdateReady((info) => {
-      setVersion(info.version)
-      setDismissed(false)
-    })
-  }, [])
+  useEffect(() => { setDismissed(false) }, [version])
 
   if (!version || dismissed) return null
 
@@ -25,13 +21,14 @@ export function UpdateBanner() {
       <span className="update-banner-text">
         Shelf {version} is ready — restart to update.
       </span>
+      {error && <span role="alert">{error}</span>}
       <button
         type="button"
         className="update-banner-restart"
         disabled={installing}
         onClick={() => {
           setInstalling(true)
-          void window.shelf.installUpdate()
+          void install().finally(() => setInstalling(false))
         }}
       >
         {installing ? 'Restarting…' : 'Restart'}

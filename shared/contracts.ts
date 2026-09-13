@@ -850,3 +850,18 @@ export interface RegisterOverrides {
 
 export type CatalogPublishResult = PublishResult
 export type StagedShareView = Omit<StagedShare, 'stagePath'>
+
+export interface ToolEnvironment {
+  checkedAt: string
+  checks: { label: string; status: 'ready' | 'missing' | 'unknown'; detail: string }[]
+  setupSteps: BootstrapStep[]
+}
+
+export interface AppUpdateState {
+  status: 'unsupported' | 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+  currentVersion: string
+  version?: string
+  percent?: number
+  checkedAt?: string
+  error?: string
+}

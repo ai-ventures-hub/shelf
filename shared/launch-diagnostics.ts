@@ -7,6 +7,7 @@ import type {
   LaunchErrorCode,
   LogLine,
   RemedyKind,
+  RunReceipt,
   Tool,
   ToolRuntimeState,
 } from './types'
@@ -136,4 +137,14 @@ export function buildErrorReport(
     tail.length > 0 ? tail.join('\n') : '(no output captured)',
   ]
   return maskSecrets(lines.filter((l) => l !== null).join('\n'), toolSecretValues(tool))
+}
+
+/** A retained run report uses that run's command/outcome rather than today's idle state. */
+export function buildReceiptReport(tool: Tool, receipt: RunReceipt, logs: LogLine[]): string {
+  if (receipt.toolId !== tool.id) throw new Error('This run does not belong to the selected tool.')
+  const status = ['failed', 'interrupted'].includes(receipt.outcome) ? 'error' : receipt.outcome as ToolRuntimeState['status']
+  const report = buildErrorReport({ ...tool, name: receipt.toolName, launchCommand: receipt.launchCommand, port: receipt.port, url: receipt.url }, {
+    status, message: receipt.message || `Recorded outcome: ${receipt.outcome}`, exitCode: receipt.exitCode,
+  }, logs)
+  return maskSecrets(`${report}\n\nRun: ${receipt.id}\nStarted: ${receipt.startedAt}\nRecorded outcome: ${receipt.outcome}\nProject folder reflects the current library entry.`, toolSecretValues(tool))
 }

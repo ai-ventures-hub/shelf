@@ -1,50 +1,79 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
-
-/**
- * Background auto-update from the public GitHub releases feed.
- *
- * Updates download silently (differential when the blockmap allows it); when
- * one is ready the renderer gets `app:update-ready` and shows the restart
- * banner. Ignoring the banner still installs on the next natural quit
- * (autoInstallOnAppQuit). Checks never surface errors — offline or
- * rate-limited checks just retry on the next cycle.
- *
- * Dev builds skip entirely: unpacked apps cannot be updated in place.
- */
+import type { AppUpdateState } from '../shared/contracts'
+import { nextAppUpdateState } from '../shared/app-update-state'
 
 const FIRST_CHECK_DELAY_MS = 15_000
 const RECHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
-
-export interface UpdateReadyInfo {
-  version: string
+let state: AppUpdateState = {
+  status: app.isPackaged ? 'idle' : 'unsupported',
+  currentVersion: app.getVersion(),
+}
+let send: (channel: string, ...args: unknown[]) => void = () => {}
+let pending: Promise<AppUpdateState> | null = null
+function update(patch: Partial<AppUpdateState>) {
+  state = nextAppUpdateState(state, patch)
+  send('app:update-state', state)
+}
+export function getAppUpdateState(): AppUpdateState {
+  return { ...state }
 }
 
-export function initAutoUpdate(
-  sendToRenderer: (channel: string, ...args: unknown[]) => void,
-): void {
-  if (!app.isPackaged) return
+export function checkAppUpdates(): Promise<AppUpdateState> {
+  if (!app.isPackaged || state.status === 'ready' || state.status === 'downloading')
+    return Promise.resolve(getAppUpdateState())
+  if (pending) return pending
+  update({ status: 'checking' })
+  pending = autoUpdater
+    .checkForUpdates()
+    .then(() => getAppUpdateState())
+    .catch(() => {
+      update({
+        status: 'error',
+        error: 'Could not check for updates. Check your connection and try again.',
+      })
+      return getAppUpdateState()
+    })
+    .finally(() => {
+      pending = null
+    })
+  return pending
+}
 
+export function initAutoUpdate(sendToRenderer: typeof send): void {
+  send = sendToRenderer
+  if (!app.isPackaged) return
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-
+  autoUpdater.on('checking-for-update', () => update({ status: 'checking' }))
+  autoUpdater.on('update-available', (info) =>
+    update({ status: 'downloading', version: info.version, checkedAt: new Date().toISOString() }),
+  )
+  autoUpdater.on('download-progress', (progress) =>
+    update({ status: 'downloading', percent: Math.round(progress.percent) }),
+  )
+  autoUpdater.on('update-not-available', () =>
+    update({ status: 'idle', checkedAt: new Date().toISOString() }),
+  )
   autoUpdater.on('update-downloaded', (info) => {
-    const payload: UpdateReadyInfo = { version: info.version }
-    sendToRenderer('app:update-ready', payload)
+    update({ status: 'ready', version: info.version })
+    send('app:update-ready', { version: info.version })
   })
-  autoUpdater.on('error', () => {
-    // Silent by design — the next scheduled check retries.
-  })
-
-  const check = () => {
-    void autoUpdater.checkForUpdates().catch(() => {})
-  }
-  setTimeout(check, FIRST_CHECK_DELAY_MS)
-  const timer = setInterval(check, RECHECK_INTERVAL_MS)
-  timer.unref?.()
+  autoUpdater.on('error', () =>
+    update({
+      status: 'error',
+      error: 'Update check or download failed. Check your connection and retry.',
+    }),
+  )
+  setTimeout(() => {
+    void checkAppUpdates()
+  }, FIRST_CHECK_DELAY_MS).unref()
+  setInterval(() => {
+    void checkAppUpdates()
+  }, RECHECK_INTERVAL_MS).unref()
 }
 
-/** Quit and install the downloaded update. Caller stops tools first. */
 export function installDownloadedUpdate(): void {
+  if (state.status !== 'ready') throw new Error('No downloaded update is ready.')
   autoUpdater.quitAndInstall()
 }

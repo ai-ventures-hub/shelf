@@ -1,6 +1,10 @@
+import { launchOriginLabel } from '../lib/launchOrigin'
+import { ToolEnvironmentPanel } from '../components/ToolEnvironmentPanel'
+import { resolveDesignProfile } from '../../shared/design-resolve'
+import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { Share2, Sparkles, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
 import { LogPanel } from '../components/LogPanel'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
@@ -20,9 +24,12 @@ import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
 export function ToolDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { isDeveloper } = useUiMode()
   const {
     tools,
+    collections,
+    loading: libraryLoading,
     states,
     startTool,
     stopTool,
@@ -35,9 +42,19 @@ export function ToolDetailPage() {
   const tool = tools.find((t) => t.id === id)
   const state = id ? states[id] : undefined
   const status = state?.status || 'stopped'
+  const { profiles } = useDesignProfiles()
+  const design = resolveDesignProfile(profiles, collections, { toolId: id })
+  const [selectedRun, setSelectedRun] = useState('')
+  const [logError, setLogError] = useState<string | null>(null)
+  const [logRevision, setLogRevision] = useState(0)
   const [logs, setLogs] = useState<LogLine[]>([])
   const [busy, setBusy] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(() => {
+    const result = (location.state as { registration?: import('../types').RegisterProjectResult } | null)?.registration
+    if (result?.outcome === 'saved_launch_failed') return result.state?.message || 'The tool was saved, but setup or launch failed. Review the latest output below and check Environment to retry setup.'
+    if (result?.outcome === 'needs_setup') return 'The tool was saved. Open Environment below to review the setup it needs before launching.'
+    return null
+  })
   const [reportPreview, setReportPreview] = useState<string | null>(null)
   const [reportCopied, setReportCopied] = useState(false)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
@@ -51,7 +68,7 @@ export function ToolDetailPage() {
   >(null)
   const [updatesOpen, setUpdatesOpen] = useState(false)
   const [teamShareOpen, setTeamShareOpen] = useState(false)
-  const { receipts, clear: clearReceipts } = useReceipts({
+  const { receipts, error: receiptError, refresh: refreshReceipts, clear: clearReceipts } = useReceipts({
     toolId: id,
     limit: 25,
   })
@@ -59,32 +76,40 @@ export function ToolDetailPage() {
   const { suggestions, resolve, dismiss } = useGapSuggestions()
   const toolSuggestions = suggestions.filter((s) => s.toolId === id)
 
+  useEffect(() => { setSelectedRun('') }, [id])
   useEffect(() => {
     if (!id) return
     let active = true
-    setLogs([])
     let fetching = false
+    let changedDuringRead = false
+    setLogs([])
     const refreshLogs = async () => {
-      if (fetching) return
+      if (fetching) { changedDuringRead = true; return }
+      if (document.hidden) return
       fetching = true
+      changedDuringRead = false
       try {
-        const lines = await getLogs(id)
-        if (active) setLogs(lines.slice(-3000))
-      } catch {
-        if (active) setActionError('Could not read shared logs. Shelf will retry.')
-      } finally { fetching = false }
+        const lines = await getLogs(id, selectedRun || undefined)
+        if (active) { setLogs(lines.slice(-3000)); setLogError(null) }
+      } catch { if (active) setLogError('Could not read this run’s logs.') }
+      finally {
+        fetching = false
+        if (active && changedDuringRead) void refreshLogs()
+      }
     }
     void refreshLogs()
-    const timer = window.setInterval(() => { void refreshLogs() }, 1000)
-    const off = subscribeLogs(id, (line) => {
-      if (active) setLogs((prev) => [...prev.filter((old) => !line.runId || !old.runId || old.runId === line.runId), line].slice(-3000))
+    // Local runs push events. Only external running tools need periodic disk reads.
+    const timer = !selectedRun && state?.origin === 'external' && ['starting', 'running'].includes(status)
+      ? window.setInterval(() => { void refreshLogs() }, 3000) : undefined
+    let scheduled: number | undefined
+    const off = subscribeLogs(id, () => {
+      if (selectedRun || scheduled !== undefined) return
+      scheduled = window.setTimeout(() => { scheduled = undefined; void refreshLogs() }, 150)
     })
-    return () => {
-      active = false
-      window.clearInterval(timer)
-      off()
-    }
-  }, [id, getLogs, subscribeLogs])
+    const offReceipt = window.shelf.onReceiptUpdate((receipt) => { if (receipt.toolId === id) void refreshLogs() })
+    document.addEventListener('visibilitychange', refreshLogs)
+    return () => { active = false; window.clearInterval(timer); window.clearTimeout(scheduled); off(); offReceipt(); document.removeEventListener('visibilitychange', refreshLogs) }
+  }, [id, getLogs, subscribeLogs, selectedRun, status, state?.origin, logRevision])
 
   useEffect(() => {
     if (!id || !window.shelf?.getDesignMd) {
@@ -94,7 +119,7 @@ export function ToolDetailPage() {
     let active = true
     void window.shelf.getDesignMd({ id }).then((result) => {
       if (active) setDesignMd(result)
-    })
+    }).catch(() => { if (active) setActionError('Could not read project design instructions. Reopen this page to retry.') })
     return () => {
       active = false
     }
@@ -105,11 +130,13 @@ export function ToolDetailPage() {
     let active = true
     void window.shelf.checkToolReadiness(id).then((result) => {
       if (active) setReadiness(result)
-    })
+    }).catch(() => { if (active) setActionError('Could not check agent readiness. Reopen this page to retry.') })
     return () => {
       active = false
     }
   }, [id, tool?.updatedAt])
+
+  if (libraryLoading) return <p role="status">Loading tool…</p>
 
   if (!tool || !id) {
     return (
@@ -311,7 +338,7 @@ export function ToolDetailPage() {
             ))}
           </div>
           <p style={{ margin: 0, color: 'var(--muted)' }}>
-            {state?.message ||
+            {(state?.message !== 'Not started' ? state?.message : undefined) ||
               (current.lastLaunchedAt
                 ? `Stopped · last launch ${formatRelativeTime(current.lastLaunchedAt)}`
                 : 'Stopped · never launched')}
@@ -483,6 +510,14 @@ export function ToolDetailPage() {
         </div>
       </div>
 
+      <section className="panel run-summary">
+        <div className="panel-header"><h2 className="panel-title">Last run</h2></div>
+        <div className="panel-body stack">
+          {receipts[0] ? <><strong>{receipts[0].outcome.replaceAll('_', ' ')} · {formatRelativeTime(receipts[0].startedAt)}</strong><p>{receipts[0].message || 'No additional status message.'}</p><p className="muted">Started by {launchOriginLabel(receipts[0].startedBy) || 'Shelf'}{receipts[0].durationMs === undefined ? '' : ` · ${(receipts[0].durationMs / 1000).toFixed(1)} seconds`}</p></> : <p>No run recorded yet. Launch the tool to check how it behaves.</p>}
+          <button className="btn btn-quiet btn-sm" onClick={() => void run(async () => { const report = await window.shelf.getErrorReport(toolId, selectedRun || receipts[0]?.id); if (report) setReportPreview(report) })}>Prepare report for your AI tool</button>
+          {receiptError && <p role="alert">{receiptError} <button className="btn" onClick={() => void refreshReceipts()}>Retry history</button></p>}
+        </div>
+      </section>
       {isDeveloper ? (
       <section className="panel capability-panel">
         <div className="panel-header">
@@ -534,9 +569,12 @@ export function ToolDetailPage() {
       <div className="detail-layout">
         <section className="panel">
           <div className="panel-header">
-            <h2 className="panel-title">Live logs</h2>
+            <h2 className="panel-title">Run output</h2>
           </div>
           <div className="panel-body">
+            <label className="field"><span className="field-label">Run to inspect</span><select className="field-input" value={selectedRun} onChange={(event) => setSelectedRun(event.target.value)}><option value="">Latest output (live when running)</option>{receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{new Date(receipt.startedAt).toLocaleString()} · {receipt.outcome}</option>)}</select></label>
+            {logError && <p role="alert">{logError}</p>}
+            <button className="btn btn-quiet btn-sm" onClick={() => setLogRevision((revision) => revision + 1)}>Refresh output</button>
             <LogPanel lines={logs} />
           </div>
         </section>
@@ -546,6 +584,7 @@ export function ToolDetailPage() {
             <h2 className="panel-title">Configuration</h2>
           </div>
           <div className="panel-body stack">
+            <div><div className="field-label">Effective design profile</div>{design.profile ? <><Link to={`/design/${design.profile.id}`}>{design.profile.name}</Link><p className="muted">{design.via === 'default' ? 'Shelf default' : `Inherited from ${collections.find((collection) => collection.id === design.collectionId)?.name || 'collection'}`}. This is the profile agents receive when resolving this tool’s design context.</p></> : <p>No profile applies. Bind one to this tool’s collection or choose a default in <Link to="/design">Design profiles</Link>.</p>}</div>
             <div>
               <div className="field-label">Launch command</div>
               <code style={{ color: 'var(--brand-strong)', fontSize: '0.86em' }}>
@@ -671,7 +710,7 @@ export function ToolDetailPage() {
               className="btn btn-quiet btn-sm"
               onClick={() => {
                 if (window.confirm('Clear run history for this tool?')) {
-                  void clearReceipts()
+                  void run(clearReceipts)
                 }
               }}
             >
@@ -686,6 +725,7 @@ export function ToolDetailPage() {
           />
         </div>
       </section>
+      <ToolEnvironmentPanel key={tool.id} tool={tool} />
       <DiagnosticReportDialog report={reportPreview} onClose={() => setReportPreview(null)} onCopied={() => {
         setReportCopied(true)
         window.setTimeout(() => setReportCopied(false), 2400)

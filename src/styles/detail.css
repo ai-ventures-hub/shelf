@@ -137,3 +137,6 @@
 .log-line[data-stream=stdout] {
   color:var(--muted);
 }
+
+.run-summary { margin-bottom: 20px; }
+.log-follow { display: flex; align-items: center; gap: 8px; margin-block: 12px; }

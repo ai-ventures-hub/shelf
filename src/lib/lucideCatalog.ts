@@ -1,26 +1,21 @@
-/**
- * Lucide catalog helpers for the icon picker.
- * Uses the package `icons` map so the picker stays in sync with lucide-react.
- */
-import { icons, type LucideIcon } from 'lucide-react'
+/** Icon names are metadata; SVG code loads only for icons actually rendered. */
+import dynamicIconImports from 'lucide-react/dynamicIconImports'
+import { selectedIcon } from './selectedIcon'
 
-/** PascalCase names without the redundant `*Icon` aliases. */
-export const LUCIDE_ICON_NAMES: string[] = Object.keys(icons)
-  .filter((name) => !name.endsWith('Icon'))
-  .sort((a, b) => a.localeCompare(b))
+export const LUCIDE_ICON_NAMES = [
+  ...new Map(
+    Object.keys(dynamicIconImports)
+      .map((name) =>
+        name
+          .split('-')
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(''),
+      )
+      .map((name) => [name.toLowerCase(), name]),
+  ).values(),
+].sort((a, b) => a.localeCompare(b))
 
-/**
- * Resolve a Lucide component by stored PascalCase name.
- * Icons are React forwardRef objects (typeof === 'object'), not plain functions.
- */
-export function getLucideIcon(name?: string): LucideIcon | null {
-  if (!name) return null
-  const Icon = icons[name as keyof typeof icons]
-  if (!Icon || typeof Icon === 'string' || typeof Icon === 'boolean' || typeof Icon === 'number') {
-    return null
-  }
-  return Icon as LucideIcon
-}
+export const getLucideIcon = selectedIcon
 
 /** "ArrowUpRight" → "Arrow Up Right" for picker labels. */
 export function humanizeLucideName(name: string): string {

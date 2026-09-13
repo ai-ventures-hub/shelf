@@ -153,3 +153,7 @@
   font-size: 0.85rem;
   font-weight: 600;
 }
+
+.catalog-starter { width: min(640px, 100%); }
+.catalog-tool-options { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.catalog-preview { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

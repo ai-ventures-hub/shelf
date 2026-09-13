@@ -59,7 +59,8 @@ export class ProcessRuntimeSupport {
     return Array.from(this.states.values())
   }
 
-  getLogs(toolId: string): LogLine[] {
+  getLogs(toolId: string, runId?: string): LogLine[] {
+    if (runId) return this.sharedLogs?.read(toolId, this.secretsFor(toolId), runId) || []
     try {
       if (!this.failedLogWrites.has(toolId)) return this.sharedLogs?.read(toolId, this.secretsFor(toolId)) || this.logs.get(toolId) || []
     } catch { /* preserve this host's evidence when shared storage is unavailable */ }

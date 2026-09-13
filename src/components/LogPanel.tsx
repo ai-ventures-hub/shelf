@@ -1,27 +1,43 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { LogLine } from '../types'
 
 export function LogPanel({ lines }: { lines: LogLine[] }) {
-  const endRef = useRef<HTMLDivElement | null>(null)
-
+  const panel = useRef<HTMLDivElement>(null)
+  const [follow, setFollow] = useState(true)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
-  }, [lines.length])
-
+    if (follow && panel.current) panel.current.scrollTop = panel.current.scrollHeight
+  }, [lines, follow])
   return (
-    <div className="log-panel" role="log" aria-live="polite" aria-relevant="additions">
-      {lines.length === 0 ? (
-        <p className="log-line" data-stream="system">
-          No output has been recorded for this run. Tools started before this Shelf update may not have shared logs.
-        </p>
-      ) : (
-        lines.map((line, index) => (
-          <p key={`${line.at}-${index}`} className="log-line" data-stream={line.stream}>
-            {line.text}
+    <>
+      <label className="log-follow">
+        <input
+          type="checkbox"
+          checked={follow}
+          onChange={(event) => setFollow(event.target.checked)}
+        />{' '}
+        Follow new output
+      </label>
+      <div
+        ref={panel}
+        className="log-panel"
+        role="log"
+        aria-label="Run output"
+        aria-live="off"
+        tabIndex={0}
+      >
+        {lines.length === 0 ? (
+          <p className="log-line" data-stream="system">
+            No output is available for this run. Shelf retains logs for the five most recent runs;
+            older tools may have no recorded output.
           </p>
-        ))
-      )}
-      <div ref={endRef} />
-    </div>
+        ) : (
+          lines.map((line, index) => (
+            <p key={`${line.at}-${index}`} className="log-line" data-stream={line.stream}>
+              {line.text}
+            </p>
+          ))
+        )}
+      </div>
+    </>
   )
 }

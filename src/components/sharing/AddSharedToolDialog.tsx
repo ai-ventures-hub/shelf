@@ -1,3 +1,4 @@
+import { Modal } from '../Modal'
 /**
  * Add a shared tool (Tool Sharing, 1.2) — "Add from URL" / "Add from bundle"
  * / shelf://add. One sheet, two phases:
@@ -211,19 +212,13 @@ export function AddSharedToolDialog({
   if (!open) return null
 
   return (
-    <div
+    <Modal open={open} onDismiss={() => { void discardAndClose() }} busy={busy} aria-labelledby="add-shared-title"
       className="name-prompt-backdrop consent-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) void discardAndClose()
-      }}
     >
       <div
         ref={sheetRef}
         tabIndex={-1}
         className="consent-sheet"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="add-shared-title"
         onKeyDown={(e) => {
           if (e.key === 'Escape' && !busy) {
@@ -322,7 +317,7 @@ export function AddSharedToolDialog({
           </div>
         ) : null}
       </div>
-    </div>
+    </Modal>
   )
 }
 

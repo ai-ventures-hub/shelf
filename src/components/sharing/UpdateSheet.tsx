@@ -1,3 +1,4 @@
+import { Modal } from '../Modal'
 /**
  * "Check for updates" for a tool added from a shared repo. Check = fetch +
  * summary only (commits, manifest diff, new setup/env). Applying is always a
@@ -71,19 +72,13 @@ export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean
   const busy = phase.kind === 'checking' || phase.kind === 'applying'
 
   return (
-    <div
+    <Modal open={open} onDismiss={onClose} busy={busy} aria-labelledby="update-sheet-title"
       className="name-prompt-backdrop consent-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose()
-      }}
     >
       <div
         ref={sheetRef}
         tabIndex={-1}
         className="consent-sheet"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="update-sheet-title"
         onKeyDown={(e) => {
           if (e.key === 'Escape' && !busy) {
@@ -214,7 +209,7 @@ export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 

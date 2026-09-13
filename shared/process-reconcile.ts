@@ -17,6 +17,7 @@ export interface ExternalOwner {
 export async function reconcileExternalTool(
   toolId: string,
   opts: {
+    occupants?: number[]
     store: LibraryStore
     runtime: ProcessRuntimeSupport
     isLocallyManaged: (toolId: string) => boolean
@@ -61,7 +62,7 @@ export async function reconcileExternalTool(
     return
   }
 
-  const occupants = await findPortOccupants(tool.port)
+  const occupants = opts.occupants ?? await findPortOccupants(tool.port)
   if (occupants.length > 0) {
     const owner = await opts.trustedExternalOwner(toolId, tool.port, occupants)
     if (!owner) {

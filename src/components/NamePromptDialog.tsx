@@ -1,3 +1,4 @@
+import { Modal } from './Modal'
 /**
  * In-app name prompt — Electron does not support window.prompt (always null).
  */
@@ -25,11 +26,13 @@ export function NamePromptDialog({
   onConfirm,
 }: NamePromptDialogProps) {
   const [value, setValue] = useState(initialValue)
+  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
+    setError(null)
     setValue(initialValue)
     setBusy(false)
     // Focus after paint so the modal receives keyboard input.
@@ -46,6 +49,8 @@ export function NamePromptDialog({
     setBusy(true)
     try {
       await onConfirm(trimmed)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -59,17 +64,11 @@ export function NamePromptDialog({
   }
 
   return (
-    <div
+    <Modal open={open} onDismiss={onCancel} busy={busy} aria-labelledby="name-prompt-title"
       className="name-prompt-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel()
-      }}
     >
       <form
         className="name-prompt"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="name-prompt-title"
         onSubmit={(e) => void submit(e)}
         onKeyDown={onKeyDown}
@@ -88,6 +87,7 @@ export function NamePromptDialog({
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
+        {error && <p role="alert" className="form-error">{error}</p>}
         <div className="name-prompt-actions">
           <button
             type="button"
@@ -106,6 +106,6 @@ export function NamePromptDialog({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

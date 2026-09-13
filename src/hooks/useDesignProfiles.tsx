@@ -2,8 +2,8 @@
  * Design profiles context (useLibrary model). One provider because the shell
  * (nav count, QuickOpen), both /design pages, and the collection binding
  * picker all read the same list; mutations follow "IPC → await refresh()".
- * Live updates ride the main process's data-root watcher — agents never
- * write profiles, but the seed script and hand edits do.
+ * Live updates ride the main process's data-root watcher, including agent drafts
+ * and changes from other Shelf processes.
  */
 import {
   createContext,

@@ -1,3 +1,4 @@
+import { AppUpdatePanel } from '../components/AppUpdatePanel'
 import { GLOBAL_SHORTCUT_PRESETS } from '../../shared/global-shortcut'
 import { useEffect, useState } from 'react'
 import { ColorField } from '../components/ColorField'
@@ -28,7 +29,7 @@ const EXPERIENCE: { id: UiMode; label: string; hint: string }[] = [
 
 
 export function SettingsPage() {
-  const { prefs, updatePrefs, resolvedTheme, shortcutStatus } = usePrefs()
+  const { prefs, updatePrefs, resolvedTheme, shortcutStatus, error: prefsError, refresh: refreshPrefs } = usePrefs()
   const { mode, isDeveloper, setMode } = useUiMode()
   const { tools, collections } = useLibrary()
   // Draft so typing does not re-register the hotkey on every keystroke.
@@ -54,6 +55,8 @@ export function SettingsPage() {
         </div>
       </header>
 
+      {prefsError && <p role="alert" className="form-error">{prefsError} <button className="btn" onClick={() => void refreshPrefs()}>Retry preferences</button></p>}
+      <AppUpdatePanel />
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <div className="panel-header">
           <h2 className="panel-title">Experience</h2>

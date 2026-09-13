@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
@@ -46,10 +47,17 @@ export function ToolFormPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<ProjectImportSuggestion | null>(null)
+  const inspection = useRef(0)
+  const currentPath = useRef(form.projectPath)
+  currentPath.current = form.projectPath
+  useEffect(() => () => { inspection.current++ }, [])
   const [inspecting, setInspecting] = useState(false)
   // Create starts collapsed; edit may auto-open when advanced fields have content.
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const isEdit = Boolean(id)
+  const initialForm = useRef(form)
+  const base = baseRef.current || initialForm.current
+  const guard = useUnsavedChanges(JSON.stringify(form) !== JSON.stringify(base) || tagsText !== base.tags.join(', ') || capabilitiesText !== base.capabilities.join('\n') || envText !== envToText(base.env), saving)
 
   // Sync when library loads an existing tool after mount (Electron IPC is async).
   useEffect(() => {
@@ -109,16 +117,18 @@ export function ToolFormPage() {
    */
   async function runSmartImport(projectPath: string, opts: { fillEmpty: boolean }) {
     if (!window.shelf?.inspectProject) return
+    const ticket = ++inspection.current
     setInspecting(true)
     setError(null)
     try {
       const next = await window.shelf.inspectProject(projectPath)
+      if (ticket !== inspection.current || currentPath.current?.trim() !== projectPath.trim()) return
       setSuggestion(next)
       if (opts.fillEmpty) applySuggestion(next, { onlyEmpty: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setInspecting(false)
+      if (ticket === inspection.current) setInspecting(false)
     }
   }
 
@@ -224,6 +234,7 @@ export function ToolFormPage() {
         env: textToEnv(envText),
         port: form.port && Number.isFinite(form.port) ? Number(form.port) : undefined,
       })
+      guard.allowNavigation()
       navigate(`/tools/${saved.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -234,6 +245,7 @@ export function ToolFormPage() {
 
   return (
     <>
+      {guard.prompt}
       <header className="page-header">
         <div className="page-header-copy">
           <p className="eyebrow">{isEdit ? 'Edit tool' : 'Add tool'}</p>

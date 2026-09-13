@@ -270,3 +270,11 @@
   gap:.4rem;
   margin-top:.35rem;
 }
+
+.project-review { display: grid; gap: 14px; max-width: 840px; padding: 24px; }
+.project-review > p, .project-review > h2 { margin: 0; }
+.project-review > .btn { justify-self: start; }
+.project-review .field { margin: 0; }
+.project-review pre, .project-path { overflow-wrap: anywhere; white-space: pre-wrap; }
+.project-review .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.setup-review { padding: 16px; border: 1px solid var(--line); border-radius: 12px; }

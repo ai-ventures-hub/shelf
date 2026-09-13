@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 /**
  * Design profile editor. Auto-saves a local draft (name/tokens/modes/
  * direction) on a 500ms debounce — assets are deliberately outside the draft
@@ -83,6 +84,7 @@ export function DesignProfilePage() {
   const [jsonDirty, setJsonDirty] = useState(false)
   const [jsonError, setJsonError] = useState<string | null>(null)
 
+  const guard = useUnsavedChanges(jsonDirty || saveState === 'error', saveState === 'pending' || assetBusy)
   const lastSavedRef = useRef('')
   const lastSavedNameRef = useRef('')
   const adoptedIdRef = useRef('')
@@ -290,6 +292,7 @@ export function DesignProfilePage() {
     if (!window.confirm(message)) return
     await deleteProfile(profile.id)
     if (successor) await setDefaultProfile(successor.id)
+    guard.allowNavigation()
     navigate('/design')
   }
 
@@ -366,6 +369,7 @@ export function DesignProfilePage() {
 
   return (
     <>
+      {guard.prompt}
       <header className="page-header-compact design-editor-header">
         <Link className="btn btn-quiet btn-sm" to="/design" title="Back to Design">
           ← Design

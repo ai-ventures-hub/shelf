@@ -387,3 +387,19 @@
 dialog.diagnostic-report { color:var(--ink); margin:auto; }
 dialog.diagnostic-report:not([open]) { display:none; }
 dialog.diagnostic-report::backdrop { background:rgb(0 0 0 / 65%); }
+
+/* Top-layer dialogs keep the established sheet styling and native focus behavior. */
+.shelf-modal {
+  margin: 0;
+  border: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  box-sizing: border-box;
+  color: var(--ink);
+  overflow-y: auto;
+}
+.shelf-modal:not([open]) { display: none; }
+.shelf-modal::backdrop { background: transparent; }
+.shelf-modal > :first-child { flex-shrink: 0; }

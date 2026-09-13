@@ -180,6 +180,7 @@ export async function registerProject(
   if (options.dryRun) {
     return {
       outcome: 'dry_run',
+      tool: existing,
       suggestion,
       autoRunnable: gateResult.autoRunnable,
       autoRunReason: gateResult.reason,

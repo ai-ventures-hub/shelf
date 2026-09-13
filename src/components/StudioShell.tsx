@@ -132,7 +132,7 @@ function NavCount({ collapsed, value }: { collapsed: boolean; value: number }) {
 
 export function StudioShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
-  const { tools, collections, states, saveCollection, refresh } = useLibrary()
+  const { tools, collections, states, saveCollection } = useLibrary()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
   const mcpLabel = isDeveloper ? 'MCP Connections' : 'AI Connections'
@@ -148,7 +148,6 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const [collectionPromptOpen, setCollectionPromptOpen] = useState(false)
   const [designPromptOpen, setDesignPromptOpen] = useState(false)
   // Status line while a dropped folder is being registered/launched.
-  const [dropBusy, setDropBusy] = useState<string | null>(null)
   // Add-shared-tool sheet (Tool Sharing): opened by the Library page buttons
   // or a shelf://add link; hosted here so it works from every route.
   const [pendingImports, setPendingImports] = useState<{ id: string; name: string; destination: string }[]>([])
@@ -211,47 +210,10 @@ export function StudioShell({ children }: { children: ReactNode }) {
     window.addEventListener('mouseup', onUp)
   }
 
-  /** Drop a project folder anywhere on the window → register + launch. */
+  /** Folder drops use the same review and setup consent as Add tool. */
   async function handleDroppedFolder(file: File) {
-    if (!window.shelf?.registerProject || !window.shelf.getPathForFile) return
-    const dropped = window.shelf.getPathForFile(file)
-    if (!dropped) return
-    setDropBusy('Looking at that folder…')
-    try {
-      let result = await window.shelf.registerProject(dropped)
-      if (result.outcome === 'invalid_folder') {
-        window.alert(
-          result.issues[0]?.message ||
-            "Shelf can't use that item — drop a project folder.",
-        )
-        return
-      }
-      if (result.outcome === 'needs_setup') {
-        const docker = result.issues.find((i) => i.code === 'docker_not_running')
-        const steps = result.setupNeeds.map((s) => s.label).join(', ')
-        if (docker) {
-          window.alert(
-            `${docker.message} Start it, then launch the tool from its page.`,
-          )
-        } else if (
-          steps &&
-          window.confirm(`${steps} and run? This can take a few minutes.`)
-        ) {
-          setDropBusy('Installing — watch progress in Live logs…')
-          result = await window.shelf.registerProject(dropped, { runSetup: true })
-        }
-      }
-      await refresh()
-      if (result.tool) {
-        navigate(
-          result.outcome === 'saved_needs_review'
-            ? `/tools/${result.tool.id}/edit`
-            : `/tools/${result.tool.id}`,
-        )
-      }
-    } finally {
-      setDropBusy(null)
-    }
+    const projectPath = window.shelf?.getPathForFile(file)
+    if (projectPath) navigate('/tools/new', { state: { projectPath } })
   }
 
   async function createCollection(name: string) {
@@ -292,7 +254,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
         dragDepth.current = 0
         setDragActive(false)
         const file = e.dataTransfer.files[0]
-        if (!file || dropBusy) return
+        if (!file) return
         e.preventDefault()
         void handleDroppedFolder(file)
       }}
@@ -476,7 +438,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
         </div>
       </main>
 
-      {dragActive && !dropBusy ? (
+      {dragActive ? (
         <div className="drop-overlay" aria-hidden>
           <div className="drop-overlay-label">
             Drop a project folder to add it
@@ -484,11 +446,6 @@ export function StudioShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
 
-      {dropBusy ? (
-        <div className="drop-progress" role="status" aria-live="polite">
-          {dropBusy}
-        </div>
-      ) : null}
 
       {/* Global ⌘K palette — mounted once so it works from every route. */}
       <QuickOpen
