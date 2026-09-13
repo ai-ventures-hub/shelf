@@ -1,6 +1,6 @@
 # Phase 3 — Improve
 
-Implemented on `codex/phase3-improve`, based on the published `v1.6.0` release. This phase improves existing desktop workflows. It adds no dependencies, changes no store format, and does not publish a release or change the installed app.
+Implemented on `codex/phase3-improve`, based on the published `v1.6.0` release, and prepared for the signed 1.7.0 release. This phase improves existing desktop workflows. It adds no dependencies and changes no store format. The results below describe local implementation checks; the release workflow separately gates signing, notarization, and publication.
 
 ## What changed
 

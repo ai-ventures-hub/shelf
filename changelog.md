@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.0 - 2026-09-13
+
+- Add projects from a folder, review detected commands, and choose whether
+  to save or run. Setup commands require explicit approval before execution.
+- Inspect retained run logs and prepare reports from the selected run's
+  recorded command and outcome. Read-only environment checks help explain
+  missing dependencies, runtimes, and configuration.
+- Create and export a validated team catalog from tools with Git remotes.
+  Tool details also show the effective design profile and its source.
+- Dialogs contain keyboard focus, card actions no longer navigate, and
+  unsaved edits are guarded during navigation, reload, quit, and updates.
+  Cancelling quit preserves running tools; intentional quits record stopped runs.
+- Settings shows update checks, download progress, errors, and retry actions.
+  Downloaded updates remain available after renderer reloads or later feed errors.
+- Secondary screens and icons load on demand. The initial JavaScript entry
+  is 57% smaller, and listener checks share a snapshot instead of probing
+  each tool separately. Logs use local events where available.
+
 ## 1.6.0 - 2026-09-13
 
 - Archive creation and extraction run in a worker so large shared tools do
