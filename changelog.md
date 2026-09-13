@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 - 2026-09-13
+
+- Save project purpose, conventions, decisions, known issues, and next steps
+  through the new Memory & handoff page. Notes stay local and show when they
+  were saved. Conflicting saves preserve your draft and reject stale overwrites.
+- Prepare an editable agent handoff with optional environment checks, design
+  direction, and a selected run's recorded command, outcome, and output.
+  Review and copy the brief; nothing is sent or executed automatically.
+- Connected agents can read saved context with shelf_get_project_memory and
+  prepare briefs with shelf_prepare_handoff. Both operations are read-only;
+  known credentials are masked in agent responses and generated handoffs.
+- Unsaved notes and handoff tasks are protected during navigation, reload,
+  and quit. Memory writes are private, atomic, and bounded; malformed files
+  and oversized saves preserve the previous data.
+
 ## 1.7.0 - 2026-09-13
 
 - Add projects from a folder, review detected commands, and choose whether

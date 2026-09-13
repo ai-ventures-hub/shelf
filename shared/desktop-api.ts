@@ -1,6 +1,10 @@
 /// <reference lib="dom" />
 /** The desktop bridge contract, checked by both preload and renderer. */
 import type {
+  ProjectMemory,
+  SaveProjectMemoryInput,
+  ProjectHandoffOptions,
+  ProjectHandoff,
   ToolEnvironment,
   AppUpdateState,
   AgentAccessKind,
@@ -52,6 +56,9 @@ import type {
 } from './contracts'
 
 export interface ShelfApi {
+  getProjectMemory: (id: string) => Promise<ProjectMemory | null>
+  saveProjectMemory: (input: SaveProjectMemoryInput) => Promise<ProjectMemory>
+  prepareProjectHandoff: (id: string, options: ProjectHandoffOptions) => Promise<ProjectHandoff>
   inspectToolEnvironment: (id: string) => Promise<ToolEnvironment>
   getAppUpdateState: () => Promise<AppUpdateState>
   checkAppUpdates: () => Promise<AppUpdateState>

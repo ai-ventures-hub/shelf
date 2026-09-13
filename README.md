@@ -77,6 +77,15 @@ open 'shelf://launch?name=Photo%20Prepper'
 Action links (`launch`, `stop`, `restart`) require confirmation in Shelf, so a web page or another
 application cannot control local tools silently.
 
+### Project memory and handoffs
+
+Open a tool and choose **Memory & handoff** to save its purpose, conventions,
+decisions, known issues, and next steps. Prepare an editable brief with optional
+environment checks, design direction, and selected run evidence, then review and
+copy it into your agent. Connected agents can read saved memory through Shelf's
+MCP interface. See [project context](docs/phase4-project-context.md) for storage,
+revision conflicts, and the read-only agent contract.
+
 ## MCP — giving agents your shelf
 
 **Easiest path:** open Shelf → **MCP Connections** → Connect Claude, Cursor, or Codex. Shelf writes
@@ -119,6 +128,7 @@ Example prompts:
 `shelf_update_capability_gap`, `shelf_find_free_port`, `shelf_inspect_project`,
 `shelf_register_project`, `shelf_upsert_tool`, `shelf_remove_tool`, `shelf_launch_tool`,
 `shelf_stop_tool`, `shelf_get_status`, `shelf_get_logs`, `shelf_list_receipts`,
+`shelf_get_project_memory`, `shelf_prepare_handoff`,
 `shelf_clear_receipts`, `shelf_list_collections`, `shelf_get_collection`,
 `shelf_upsert_collection`, `shelf_export_tool`, `shelf_get_design_md`,
 `shelf_list_design_profiles`, `shelf_get_design_profile`, `shelf_upsert_design_profile`.

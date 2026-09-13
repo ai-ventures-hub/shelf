@@ -1,3 +1,5 @@
+import { ProjectMemoryStore } from '../shared/project-memory-store'
+import { registerProjectContextTools } from './project-context-tools'
 import { agentAccessInputSchema, portSchema, toolSchema } from '../shared/tool-validation'
 /**
  * Shelf MCP stdio server — same library + process manager as the Electron app.
@@ -469,6 +471,7 @@ registerCapabilityTools({
   profiles: designProfiles,
 })
 registerDesignTools({ server, store, profiles: designProfiles })
+registerProjectContextTools(server, { library: store, memory: new ProjectMemoryStore(store.getRoot()), receipts, design: designProfiles })
 
 server.registerTool(
   'shelf_list_collections',

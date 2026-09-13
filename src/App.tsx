@@ -13,6 +13,7 @@ import { LibraryPage } from './pages/LibraryPage'
 const McpConnectPage = lazy(() => import('./pages/McpConnectPage').then((module) => ({ default: module.McpConnectPage })))
 const TeamToolsPage = lazy(() => import('./pages/TeamToolsPage').then((module) => ({ default: module.TeamToolsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const ProjectContextPage = lazy(() => import('./pages/ProjectContextPage').then((module) => ({ default: module.ProjectContextPage })))
 const ToolDetailPage = lazy(() => import('./pages/ToolDetailPage').then((module) => ({ default: module.ToolDetailPage })))
 const ToolFormPage = lazy(() => import('./pages/ToolFormPage').then((module) => ({ default: module.ToolFormPage })))
 
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/tools/new" element={<AddProjectPage />} />
             <Route path="/tools/new/manual" element={<ToolFormPage />} />
             <Route path="/tools/:id" element={<ToolDetailPage />} />
+            <Route path="/tools/:id/context" element={<ProjectContextPage />} />
             <Route path="/tools/:id/edit" element={<ToolFormPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes></Suspense>

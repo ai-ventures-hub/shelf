@@ -140,3 +140,8 @@
 
 .run-summary { margin-bottom: 20px; }
 .log-follow { display: flex; align-items: center; gap: 8px; margin-block: 12px; }
+
+.context-fields { border: 0; margin: 0; padding: 0; display: grid; gap: 1rem; min-width: 0; }
+.context-check { display: flex; align-items: center; gap: 0.6rem; }
+.consent-sheet.context-handoff { width: min(860px, 100%); }
+.context-handoff textarea { max-height: 55vh; }

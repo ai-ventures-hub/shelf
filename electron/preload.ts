@@ -1,4 +1,4 @@
-import type { AppUpdateState } from '../shared/contracts'
+import type { SaveProjectMemoryInput, ProjectHandoffOptions, AppUpdateState } from '../shared/contracts'
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { ShelfApi } from '../shared/desktop-api'
 import type {
@@ -55,6 +55,9 @@ import type {
  * No Node APIs are exposed directly — all file/process work goes through IPC.
  */
 const api = {
+  getProjectMemory: (id: string) => ipcRenderer.invoke('context:getMemory', id),
+  saveProjectMemory: (input: SaveProjectMemoryInput) => ipcRenderer.invoke('context:saveMemory', input),
+  prepareProjectHandoff: (id: string, options: ProjectHandoffOptions) => ipcRenderer.invoke('context:handoff', id, options),
   inspectToolEnvironment: (id: string) => ipcRenderer.invoke('tools:environment', id),
   getAppUpdateState: () => ipcRenderer.invoke('app:updateState'),
   checkAppUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
