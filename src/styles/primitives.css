@@ -164,6 +164,13 @@
   overflow:hidden;
 }
 
+/* Page sections share outer spacing. Panels inside grids/stacks keep their
+   parent's gap, so nested cards and header/body seams never get double spacing. */
+.content-inner > .panel,
+.content-inner > .detail-layout {
+  margin-bottom:1rem;
+}
+
 .panel-header {
   display:flex;
   align-items:center;

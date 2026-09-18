@@ -1,3 +1,4 @@
+import { VerificationActivity } from './VerificationActivity'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -434,6 +435,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
         Import unfinished: {item.name}. Files are preserved at {item.destination}.
         <button type="button" className="btn" onClick={() => setAddShared({ resumeStageId: item.id })}>Resume import</button>
       </div>)}
+        <VerificationActivity />
         {children}
         </div>
       </main>

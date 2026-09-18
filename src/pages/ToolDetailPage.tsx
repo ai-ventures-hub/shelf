@@ -309,6 +309,7 @@ export function ToolDetailPage() {
               <Share2 size={15} aria-hidden /> Share
             </button>
           ) : null}
+          <Link className="btn btn-quiet" to={`/tools/${toolId}/verify`}>Verify project</Link>
           <Link className="btn btn-primary" to={`/tools/${toolId}/context${selectedRun ? `?run=${encodeURIComponent(selectedRun)}` : ''}`}>
             Memory &amp; handoff
           </Link>
@@ -704,7 +705,7 @@ export function ToolDetailPage() {
         onClose={() => setTeamShareOpen(false)}
       />
 
-      <section className="panel" style={{ marginTop: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Run history</h2>
           {receipts.length > 0 ? (

@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LogLine } from '../types'
 
-export function LogPanel({ lines }: { lines: LogLine[] }) {
+export function LogPanel({
+  lines,
+  emptyMessage = 'No output is available for this run. Shelf retains logs for the five most recent runs; older tools may have no recorded output.',
+}: {
+  lines: LogLine[]
+  emptyMessage?: string
+}) {
   const panel = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState(true)
   useEffect(() => {
@@ -27,8 +33,7 @@ export function LogPanel({ lines }: { lines: LogLine[] }) {
       >
         {lines.length === 0 ? (
           <p className="log-line" data-stream="system">
-            No output is available for this run. Shelf retains logs for the five most recent runs;
-            older tools may have no recorded output.
+            {emptyMessage}
           </p>
         ) : (
           lines.map((line, index) => (

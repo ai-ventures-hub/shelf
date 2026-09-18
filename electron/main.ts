@@ -1,3 +1,6 @@
+import { VerificationRunner } from '../shared/verification-runner'
+import { prepareVerificationHandoff } from '../shared/verification-handoff'
+import type { SaveVerificationInput, StartVerificationInput } from '../shared/verification-contracts'
 import { ProjectMemoryStore } from '../shared/project-memory-store'
 import { prepareProjectHandoff } from '../shared/project-handoff'
 import type { SaveProjectMemoryInput, ProjectHandoffOptions } from '../shared/project-context-contracts'
@@ -110,6 +113,7 @@ let mainWindow: BrowserWindow | null = null
 let store: LibraryStore
 let processes: ProcessManager
 let prefs: PrefsStore
+let verification: VerificationRunner
 let projectMemory: ProjectMemoryStore
 let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
@@ -422,6 +426,18 @@ function resolveMcpServerPath(): string {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('verification:activity', () => verification.activity())
+  ipcMain.handle('verification:get', (_e, id: string) => verification.get(id))
+  ipcMain.handle('verification:save', (_e, input: SaveVerificationInput) => verification.save(input))
+  ipcMain.handle('verification:suggest', (_e, id: string) => verification.suggest(id))
+  ipcMain.handle('verification:start', (_e, input: StartVerificationInput) => {
+    if (isQuitting || quitPreparing) throw new Error('Shelf is preparing to quit or update. Try again after it finishes.')
+    return verification.start(input)
+  })
+  ipcMain.handle('verification:cancel', (_e, id: string, runId: string) => verification.cancel(id, runId))
+  ipcMain.handle('verification:logs', (_e, id: string, runId: string, stepId: string) => verification.logs(id, runId, stepId))
+  ipcMain.handle('verification:handoff', (_e, id: string, runId: string) =>
+    prepareVerificationHandoff({ library: store, memory: projectMemory, receipts, design: designProfiles }, id, runId))
   ipcMain.handle('context:getMemory', (_e, id: string) => {
     if (!store.get(id)) throw new Error('This tool is no longer in the library.')
     return projectMemory.get(id)
@@ -442,6 +458,7 @@ function registerIpc(): void {
     // the library to represent it.
     const tool = store.get(id)
     const state = await processes.stop(id)
+    await verification.stopTool(id)
     // Two error codes cannot orphan anything and must not block deletion:
     // stop_command_failed (stop script errored while nothing was observably
     // running) and stop_refused_not_owner (an UNRELATED process holds the
@@ -1081,6 +1098,7 @@ function registerIpc(): void {
     quitPreparing = true
     try {
       if (!await confirmPendingChanges('Restart and update')) return
+      await verification.stopAll()
       await processes.stopAll('Shelf is updating.', { scope: 'local' })
       isQuitting = true
       installDownloadedUpdate()
@@ -1114,6 +1132,7 @@ if (gotLock) {
     store = new LibraryStore()
     receipts = new ReceiptStore()
     projectMemory = new ProjectMemoryStore(store.getRoot())
+    verification = new VerificationRunner(store, id => sendToRenderer('verification:update', id))
     capabilityGaps = new CapabilityGapStore()
     designProfiles = new DesignProfileStore()
     teamCatalogs = new TeamCatalogStore()
@@ -1228,6 +1247,7 @@ if (gotLock) {
     // scope 'local': quitting the GUI must not kill agent-owned tools.
     void (async () => {
       if (!await confirmPendingChanges('Quit Shelf')) { quitPreparing = false; return }
+      await verification.stopAll()
       await processes.stopAll('Shelf is quitting.', { scope: 'local' })
       // A natural quit honors window lifecycle and update installation hooks.
       isQuitting = true

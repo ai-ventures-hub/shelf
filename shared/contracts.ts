@@ -866,3 +866,5 @@ export interface AppUpdateState {
   checkedAt?: string
   error?: string
 }
+
+export type { VerificationStep, VerificationWorkflow, VerificationRun, VerificationState, SaveVerificationInput, StartVerificationInput } from './verification-contracts'

@@ -440,7 +440,7 @@ export function LibraryPage({
       ) : null}
 
       {mode === 'recent' ? (
-        <section className="panel" style={{ marginBottom: '1rem' }}>
+        <section className="panel">
           <div className="panel-header">
             <h2 className="panel-title">{isDeveloper ? 'Launch receipts' : 'History'}</h2>
           </div>

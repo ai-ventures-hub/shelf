@@ -1,6 +1,12 @@
 /// <reference lib="dom" />
 /** The desktop bridge contract, checked by both preload and renderer. */
 import type {
+  VerificationStep,
+  VerificationWorkflow,
+  VerificationRun,
+  VerificationState,
+  SaveVerificationInput,
+  StartVerificationInput,
   ProjectMemory,
   SaveProjectMemoryInput,
   ProjectHandoffOptions,
@@ -56,6 +62,15 @@ import type {
 } from './contracts'
 
 export interface ShelfApi {
+  getVerificationActivity: () => Promise<{ toolId: string; name: string; status: string }[]>
+  getVerification: (id: string) => Promise<VerificationState>
+  saveVerification: (input: SaveVerificationInput) => Promise<VerificationWorkflow>
+  suggestVerification: (id: string) => Promise<VerificationStep[]>
+  startVerification: (input: StartVerificationInput) => Promise<VerificationRun>
+  cancelVerification: (id: string, runId: string) => Promise<void>
+  getVerificationLogs: (id: string, runId: string, stepId: string) => Promise<LogLine[]>
+  prepareVerificationHandoff: (id: string, runId: string) => Promise<ProjectHandoff>
+  onVerificationUpdate: (cb: (id: string) => void) => () => void
   getProjectMemory: (id: string) => Promise<ProjectMemory | null>
   saveProjectMemory: (input: SaveProjectMemoryInput) => Promise<ProjectMemory>
   prepareProjectHandoff: (id: string, options: ProjectHandoffOptions) => Promise<ProjectHandoff>
