@@ -1,3 +1,4 @@
+import type { SaveVerificationInput, StartVerificationInput } from '../shared/verification-contracts'
 import type { SaveProjectMemoryInput, ProjectHandoffOptions, AppUpdateState } from '../shared/contracts'
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { ShelfApi } from '../shared/desktop-api'
@@ -55,6 +56,19 @@ import type {
  * No Node APIs are exposed directly — all file/process work goes through IPC.
  */
 const api = {
+  getVerificationActivity: () => ipcRenderer.invoke('verification:activity'),
+  getVerification: (id: string) => ipcRenderer.invoke('verification:get', id),
+  saveVerification: (input: SaveVerificationInput) => ipcRenderer.invoke('verification:save', input),
+  suggestVerification: (id: string) => ipcRenderer.invoke('verification:suggest', id),
+  startVerification: (input: StartVerificationInput) => ipcRenderer.invoke('verification:start', input),
+  cancelVerification: (id: string, runId: string) => ipcRenderer.invoke('verification:cancel', id, runId),
+  getVerificationLogs: (id: string, runId: string, stepId: string) => ipcRenderer.invoke('verification:logs', id, runId, stepId),
+  prepareVerificationHandoff: (id: string, runId: string) => ipcRenderer.invoke('verification:handoff', id, runId),
+  onVerificationUpdate: (cb: (id: string) => void) => {
+    const handler = (_event: IpcRendererEvent, id: string) => cb(id)
+    ipcRenderer.on('verification:update', handler)
+    return () => { ipcRenderer.removeListener('verification:update', handler) }
+  },
   getProjectMemory: (id: string) => ipcRenderer.invoke('context:getMemory', id),
   saveProjectMemory: (input: SaveProjectMemoryInput) => ipcRenderer.invoke('context:saveMemory', input),
   prepareProjectHandoff: (id: string, options: ProjectHandoffOptions) => ipcRenderer.invoke('context:handoff', id, options),

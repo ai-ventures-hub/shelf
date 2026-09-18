@@ -66,6 +66,7 @@ async function main() {
   await run('codex connect', 'node', ['scripts/smoke-codex-connect.mjs'])
   await run('mcp path preference', 'node', ['scripts/smoke-mcp-path.mjs'])
   await run('phase 4 project context', 'node', ['scripts/smoke-phase4.mjs'])
+  await run('verification workflows', 'node', ['scripts/smoke-verification.mjs'])
   await run('mcp smoke', 'node', ['scripts/smoke-mcp.mjs'])
   await run('tool sharing', 'node', ['scripts/smoke-sharing.mjs'])
   await run('team catalog', 'node', ['scripts/smoke-catalog.mjs'])
