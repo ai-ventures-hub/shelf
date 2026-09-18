@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.9.0 - 2026-09-17
+
+- Save ordered project checks and discover existing typecheck, lint, test,
+  and build scripts. Review exact commands, folder, environment key names,
+  and timeouts before running against the current working tree.
+- Follow per-step output and retained verification history. Failed, timed-out,
+  or cancelled checks stop the sequence; later checks are skipped. Navigation
+  preserves active runs, and quitting awaits cancellation and process cleanup.
+- Prepare an editable failure handoff with project memory, design context,
+  and selected verification output. Connected agents can read results through
+  shelf_get_verification and prepare briefs with shelf_prepare_verification_handoff.
+  Both MCP tools are read-only; running commands requires desktop review.
+- Protect saved workflows and results with revision checks, private atomic
+  writes, bounded logs, credential masking, and interrupted-run recovery.
+- Apply consistent spacing between page panels, including Run History and
+  Environment, Project Memory and Handoff, and Verification commands and history.
+
 ## 1.8.0 - 2026-09-13
 
 - Save project purpose, conventions, decisions, known issues, and next steps

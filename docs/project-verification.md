@@ -2,6 +2,8 @@
 
 Shelf can save and run a project's finite checks without changing its launch command. This extends project memory and handoffs from Phase 4. It does not add a general automation builder.
 
+Prepared for Shelf 1.9.0. Signing, notarization, and publication are gated separately by the release workflow.
+
 ## User flow
 
 1. Open a tool and choose **Verify project**.
