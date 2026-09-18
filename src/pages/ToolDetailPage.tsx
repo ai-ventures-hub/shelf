@@ -705,7 +705,7 @@ export function ToolDetailPage() {
         onClose={() => setTeamShareOpen(false)}
       />
 
-      <section className="panel" style={{ marginTop: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Run history</h2>
           {receipts.length > 0 ? (

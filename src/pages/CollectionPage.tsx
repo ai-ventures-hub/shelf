@@ -166,7 +166,7 @@ export function CollectionPage() {
       {stackSummary ? <p className="collection-stack-summary">{stackSummary}</p> : null}
 
       {editing ? (
-        <section className="panel" style={{ marginBottom: '1rem' }}>
+        <section className="panel">
           <div className="panel-header">
             <h2 className="panel-title">Members ({members.length})</h2>
           </div>

@@ -3,7 +3,7 @@ import { useAppUpdate } from '../hooks/useAppUpdate'
 export function AppUpdatePanel() {
   const { state, error, check, install } = useAppUpdate()
   return (
-    <section className="panel" style={{ marginBottom: '1rem' }}>
+    <section className="panel">
       <div className="panel-header">
         <h2 className="panel-title">Shelf updates{state ? ` · ${state.currentVersion}` : ''}</h2>
       </div>

@@ -1,8 +1,4 @@
 /* Capability intelligence — tool access summaries and gap inbox. */
-.capability-panel {
-  margin-bottom:1rem;
-}
-
 .capability-detail-grid {
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);

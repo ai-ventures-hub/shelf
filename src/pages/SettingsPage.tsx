@@ -57,7 +57,7 @@ export function SettingsPage() {
 
       {prefsError && <p role="alert" className="form-error">{prefsError} <button className="btn" onClick={() => void refreshPrefs()}>Retry preferences</button></p>}
       <AppUpdatePanel />
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Experience</h2>
         </div>
@@ -84,7 +84,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Appearance</h2>
         </div>
@@ -110,7 +110,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Tool icon defaults</h2>
         </div>
@@ -145,7 +145,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Library layout</h2>
         </div>
@@ -192,7 +192,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Menu bar &amp; global shortcut</h2>
         </div>
@@ -298,7 +298,7 @@ export function SettingsPage() {
       </section>
 
       {isDeveloper ? (
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">URL scheme</h2>
         </div>
@@ -328,7 +328,7 @@ export function SettingsPage() {
       </section>
       ) : null}
 
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Shortcuts</h2>
         </div>
@@ -354,7 +354,7 @@ export function SettingsPage() {
       </section>
 
       {isDeveloper ? (
-      <section className="panel" style={{ marginBottom: '1rem' }}>
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Run history</h2>
         </div>
