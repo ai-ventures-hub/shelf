@@ -114,7 +114,7 @@
   line-height:1.45;
   max-height:420px;
   overflow:auto;
-  background:#070b13;
+  background:var(--input);
   border-radius:12px;
   border:1px solid var(--line);
   padding:.85rem 1rem;

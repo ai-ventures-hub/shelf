@@ -1,3 +1,4 @@
+import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { OnboardingGate } from './components/onboarding/OnboardingFlow'
@@ -23,6 +24,7 @@ const AddProjectPage = lazy(() => import('./pages/AddProjectPage').then((module)
 export default function App() {
   return (
     <PrefsProvider>
+      <AppUpdateProvider>
       <LibraryProvider>
         <DesignProfilesProvider>
         <OnboardingGate>
@@ -43,6 +45,7 @@ export default function App() {
             <Route path="/tools/new" element={<AddProjectPage />} />
             <Route path="/tools/new/manual" element={<ToolFormPage />} />
             <Route path="/tools/:id" element={<ToolDetailPage />} />
+            <Route path="/tools/:id/runs" element={<ToolDetailPage section="runs" />} />
             <Route path="/tools/:id/verify" element={<VerificationPage />} />
             <Route path="/tools/:id/context" element={<ProjectContextPage />} />
             <Route path="/tools/:id/edit" element={<ToolFormPage />} />
@@ -52,6 +55,7 @@ export default function App() {
         </OnboardingGate>
         </DesignProfilesProvider>
       </LibraryProvider>
+    </AppUpdateProvider>
     </PrefsProvider>
   )
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0 - 2026-09-21
+
+- Move update status into the sidebar footer with a compact, keyboard-accessible
+  popover. Show checking, download progress, retry, and an explicit restart action;
+  ready notices can be dismissed for the current version during the session.
+- Keep Settings and AI Connections visible while the library navigation scrolls.
+  Share one renderer update subscription between the sidebar and Settings.
+- Separate tool pages into Overview, Runs, Verify, and Memory & handoff.
+  Run selection travels with handoff links; existing routes and unsaved-draft
+  safeguards remain available. Sharing moves into the tool's More actions menu.
+- Group Settings into General, Appearance, Shortcuts, Updates & About, and
+  developer-only Advanced preferences.
+- Refine desktop titles, buttons, control heights, panel spacing, and tool-card
+  actions in both themes. Correct light-theme log and code-panel contrast and
+  reset page scroll when navigating between sections.
+
 ## 1.9.0 - 2026-09-17
 
 - Save ordered project checks and discover existing typecheck, lint, test,

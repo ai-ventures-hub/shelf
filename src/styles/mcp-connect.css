@@ -265,7 +265,7 @@
   padding: 1rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #070b13;
+  background: var(--input);
   color: var(--brand-strong);
   font-family: SFMono-Regular, ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;
   font-size: 0.86em;
@@ -348,7 +348,7 @@
   padding:.85rem 1rem;
   border:1px solid var(--line);
   border-radius:12px;
-  background:#070b13;
+  background:var(--input);
   color:var(--brand-strong);
   font-family:SFMono-Regular,ui-monospace,Menlo,Consolas,Liberation Mono,monospace;
   font-size:.86em;

@@ -65,6 +65,7 @@ export function outcomesForFilter(
 export function ReceiptHistory({
   receipts,
   showToolName = false,
+  onInspect,
   emptyLabel = 'No run receipts yet.',
   filter,
   onFilterChange,
@@ -73,6 +74,7 @@ export function ReceiptHistory({
 }: {
   receipts: RunReceipt[]
   showToolName?: boolean
+  onInspect?: (receipt: RunReceipt) => void
   emptyLabel?: string
   /** When set with onFilterChange, shows outcome chips above the list. */
   filter?: ReceiptOutcomeFilter
@@ -134,8 +136,9 @@ export function ReceiptHistory({
                 <span className={`receipt-outcome is-${r.outcome}`}>
                   {outcomeLabel(r.outcome)}
                 </span>
+                {onInspect && <button className="btn btn-quiet btn-sm" onClick={() => onInspect(r)}>View output</button>}
                 {showToolName ? (
-                  <Link className="receipt-tool" to={`/tools/${r.toolId}`}>
+                  <Link className="receipt-tool" to={`/tools/${r.toolId}/runs?run=${encodeURIComponent(r.id)}`}>
                     {r.toolName}
                   </Link>
                 ) : null}

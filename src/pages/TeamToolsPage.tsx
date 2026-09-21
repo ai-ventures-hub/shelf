@@ -146,9 +146,7 @@ export function TeamToolsPage() {
           <p className="eyebrow">Team</p>
           <h1 className="page-title">Team Tools</h1>
           <p className="page-lede">
-            A team is a git repo your org already controls. Point Shelf at it once and every
-            tool your teammates published is one Install away, through the same consent sheet
-            as any other shared tool. No accounts, no Shelf server.
+            Install and share tools through a Git repository your team controls.
           </p>
         </div>
       </header>

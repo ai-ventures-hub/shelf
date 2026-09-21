@@ -1,3 +1,4 @@
+import { ToolPageHeader } from '../components/ToolPageHeader'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
@@ -170,19 +171,7 @@ function ProjectContextEditor({ id }: { id: string }) {
     )
   return (
     <>
-      <header className="page-header">
-        <div className="page-header-copy">
-          <p className="eyebrow">{tool.name}</p>
-          <h1 className="page-title">Project memory &amp; handoff</h1>
-          <p className="page-lede">
-            Keep useful context between sessions, then prepare a brief for your next
-            agent.
-          </p>
-        </div>
-        <Link className="btn btn-quiet" to={`/tools/${id}`}>
-          Back to tool
-        </Link>
-      </header>
+      <ToolPageHeader id={id} name={tool.name} description="Keep project context and prepare your next agent handoff." runId={runId} />
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -211,9 +200,8 @@ function ProjectContextEditor({ id }: { id: string }) {
         </div>
         <div className="panel-body stack">
           <p className="muted">
-            Notes are stored locally in Shelf for this tool and are readable by connected
-            agents. Keep credentials out. These notes are separate from repository files
-            and are not included in shared tool bundles.
+            Local notes for you and your connected agents. Keep credentials out.
+            Notes stay separate from repository files and shared tool bundles.
           </p>
           <p className="muted">
             {loaded

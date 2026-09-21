@@ -1,11 +1,11 @@
 /* primitives.css — headers, fields, buttons, panels */
 .page-header {
   display:flex;
-  align-items:flex-end;
+  align-items:center;
   justify-content:space-between;
   gap:1.25rem;
-  margin-bottom:1.75rem;
-  padding-top:clamp(1rem,3vw,2rem);
+  margin-bottom:var(--space-6);
+  padding-top:.25rem;
 }
 
 .page-header-copy {
@@ -23,17 +23,17 @@
 
 .page-title {
   margin:0;
-  font-size:clamp(2.2rem,5vw,3.4rem);
-  line-height:.98;
-  letter-spacing:-.055em;
+  font-size:clamp(28px,2.5vw,32px);
+  line-height:1.15;
+  letter-spacing:-.03em;
   font-weight:750;
 }
 
 .page-lede {
-  margin:.85rem 0 0;
+  margin:.5rem 0 0;
   max-width:62ch;
   color:var(--muted);
-  font-size:1.05rem;
+  font-size:.95rem;
 }
 
 .toolbar {
@@ -46,12 +46,12 @@
 
 .search-input,.field-input,.field-textarea {
   width:100%;
-  min-height:44px;
+  min-height:var(--control-height);
   border:1px solid var(--line);
   border-radius:var(--radius-control);
   background:var(--input);
   color:var(--ink);
-  padding:.65rem .85rem;
+  padding:.3rem .75rem;
 }
 
 .field-textarea {
@@ -86,11 +86,14 @@
   align-items:center;
   justify-content:center;
   gap:.4rem;
-  min-height:42px;
+  min-height:var(--control-height);
   padding:.55rem 1rem;
   border-radius:var(--radius-control);
-  border:1px solid transparent;
-  font-weight:720;
+  border:1px solid var(--line);
+  background:var(--panel-raised);
+  color:var(--ink);
+  font-weight:620;
+  transition:background 120ms ease, border-color 120ms ease;
   cursor:pointer;
   text-decoration:none;
   /* Buttons center their own box; body leading must not leak in. */
@@ -105,19 +108,23 @@
 
 /* Icon-only button: exact square, content dead-centered. */
 .btn-icon {
-  width:42px;
-  height:42px;
+  width:var(--control-height);
+  height:var(--control-height);
   padding:0;
 }
 
 .btn-sm.btn-icon {
-  width:34px;
-  height:34px;
+  width:var(--control-compact);
+  height:var(--control-compact);
 }
 
 .btn:disabled {
   opacity:.45;
   cursor:not-allowed;
+}
+
+.btn:hover:not(:disabled) {
+  border-color:var(--brand);
 }
 
 .btn-primary {
@@ -146,7 +153,7 @@
 }
 
 .btn-sm {
-  min-height:34px;
+  min-height:var(--control-compact);
   padding:.35rem .75rem;
   font-size:.75rem;
 }
@@ -168,7 +175,7 @@
    parent's gap, so nested cards and header/body seams never get double spacing. */
 .content-inner > .panel,
 .content-inner > .detail-layout {
-  margin-bottom:1rem;
+  margin-bottom:var(--space-4);
 }
 
 .panel-header {
@@ -184,8 +191,8 @@
   margin:0;
   font-size:.82rem;
   font-weight:720;
-  letter-spacing:.04em;
-  text-transform:uppercase;
+  letter-spacing:0;
+  text-transform:none;
   color:var(--subtle);
 }
 
