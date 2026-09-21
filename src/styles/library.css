@@ -6,7 +6,7 @@
 }
 
 .page-header-compact .page-title {
-  font-size:clamp(1.45rem,2.5vw,1.9rem);
+  font-size:clamp(28px,2.5vw,32px);
   letter-spacing:-.03em;
 }
 
@@ -96,8 +96,8 @@
 
 .sort-select {
   width:auto;
-  min-height:38px;
-  padding-block:.35rem;
+  min-height:var(--control-height);
+  padding-block:.3rem;
 }
 
 .meta-chip {

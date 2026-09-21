@@ -29,7 +29,14 @@
   --sidebar-bg: rgb(9 13 22 / 86%);
   --sidebar-width: 250px;
   --content-max: 1220px;
-  --radius-control: 11px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --control-height: 36px;
+  --control-compact: 32px;
+  --radius-control: 9px;
   --radius-card: 16px;
   --radius-mark: 14px;
   --surface-glow: rgb(73 98 193 / 18%);

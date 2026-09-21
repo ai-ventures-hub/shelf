@@ -1,3 +1,4 @@
+import { ToolPageHeader } from '../components/ToolPageHeader'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
@@ -140,15 +141,7 @@ function VerificationEditor({ id }: { id: string }) {
     )
   return (
     <>
-      <header className="page-header">
-        <div className="page-header-copy">
-          <p className="eyebrow">{tool.name}</p>
-          <h1 className="page-title">Verify this project</h1>
-          <p className="page-lede">
-            Save your checks, review the commands, then run them in order.
-          </p>
-        </div>
-        <div className="action-row">
+      <ToolPageHeader id={id} name={tool.name} description="Review and run this project's checks.">
           <button
             className="btn btn-primary"
             disabled={
@@ -171,11 +164,7 @@ function VerificationEditor({ id }: { id: string }) {
           >
             Review &amp; run{state?.runs.length ? ' again' : ''}
           </button>
-          <Link className="btn btn-quiet" to={`/tools/${id}`}>
-            Back to tool
-          </Link>
-        </div>
-      </header>
+      </ToolPageHeader>
       {error && (
         <p className="warning-card" role="alert">
           {error}

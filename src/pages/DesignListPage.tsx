@@ -103,8 +103,7 @@ export function DesignListPage() {
           <p className="eyebrow">Design</p>
           <h1 className="page-title">Design profiles</h1>
           <p className="page-lede">
-            Your brand's source of truth — colors, type, voice, and assets. Connected agents
-            pull the default profile when you say “use my branding.”
+            Colors, typography, and instructions your agents can reuse.
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setPromptOpen(true)}>

@@ -1,7 +1,7 @@
 import { VerificationActivity } from './VerificationActivity'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
@@ -13,7 +13,7 @@ import { QuickOpen } from './QuickOpen'
 import { AddSharedToolDialog } from './sharing/AddSharedToolDialog'
 import { onAddSharedRequest, type AddSharedRequest } from '../lib/sharingEvents'
 import { ShelfMark } from './ShelfMark'
-import { UpdateBanner } from './UpdateBanner'
+import { SidebarUpdate } from './SidebarUpdate'
 
 /** Compact SVG marks used when the sidebar is collapsed to an icon rail. */
 function NavIcon({ name }: { name: string }) {
@@ -132,6 +132,9 @@ function NavCount({ collapsed, value }: { collapsed: boolean; value: number }) {
 }
 
 export function StudioShell({ children }: { children: ReactNode }) {
+  const { pathname, search } = useLocation()
+  const settingsSearch = pathname === '/settings' ? search : ''
+  useLayoutEffect(() => { window.scrollTo(0, 0) }, [pathname, settingsSearch])
   const navigate = useNavigate()
   const { tools, collections, states, saveCollection } = useLibrary()
   const { prefs, updatePrefs } = usePrefs()
@@ -260,7 +263,6 @@ export function StudioShell({ children }: { children: ReactNode }) {
         void handleDroppedFolder(file)
       }}
     >
-      <UpdateBanner />
       <aside className="sidebar" aria-label="Shelf navigation">
         <div className="brand-row">
           {!collapsed ? <ShelfMark /> : null}
@@ -393,28 +395,30 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavLabel collapsed={collapsed}>Team Tools</NavLabel>
           </NavLink>
 
-          {/* System: MCP + Settings once each — never duplicate Connect chrome. */}
-          {!collapsed ? <p className="nav-label">System</p> : <div className="nav-divider" />}
-          <NavLink
-            to="/mcp"
-            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title={mcpLabel}
-            aria-label={mcpLabel}
-          >
-            <NavIcon name="mcp" />
-            <NavLabel collapsed={collapsed}>{mcpLabel}</NavLabel>
-          </NavLink>
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title="Settings"
-            aria-label="Settings"
-          >
-            <NavIcon name="settings" />
-            <NavLabel collapsed={collapsed}>Settings</NavLabel>
-          </NavLink>
         </nav>
-        {/* Settings lives under System above — no duplicate foot link. */}
+        <div className="sidebar-foot">
+          <SidebarUpdate collapsed={collapsed} />
+          <nav aria-label="System" className="sidebar-system">
+            <NavLink
+              to="/mcp"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title={mcpLabel}
+              aria-label={mcpLabel}
+            >
+              <NavIcon name="mcp" />
+              <NavLabel collapsed={collapsed}>{mcpLabel}</NavLabel>
+            </NavLink>
+            <NavLink
+              to="/settings"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title="Settings"
+              aria-label="Settings"
+            >
+              <NavIcon name="settings" />
+              <NavLabel collapsed={collapsed}>Settings</NavLabel>
+            </NavLink>
+          </nav>
+        </div>
       </aside>
 
       {!collapsed ? (
