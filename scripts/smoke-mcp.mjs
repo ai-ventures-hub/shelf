@@ -16,6 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const serverEntry = path.join(root, 'dist-mcp/mcp/server.js')
 const fixture = path.join(root, 'fixtures/sample-tool')
+const fixturePort = Number(process.env.SHELF_SMOKE_MCP_PORT || 8766)
+if (!Number.isInteger(fixturePort) || fixturePort < 1024 || fixturePort > 65535) throw new Error('Invalid SHELF_SMOKE_MCP_PORT')
 const smokeName = `MCP Smoke ${Date.now()}`
 const smokeDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-mcp-smoke-'))
 
@@ -60,9 +62,9 @@ async function main() {
         },
       ],
       projectPath: fixture,
-      launchCommand: 'PORT=8766 node server.mjs',
-      url: 'http://127.0.0.1:8766',
-      port: 8766,
+      launchCommand: `PORT=${fixturePort} node server.mjs`,
+      url: `http://127.0.0.1:${fixturePort}`,
+      port: fixturePort,
       notes: 'Created by smoke-mcp. Safe to remove.',
       env: {
         SMOKE_SECRET_TOKEN: 'should-be-masked',
@@ -101,7 +103,7 @@ async function main() {
     if (rawTool.env?.DATABASE_URL !== 'postgres://user:hunter2@localhost/db') {
       throw new Error('Masked env round-trip clobbered DATABASE_URL')
     }
-    if (rawTool.launchCommand !== 'PORT=8766 node server.mjs') {
+    if (rawTool.launchCommand !== `PORT=${fixturePort} node server.mjs`) {
       throw new Error('Masked launchCommand round-trip clobbered the stored command')
     }
     if (rawTool.notes !== 'Round-trip touched only this field.') {
@@ -110,7 +112,7 @@ async function main() {
     console.log('OK: masked read → upsert round-trip restores real values')
 
     const free = await callTool(client, 'shelf_find_free_port', {
-      preferred: 8766,
+      preferred: fixturePort,
       from: 8700,
       to: 8800,
       count: 3,

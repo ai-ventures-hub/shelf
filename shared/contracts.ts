@@ -9,7 +9,7 @@ export type ToolStatus = 'stopped' | 'starting' | 'stopping' | 'running' | 'erro
 
 export type AppearanceMode = 'system' | 'light' | 'dark'
 
-export type ViewMode = 'grid' | 'list'
+export type ViewMode = 'grid' | 'list' | 'compact'
 
 export type SortMode = 'name' | 'recent' | 'status'
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1 - 2026-09-21
+
+- Add a saved Compact library view with smaller icons and titles, full-size
+  action buttons, and columns that adapt to the available window width.
+- Replace long launch-warning chips with short badges and keyboard-accessible
+  detail popovers in Grid, List, and Compact. Keep warnings separate from
+  card actions and retain every blocker in the details.
+
 ## 2.0.0 - 2026-09-21
 
 - Move update status into the sidebar footer with a compact, keyboard-accessible

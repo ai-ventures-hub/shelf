@@ -37,6 +37,9 @@ jobs:
       - name: Smoke all
         run: npm run smoke:all
 
+      - name: Compact library renderer checks
+        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-compact-ui.cjs
+
   site:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -24,6 +24,11 @@ try {
   assert.equal(updated.uiMode, 'simple')
   assert.equal(new PrefsStore(root).get().uiMode, 'simple')
 
+  store.update({ viewMode: 'compact' })
+  assert.equal(new PrefsStore(root).get().viewMode, 'compact')
+  store.update({ viewMode: 'grid' })
+  assert.equal(new PrefsStore(root).get().viewMode, 'grid')
+
   // Legacy prefs.json without the key (pre-0.7 file) reads back developer.
   const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-prefs-legacy-'))
   fs.mkdirSync(legacyRoot, { recursive: true })
