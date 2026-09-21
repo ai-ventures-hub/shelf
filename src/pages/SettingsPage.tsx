@@ -140,6 +140,7 @@ export function SettingsPage() {
               >
                 <option value="grid">Grid</option>
                 <option value="list">List</option>
+                <option value="compact">Compact</option>
               </select>
             </label>
             <label className="field">

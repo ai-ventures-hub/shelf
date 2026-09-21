@@ -1,26 +1,11 @@
-import { ExternalLink, Play, Square, Star, TriangleAlert } from 'lucide-react'
+import { ExternalLink, Play, Square, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
 import { formatRelativeTime } from '../lib/relativeTime'
 import type { Tool, ToolHealth, ToolRuntimeState } from '../types'
 import { StatusPill } from './StatusPill'
 import { ToolIcon } from './ToolIcon'
-
-/**
- * Launchability warning (triage E). Readiness (agent setup) and launchability
- * are different facts — this chip only reports "Launch will not work right
- * now" blockers, and shows nothing when the tool is healthy or live.
- */
-function HealthChip({ health, live }: { health?: ToolHealth; live: boolean }) {
-  if (!health || health.launchable || live) return null
-  const [first] = health.problems
-  return (
-    <span className="meta-chip health-chip" title={health.problems.join(' ')}>
-      <TriangleAlert size={11} aria-hidden />
-      {first.replace(/\s*—.*$/, '').replace(/\.$/, '')}
-    </span>
-  )
-}
+import { ToolHealthWarning } from './ToolHealthWarning'
 
 /**
  * "Who started this?" — shown in BOTH ui modes on live cards; provenance is
@@ -45,6 +30,7 @@ export function ToolCard({
   state,
   health,
   hideChips = false,
+  compact = false,
   onLaunch,
   onStop,
   onOpenUrl,
@@ -55,6 +41,7 @@ export function ToolCard({
   health?: ToolHealth
   /** Simple mode: no port/time/tag chips — icon, name, status, controls. */
   hideChips?: boolean
+  compact?: boolean
   onLaunch?: () => void
   onStop?: () => void
   onOpenUrl?: () => void
@@ -66,9 +53,11 @@ export function ToolCard({
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
   const hasControls = Boolean(onLaunch || onStop)
 
+  const title = <h3 className="tool-name"><Link className="tool-card-link" to={`/tools/${tool.id}`} title={tool.name} aria-label={`${tool.name}, ${status}`}>{tool.name}</Link></h3>
+
   return (
     <article
-      className="tool-card"
+      className={`tool-card${compact ? ' tool-card-compact' : ''}`}
       data-status={status}
       aria-label={tool.name}
     >
@@ -80,21 +69,22 @@ export function ToolCard({
           iconColor={tool.iconColor}
           iconBackground={tool.iconBackground}
         />
-        <StatusPill status={status} message={state?.message} />
+        {compact ? title : <StatusPill status={status} message={state?.message} />}
       </div>
-      <div>
-        <h3 className="tool-name"><Link className="tool-card-link" to={`/tools/${tool.id}`} aria-label={`${tool.name}, ${status}`}>{tool.name}</Link></h3>
+      {!compact && <div>
+        {title}
         <p className="tool-desc">
           {status === 'error' ? state?.message || 'Open this tool to review the last failure.' : tool.description || tool.capabilities[0] || 'Add a short description to explain what this tool does.'}
         </p>
+      </div>}
+      <div className="tool-card-notice">
+        <ToolHealthWarning health={health} live={live} toolName={tool.name} />
+        {compact && <OriginChip state={state} />}
       </div>
       <div className="tool-card-footer">
         <div className="tool-meta">
-          <OriginChip state={state} />
-          {/* Health matters in BOTH ui modes — a broken Launch is a
-              Simple-mode problem too (the origin-chip precedent). */}
-          <HealthChip health={health} live={live} />
-          {!hideChips ? (
+          {compact ? <StatusPill status={status} message={state?.message} /> : <OriginChip state={state} />}
+          {!hideChips && !compact ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
               <span className="meta-chip">{formatRelativeTime(tool.lastLaunchedAt, 'Never')}</span>
@@ -220,7 +210,7 @@ export function ToolListRow({
         <div className="tool-list-status">
           <StatusPill status={status} />
           <OriginChip state={state} />
-          <HealthChip health={health} live={canStop} />
+          <ToolHealthWarning health={health} live={canStop} toolName={tool.name} />
         </div>
       </td>
       <td className="tabular">{tool.port ? `:${tool.port}` : '—'}</td>

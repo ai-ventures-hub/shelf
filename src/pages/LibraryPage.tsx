@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
@@ -394,22 +395,14 @@ export function LibraryPage({
         </label>
 
         <div className="view-toggle" role="group" aria-label="View mode">
-          <button
-            type="button"
-            className={`btn btn-quiet btn-sm${prefs.viewMode === 'grid' ? ' is-selected' : ''}`}
-            aria-pressed={prefs.viewMode === 'grid'}
-            onClick={() => void updatePrefs({ viewMode: 'grid' })}
-          >
-            Grid
-          </button>
-          <button
-            type="button"
-            className={`btn btn-quiet btn-sm${prefs.viewMode === 'list' ? ' is-selected' : ''}`}
-            aria-pressed={prefs.viewMode === 'list'}
-            onClick={() => void updatePrefs({ viewMode: 'list' })}
-          >
-            List
-          </button>
+          {(['grid', 'list', 'compact'] as const).map((view) => (
+            <button key={view} type="button"
+              className={`btn btn-quiet btn-sm${prefs.viewMode === view ? ' is-selected' : ''}`}
+              aria-pressed={prefs.viewMode === view}
+              onClick={() => void updatePrefs({ viewMode: view })}>
+              {view === 'grid' ? 'Grid' : view === 'list' ? 'List' : 'Compact'}
+            </button>
+          ))}
         </div>
       </div>
       ) : null}
@@ -544,11 +537,12 @@ export function LibraryPage({
           </table>
         </div>
       ) : (
-        <div className="tool-grid">
+        <div className={`tool-grid${prefs.viewMode === 'compact' ? ' tool-grid-compact' : ''}`}>
           {shownSuggestions.map((suggestion) => (
             <SuggestionGridCard
               key={`suggestion:${suggestion.gapId}:${suggestion.toolId}`}
               suggestion={suggestion}
+              compact={prefs.viewMode === 'compact'}
             />
           ))}
           {filtered.map((tool) => (
@@ -558,6 +552,7 @@ export function LibraryPage({
               state={states[tool.id]}
               health={health[tool.id]}
               hideChips={!isDeveloper}
+              compact={prefs.viewMode === 'compact'}
               onLaunch={() => void startTool(tool.id)}
               onStop={() => void stopTool(tool.id)}
               onOpenUrl={
@@ -570,6 +565,9 @@ export function LibraryPage({
               }
             />
           ))}
+          {prefs.viewMode === 'compact' && mode === 'all' && !query.trim() && !activeFilters.length && (
+            <Link to="/tools/new" className="tool-compact-add"><Plus size={22} aria-hidden /><span>Add another tool</span></Link>
+          )}
         </div>
       )}
     </>

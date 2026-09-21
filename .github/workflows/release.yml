@@ -45,6 +45,8 @@ jobs:
       # The artifact that ships must clear at least the gate PRs clear.
       - run: npm run smoke:all
       - run: npm run build
+      - name: Compact library renderer checks
+        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-compact-ui.cjs
       - name: Package, sign, notarize
         run: npx electron-builder --mac --publish never
         env:

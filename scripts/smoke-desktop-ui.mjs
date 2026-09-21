@@ -4,6 +4,15 @@ const require = createRequire(import.meta.url)
 const { updateNotice, updateDescription } = require('../dist-electron/shared/app-update-presentation')
 const { toolSections, settingsSection } = require('../dist-electron/shared/ui-navigation')
 const { nextAppUpdateState } = require('../dist-electron/shared/app-update-state')
+const { healthWarning } = require('../dist-electron/shared/tool-health-presentation')
+
+const health = (...problems) => ({ toolId: 'test', launchable: false, problems })
+assert.deepEqual(healthWarning(health('Port 4408 is in use by another process.')), { label: 'Port busy', heading: 'Port 4408 is busy' })
+assert.equal(healthWarning(health('Project folder is missing — moved or deleted?', 'Port 4408 is in use by another process.')).label, 'Folder missing')
+assert.equal(healthWarning(health('No launch command is set.')).label, 'Setup needed')
+assert.equal(healthWarning(health('An unknown future blocker')).label, 'Needs attention')
+assert.equal(healthWarning(health()).label, 'Needs attention')
+console.log('OK: compact warnings preserve blocker priority and tolerate absent or unfamiliar details')
 
 const base = { currentVersion: '1.9.0' }
 assert.equal(updateNotice(null, null, null), null)
