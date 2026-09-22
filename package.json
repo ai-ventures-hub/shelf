@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "productName": "Shelf",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "description": "Local tool library for macOS — launch the tools you build and share them with your AI agents over MCP",
   "main": "dist-electron/electron/main.js",

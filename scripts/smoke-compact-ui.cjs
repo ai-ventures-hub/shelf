@@ -17,7 +17,7 @@ const names = ['AI Movie Studio', 'AI Ventures Brand', 'Asset Engine', 'Audio Tr
 const icons = ['Clapperboard', 'Palette', 'Sparkles', 'AudioLines', 'ClipboardList', 'Cable', 'Image', 'Images', 'Utensils', 'Settings', 'Terminal', 'Box', 'Search', 'List', 'Dumbbell', 'Layers', 'PanelsTopLeft']
 const store = new LibraryStore(root)
 names.forEach((name, i) => store.save({ id: `compact-${i}`, name, projectPath: root, launchCommand: 'echo fixture', url: 'http://127.0.0.1:4408', port: 4408, description: 'A local tool for your daily work.', iconLucide: icons[i], favorite: i === 1, iconBackground: i === 15 ? '#dc1238' : ['#7895ff', '#a34bfa', '#30b8d4'][i % 3], tags: [] }))
-const states = [4, 13, 16].map(i => ({ toolId: `compact-${i}`, status: 'running' }))
+const states = [4, 13, 16].map(i => ({ toolId: `compact-${i}`, status: 'running', startedBy: { kind: 'mcp', client: i === 4 ? 'Codex' : 'Claude Code' } }))
 let health = [{ toolId: 'compact-15', launchable: false, problems: ['Port 4408 is in use by another process.'] }]
 let suggestions = []
 const calls = []
@@ -55,13 +55,22 @@ async function run(win) {
       for(const card of document.querySelectorAll('.tool-card-compact')) {
         const r=card.getBoundingClientRect();
         if(r.width < 219) problems.push('narrow tile');
+        if(Math.abs(r.height-114)>1) problems.push('reserved vertical space');
         const buttons=[...card.querySelectorAll('.tool-card-controls button')];
         for(const b of buttons) { const q=b.getBoundingClientRect(); if(q.width<32 || q.height<32 || q.right>r.right || q.left<r.left) problems.push('clipped action'); }
         const status=card.querySelector('.status-pill').getBoundingClientRect();
         if(buttons.length && status.right+6>buttons[0].getBoundingClientRect().left) problems.push('status overlaps controls');
         const title=card.querySelector('.tool-name').getBoundingClientRect();
         const warning=card.querySelector('.health-warning-trigger');
-        if(warning) { const w=warning.getBoundingClientRect(); if(w.top<title.bottom+7 || w.bottom+7>card.querySelector('.tool-card-footer').getBoundingClientRect().top) problems.push('warning cramped'); }
+        if(warning) {
+          const w=warning.getBoundingClientRect();
+          if(title.right+6>w.left || w.right>r.right-10 || w.top<r.top+10 || w.width<32 || w.height<32) problems.push('corner warning overlaps title or card');
+          if(warning.innerText.trim()) problems.push('compact warning still has text');
+          if(!warning.getAttribute('aria-label') || !warning.title) problems.push('unlabeled warning');
+          if(document.elementFromPoint(w.x+w.width/2,w.y+w.height/2)?.closest('button') !== warning && w.y>=0 && w.bottom<=innerHeight) problems.push('warning is covered by card link');
+        }
+        const origin=card.querySelector('.origin-chip');
+        if(origin) { const o=origin.getBoundingClientRect(); if(o.bottom>r.bottom-14 || (buttons.length && o.right+6>buttons[0].getBoundingClientRect().left)) problems.push('origin overlaps footer'); }
       }
       if(document.documentElement.scrollWidth>innerWidth) problems.push('page horizontal overflow');
       return problems;
@@ -81,7 +90,7 @@ async function run(win) {
   await capture('warning-dark-wide')
   await press('Escape')
   await until(`!document.querySelector(':popover-open') && document.querySelector('.health-warning-trigger').getAttribute('aria-expanded')==='false'`)
-  assert.equal(await js(`document.activeElement.className`), 'health-warning-trigger')
+  assert.equal(await js(`document.activeElement.classList.contains('health-warning-trigger')`), true)
   await press('Space')
   await until(`!!document.querySelector(':popover-open') && document.activeElement.classList.contains('health-warning-popover')`)
   await press('Tab')
@@ -100,6 +109,7 @@ async function run(win) {
   await click('[aria-label="Add AI Movie Studio to favorites"]')
   await until(`document.querySelector('[aria-label="Remove AI Movie Studio from favorites"]')?.getAttribute('aria-pressed')==='true'`)
   await mode('Grid')
+  assert.equal(await js(`document.querySelector('.health-warning-trigger').textContent`), 'Port busy')
   assert.equal(await js(`document.querySelectorAll('.tool-card-compact').length`), 0)
   await click('.health-warning-trigger')
   await until(`!!document.querySelector(':popover-open')`)

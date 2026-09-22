@@ -2,6 +2,34 @@
 
 final result: passed
 
+## Video feedback refinement, 2.0.2
+
+The September 21 recording supersedes the reserved warning row described below.
+Compact cards now use an icon-only warning in the top-right corner. The trigger
+retains its accessible name, hover description, 32px target, and existing details
+popover. Grid and List retain their text badges.
+
+Cards are 114px tall instead of 140px, with 16px padding instead of 14px. The
+24px tool icons, 13px titles, and 32px actions remain. Running-tool provenance
+sits below status. Compact suggestions and the add-tool tile use the same height.
+
+Passed `npm run typecheck` and `npm run smoke:compact-ui`, which includes the
+production build and native Electron renderer checks. The existing build chunk
+warning remains. Checks cover real pointer targeting, warning/title separation,
+provenance/action containment, keyboard access, preference reload, long titles,
+multiple blockers, and dark/light themes at wide and narrow window sizes.
+
+Inspected captures are in
+`/Users/cjm/.codex/visualizations/2026/09/11/01a0913c-ad75-7253-a949-a1f18fd3cb03/video-feedback/after/`.
+The wide and narrow Compact views, open warning, and light-theme multiple-blocker
+and suggestion state passed visual review.
+
+Changed implementation files: `src/components/ToolHealthWarning.tsx`,
+`src/components/ToolCard.tsx`, `src/components/SuggestionGridCard.tsx`,
+`src/styles/library.css`, and `scripts/smoke-compact-ui.cjs`.
+Documentation changes are in this file and `changelog.md`. Package manifests
+set this patch to 2.0.2. Release verification follows the renderer checks.
+
 ## Visual target and evidence
 
 - Selected source: `/Users/cjm/.codex/generated_images/01a0913c-ad75-7253-a949-a1f18fd3cb03/exec-b2c9915f-9102-47af-814a-0dc79fdc47ec.png`.

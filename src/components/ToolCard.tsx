@@ -78,12 +78,12 @@ export function ToolCard({
         </p>
       </div>}
       <div className="tool-card-notice">
-        <ToolHealthWarning health={health} live={live} toolName={tool.name} />
-        {compact && <OriginChip state={state} />}
+        <ToolHealthWarning health={health} live={live} toolName={tool.name} iconOnly={compact} />
       </div>
       <div className="tool-card-footer">
         <div className="tool-meta">
-          {compact ? <StatusPill status={status} message={state?.message} /> : <OriginChip state={state} />}
+          {compact && <StatusPill status={status} message={state?.message} />}
+          <OriginChip state={state} />
           {!hideChips && !compact ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}

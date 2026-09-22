@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 - 2026-09-21
+
+- Move Compact view warnings to a top-right icon with the existing click-open
+  details. Reduce cards from 140px to 114px tall and increase edge padding while
+  retaining full-size actions and launch provenance.
+
 ## 2.0.1 - 2026-09-21
 
 - Add a saved Compact library view with smaller icons and titles, full-size
