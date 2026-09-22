@@ -4,12 +4,12 @@ import { Link } from 'react-router-dom'
 import { healthWarning } from '../../shared/tool-health-presentation'
 import type { ToolHealth } from '../types'
 
-export function ToolHealthWarning({ health, live, toolName }: { health?: ToolHealth; live: boolean; toolName: string }) {
+export function ToolHealthWarning({ health, live, toolName, iconOnly = false }: { health?: ToolHealth; live: boolean; toolName: string; iconOnly?: boolean }) {
   if (!health || health.launchable || live) return null
-  return <WarningDetails health={health} toolName={toolName} />
+  return <WarningDetails health={health} toolName={toolName} iconOnly={iconOnly} />
 }
 
-function WarningDetails({ health, toolName }: { health: ToolHealth; toolName: string }) {
+function WarningDetails({ health, toolName, iconOnly }: { health: ToolHealth; toolName: string; iconOnly: boolean }) {
   const id = useId()
   const trigger = useRef<HTMLButtonElement>(null)
   const popover = useRef<HTMLDivElement>(null)
@@ -52,9 +52,11 @@ function WarningDetails({ health, toolName }: { health: ToolHealth; toolName: st
   }
 
   return <>
-    <button ref={trigger} type="button" className="health-warning-trigger" popoverTarget={id}
+    <button ref={trigger} type="button" className={`health-warning-trigger${iconOnly ? ' health-warning-icon' : ''}`} popoverTarget={id}
+      title={heading}
       aria-haspopup="dialog" aria-expanded={open} aria-controls={id} aria-label={`${label}: ${toolName}`}>
-      <TriangleAlert size={13} aria-hidden /><span>{label}</span><ChevronDown size={12} aria-hidden />
+      <TriangleAlert size={iconOnly ? 15 : 13} aria-hidden />
+      {!iconOnly && <><span>{label}</span><ChevronDown size={12} aria-hidden /></>}
     </button>
     <div ref={popover} id={id} popover="auto" className="health-warning-popover" role="dialog"
       tabIndex={-1} aria-labelledby={`${id}-heading`}

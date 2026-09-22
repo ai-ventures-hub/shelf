@@ -18,12 +18,12 @@ export function SuggestionGridCard({
 }) {
   if (compact) return (
     <Link to="/gaps" className="tool-card tool-card-compact" data-suggestion
-      aria-label={`Tool suggestion: ${suggestion.toolName}. Review and decide.`}>
+      title={suggestion.matched.join(', ')}
+      aria-label={`Tool suggestion: ${suggestion.toolName}. ${suggestion.matched.join(', ')}. Review and decide.`}>
       <div className="tool-card-top">
         <span className="tool-icon suggestion-tile" aria-hidden><Sparkles size={16} /></span>
         <h3 className="tool-name compact-suggestion-name" title={suggestion.toolName}>{suggestion.toolName}</h3>
       </div>
-      <p className="compact-suggestion-copy" title={suggestion.matched.join(', ')}>{suggestion.matched.join(', ')}</p>
       <div className="tool-card-footer">
         <span className="status-pill" data-status="suggestion">Tool suggestion</span>
         <span className="btn btn-quiet btn-sm btn-icon"><ArrowUpRight size={13} aria-hidden /></span>
