@@ -7,6 +7,7 @@ import { normalizeAgentAccess, normalizeCapabilities } from './capability-intell
 import { resolveAppDataRoot, resolveShelfDataRoot } from './paths'
 import { containsLikelySecret } from './capability-intelligence'
 import { foldDisplayName, stripInvisibleChars } from './types'
+import { normalizeStack } from './stack-contract'
 import type { Collection, LibraryFile, Tool, ToolSource } from './types'
 
 /**
@@ -391,17 +392,26 @@ export class LibraryStore {
           ? undefined
           : previous?.origin // 'preserve'
 
+    const toolIds = Array.from(
+      new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
+    )
+    // Agents never write the contract. A save that omits `stack` keeps the
+    // stored one, so membership edits and older callers do not wipe it.
+    // An explicit stack (including undefined) is a GUI write and may clear it.
+    const stack = normalizeStack(
+      input.origin === 'agent' || !('stack' in input) ? previous?.stack : input.stack,
+      toolIds,
+    )
     const collection: Collection = {
       id: input.id || randomUUID(),
       // Strip here, not only in normalizeCollection, so the returned record
       // matches what lands on disk (an agent gets back what it really saved).
       name: stripInvisibleChars(input.name).trim(),
       description: stripInvisibleChars(input.description || '').trim() || undefined,
-      toolIds: Array.from(
-        new Set((input.toolIds || []).filter((id) => knownToolIds.has(id))),
-      ),
+      toolIds,
       designProfileId: input.designProfileId?.trim() || undefined,
       origin,
+      ...(stack ? { stack } : {}),
       createdAt: previous ? previous.createdAt : input.createdAt || now,
       updatedAt: now,
     }
@@ -504,15 +514,18 @@ export class LibraryStore {
 
 function normalizeCollection(input: Partial<Collection>): Collection {
   const now = new Date().toISOString()
+  const toolIds = Array.isArray(input.toolIds) ? input.toolIds.filter(Boolean) : []
+  const stack = normalizeStack(input.stack, toolIds)
   return {
     id: input.id || randomUUID(),
     name: stripInvisibleChars(input.name || 'Untitled').trim() || 'Untitled',
     description: stripInvisibleChars(input.description || '').trim() || undefined,
-    toolIds: Array.isArray(input.toolIds) ? input.toolIds.filter(Boolean) : [],
+    toolIds,
     designProfileId: input.designProfileId?.trim() || undefined,
     // Both normalizeCollection AND the save literal must carry `origin`, or
     // agent ownership silently vanishes on the next read (Tool.source lesson).
     origin: input.origin === 'agent' ? 'agent' : undefined,
+    ...(stack ? { stack } : {}),
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
   }

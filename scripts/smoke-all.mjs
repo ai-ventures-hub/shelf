@@ -56,6 +56,8 @@ async function main() {
   await run('launch diagnostics', 'node', ['scripts/smoke-diagnostics.mjs'])
   await run('project bootstrap', 'node', ['scripts/smoke-bootstrap.mjs'])
   await run('register project', 'node', ['scripts/smoke-register.mjs'])
+  await run('morning board', 'node', ['scripts/smoke-morning.mjs'])
+  await run('tool drafts', 'node', ['scripts/smoke-drafts.mjs'])
   await run('adopt-by-port', 'node', ['scripts/smoke-adopt.mjs'])
   await run('adopt deep/cross-process', 'node', ['scripts/smoke-adopt-deep.mjs'])
   await run('stack + provenance', 'node', ['scripts/smoke-stack.mjs'])

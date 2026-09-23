@@ -8,6 +8,7 @@ import { agentAccessInputSchema, portSchema, toolSchema } from '../shared/tool-v
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { z } from 'zod'
 import pkg from '../package.json'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
@@ -28,6 +29,8 @@ import { ProcessManager } from '../shared/process-manager'
 import { inspectProject } from '../shared/project-import'
 import { ReceiptStore } from '../shared/receipt-store'
 import { registerProject } from '../shared/register-project'
+import { readManifest } from '../shared/tool-manifest'
+import { publicToolDraft, ToolDraftStore } from '../shared/tool-draft-store'
 import { exportToolManifest, ShareError } from '../shared/tool-share'
 import {
   sanitizeToolForOutput,
@@ -42,6 +45,7 @@ const store = new LibraryStore()
 const receipts = new ReceiptStore()
 const capabilityGaps = new CapabilityGapStore()
 const designProfiles = new DesignProfileStore()
+const drafts = new ToolDraftStore()
 const processes = new ProcessManager(store, {
   receipts,
   // Thunk: the client's self-reported name (e.g. "claude-code") is only known
@@ -537,6 +541,9 @@ server.registerTool(
         // So an agent can tell before writing whether shelf_upsert_collection
         // will be refused, instead of finding out by failing.
         editableByAgent: collection.origin === 'agent',
+        // Read-only. shelf_upsert_collection cannot change launch order or
+        // the env key names a step requires.
+        stack: collection.stack ?? null,
       },
       members,
       running: members.filter((m) => 'status' in m && m.status === 'running').length,
@@ -638,7 +645,7 @@ server.registerTool(
   'shelf_register_project',
   {
     description:
-      'One-shot register: inspect a project folder, save it to the library (idempotent — re-registering the same folder updates instead of duplicating), optionally run detected setup (package install; requires runSetup=true consent), and launch. Collapses the inspect → upsert → launch workflow into one call with the same safety semantics. Outcomes: launched | saved | needs_setup | saved_needs_review | saved_launch_failed | invalid_folder | dry_run. Failed launches carry a structured state.code (e.g. deps_missing, port_timeout).',
+      'Register a project folder. A folder already in the library is updated in place (idempotent) and may launch. A NEW folder is staged for the user and is not saved or launched. They accept it in Shelf, which shows the command, folder, port, and env key names. dryRun still inspects only. Outcomes: pending_consent | launched | saved | needs_setup | saved_needs_review | saved_launch_failed | invalid_folder | dry_run. Failed launches of an existing tool carry a structured state.code (e.g. deps_missing, port_timeout).',
     inputSchema: {
       projectPath: z.string().min(1).describe('Absolute project folder path'),
       launch: z
@@ -663,6 +670,36 @@ server.registerTool(
   },
   async ({ projectPath, launch, onPortConflict, runSetup, dryRun }) => {
     try {
+      const resolved = path.resolve(projectPath.trim())
+      // New folders stop here. Accept in the GUI is what calls registerProject.
+      if (!dryRun && !store.findByProjectPath(resolved)) {
+        const suggestion = await inspectProject(resolved)
+        let envKeys: string[] = []
+        try {
+          envKeys = Object.keys(readManifest(resolved)?.manifest.env || {})
+        } catch {
+          envKeys = []
+        }
+        const draft = drafts.stage({
+          projectPath: resolved,
+          suggestion,
+          envKeys,
+          client: server.server.getClientVersion()?.name,
+        })
+        return textResult({
+          outcome: 'pending_consent',
+          created: false,
+          draft: publicToolDraft(draft),
+          suggestion,
+          note: launch === false
+            ? 'Staged in Shelf. Nothing was saved. The user accepts it before it enters the library.'
+            : 'Staged in Shelf. Nothing was saved or launched. The user accepts it in Shelf, then launches it themselves.',
+          ignored: {
+            runSetup: Boolean(runSetup),
+            reason: 'Setup and launch wait until the user has accepted this draft.',
+          },
+        })
+      }
       const result = await registerProject(
         projectPath,
         { store, processes },

@@ -104,6 +104,10 @@ const api = {
   getIconDataUrl: (iconPath: string): Promise<string | null> =>
     ipcRenderer.invoke('tools:iconDataUrl', iconPath),
 
+  getActivityBoard: () => ipcRenderer.invoke('activity:board'),
+  listToolDrafts: () => ipcRenderer.invoke('drafts:list'),
+  acceptToolDraft: (id: string) => ipcRenderer.invoke('drafts:accept', id),
+  rejectToolDraft: (id: string) => ipcRenderer.invoke('drafts:reject', id),
   listCollections: (): Promise<Collection[]> =>
     ipcRenderer.invoke('collections:list'),
   saveCollection: (collection: Collection): Promise<Collection> =>

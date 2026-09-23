@@ -163,6 +163,36 @@ try {
   assert.equal(healed.results[0].state?.port, reassigned.port)
   await stopCollection(conflictCollection.id, { store, processes: gui })
   console.log('OK: stack surfaces port_in_use (fail) and heals it (reassign)')
+
+  // 5. Ordered contract blocks before spawn, and an agent rename cannot rewrite it.
+  const created = store.upsertCollectionFromAgent({
+    name: 'Agent Ordered',
+    toolIds: [toolA.id, toolB.id],
+  })
+  store.saveCollection({
+    ...created.collection,
+    origin: 'preserve',
+    stack: {
+      ordered: true,
+      steps: [{ toolId: toolA.id, requireEnvKeys: ['SHELF_STACK_TOKEN', 'not a key'] }],
+    },
+  })
+  const renamed = store.upsertCollectionFromAgent({
+    id: created.collection.id,
+    name: 'Agent Ordered Renamed',
+  })
+  assert.equal(renamed.collection.origin, 'agent')
+  assert.equal(renamed.collection.name, 'Agent Ordered Renamed')
+  assert.equal(renamed.collection.stack?.ordered, true)
+  assert.deepEqual(renamed.collection.stack?.steps?.[0]?.requireEnvKeys, ['SHELF_STACK_TOKEN'])
+  const blocked = await startCollection(renamed.collection.id, { store, processes: gui })
+  assert.deepEqual(
+    blocked.results.map((item) => item.outcome),
+    ['blocked', 'skipped'],
+  )
+  assert.equal(Boolean(await findPortOccupant(portA)), false)
+  assert.equal(Boolean(await findPortOccupant(portB)), false)
+  console.log('OK: ordered stack blocks on a missing env key and skips the rest')
 } finally {
   await gui.stopAll('Smoke cleanup.')
   await agent.stopAll('Smoke cleanup.')

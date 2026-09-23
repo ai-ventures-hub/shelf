@@ -269,19 +269,28 @@ async function main() {
       const beforeRegister = await callTool(client, 'shelf_list_tools')
       const registered = await callTool(client, 'shelf_register_project', {
         projectPath: registerProj,
+        launch: true,
+        runSetup: true,
       })
-      if (registered.outcome !== 'launched' || !registered.tool?.id) {
+      if (registered.outcome !== 'pending_consent' || !registered.draft?.id) {
         throw new Error(
-          `Expected launched, got ${registered.outcome}: ${registered.state?.message}`,
+          `Expected pending_consent, got ${registered.outcome}`,
         )
       }
-      const afterRegister = await callTool(client, 'shelf_list_tools')
-      if (afterRegister.count !== beforeRegister.count + 1) {
-        throw new Error('register_project must add exactly one tool')
+      if (registered.draft.envKeys?.some((key) => key.includes('='))) {
+        throw new Error('draft exposed an env value')
       }
-      await callTool(client, 'shelf_stop_tool', { id: registered.tool.id })
-      await callTool(client, 'shelf_remove_tool', { id: registered.tool.id })
-      console.log('OK: register_project one-shot')
+      const afterRegister = await callTool(client, 'shelf_list_tools')
+      if (afterRegister.count !== beforeRegister.count) {
+        throw new Error('register_project must not add a tool before the user accepts it')
+      }
+      const again = await callTool(client, 'shelf_register_project', {
+        projectPath: registerProj,
+      })
+      if (again.draft?.id !== registered.draft.id) {
+        throw new Error('a second registration must refresh the same draft')
+      }
+      console.log('OK: register_project stages a draft')
     } finally {
       fs.rmSync(registerProj, { recursive: true, force: true })
     }

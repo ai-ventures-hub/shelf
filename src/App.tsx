@@ -20,6 +20,8 @@ const ToolDetailPage = lazy(() => import('./pages/ToolDetailPage').then((module)
 const ToolFormPage = lazy(() => import('./pages/ToolFormPage').then((module) => ({ default: module.ToolFormPage })))
 
 const AddProjectPage = lazy(() => import('./pages/AddProjectPage').then((module) => ({ default: module.AddProjectPage })))
+const MorningBoardPage = lazy(() => import('./pages/MorningBoardPage').then((module) => ({ default: module.MorningBoardPage })))
+const DraftToolsPage = lazy(() => import('./pages/DraftToolsPage').then((module) => ({ default: module.DraftToolsPage })))
 
 export default function App() {
   return (
@@ -34,6 +36,8 @@ export default function App() {
             <Route path="/favorites" element={<LibraryPage mode="favorites" />} />
             <Route path="/running" element={<LibraryPage mode="running" />} />
             <Route path="/recent" element={<LibraryPage mode="recent" />} />
+            <Route path="/activity" element={<MorningBoardPage />} />
+            <Route path="/drafts" element={<DraftToolsPage />} />
             <Route path="/gaps" element={<CapabilityGapsPage />} />
             <Route path="/tags/:tag" element={<LibraryPage mode="tag" />} />
             <Route path="/collections/:collectionId" element={<CollectionPage />} />

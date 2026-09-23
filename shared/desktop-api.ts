@@ -58,8 +58,10 @@ import type {
   ToolReadiness,
   ToolRuntimeState,
   UiPrefs,
+  ToolDraft,
   UpdateCheck,
 } from './contracts'
+import type { MorningEvent } from './morning-board'
 
 export interface ShelfApi {
   getVerificationActivity: () => Promise<{ toolId: string; name: string; status: string }[]>
@@ -94,6 +96,10 @@ export interface ShelfApi {
   getPathForFile: (file: File) => string
   pickIcon: () => Promise<string | null>
   getIconDataUrl: (iconPath: string) => Promise<string | null>
+  getActivityBoard: () => Promise<MorningEvent[]>
+  listToolDrafts: () => Promise<ToolDraft[]>
+  acceptToolDraft: (id: string) => Promise<RegisterProjectResult>
+  rejectToolDraft: (id: string) => Promise<void>
   listCollections: () => Promise<Collection[]>
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
