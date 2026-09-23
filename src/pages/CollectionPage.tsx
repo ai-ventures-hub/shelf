@@ -9,7 +9,8 @@ import { LibraryPage } from './LibraryPage'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
-import type { CollectionActionResult } from '../types'
+import { parseEnvKeyList } from '../../shared/stack-contract'
+import type { Collection, CollectionActionResult } from '../types'
 
 function summarizeStackResult(
   result: CollectionActionResult,
@@ -28,13 +29,61 @@ function summarizeStackResult(
     add('started', 'started')
     add('already_running', 'already running')
     add('failed', 'failed')
+    add('blocked', 'blocked')
+    add('skipped', 'skipped')
   } else {
     add('stopped', 'stopped')
     add('skipped_external', 'left running (not started by Shelf)')
     add('not_running', 'not running')
     add('failed', 'failed to stop')
   }
+  const blocked = result.results.find((item) => item.outcome === 'blocked' && item.message)
+  if (blocked?.message) parts.push(blocked.message)
   return parts.length ? parts.join(' · ') : 'Nothing to do.'
+}
+
+function EnvKeyField({
+  toolId,
+  toolName,
+  keys,
+  collection,
+  saveCollection,
+}: {
+  toolId: string
+  toolName: string
+  keys: string
+  collection: Collection
+  saveCollection: (collection: Collection) => Promise<Collection>
+}) {
+  const [text, setText] = useState(keys)
+
+  return (
+    <label className="stack-contract-row">
+      <span title={toolName}>{toolName}</span>
+      <input
+        className="field-input"
+        value={text}
+        spellCheck={false}
+        aria-label={`Env keys required before ${toolName}`}
+        placeholder="API_KEY, DATABASE_URL"
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => {
+          const requireEnvKeys = parseEnvKeyList(text)
+          const others = (collection.stack?.steps || []).filter((step) => step.toolId !== toolId)
+          const steps = requireEnvKeys.length
+            ? [...others, { toolId, requireEnvKeys }]
+            : others
+          const ordered = collection.stack?.ordered === true
+          void saveCollection({
+            ...collection,
+            // Always send an object. IPC drops undefined, which would look
+            // like "leave the stored contract alone" and the checkbox would stick.
+            stack: { ordered, steps },
+          })
+        }}
+      />
+    </label>
+  )
 }
 
 export function CollectionPage() {
@@ -125,7 +174,11 @@ export function CollectionPage() {
           onClick={() => void runStackAction('start')}
         >
           <Play size={13} aria-hidden style={{ marginRight: 4 }} />
-          {stackBusy === 'start' ? 'Starting stack…' : 'Start stack'}
+          {stackBusy === 'start'
+            ? 'Starting stack…'
+            : collection.stack?.ordered
+              ? 'Start in order'
+              : 'Start stack'}
         </button>
         {runningCount > 0 ? (
           <button
@@ -164,6 +217,50 @@ export function CollectionPage() {
         </button>
       </div>
       {stackSummary ? <p className="collection-stack-summary">{stackSummary}</p> : null}
+
+      {members.length > 0 ? (
+        <section className="stack-contract">
+          <label className="filter-tag-row">
+            <input
+              type="checkbox"
+              checked={collection.stack?.ordered === true}
+              onChange={(event) => {
+                const ordered = event.target.checked
+                const steps = collection.stack?.steps || []
+                void saveCollection({
+                  ...collection,
+                  stack: { ordered, steps },
+                })
+              }}
+            />
+            <span>Start in order</span>
+          </label>
+          <p className="field-hint">
+            Each tool finishes its port check before the next command starts. A missing env key
+            stops the rest. Saving this adopts the collection if an agent created it.
+          </p>
+          {collection.stack?.ordered
+            ? collection.toolIds.map((toolId) => {
+                const tool = tools.find((item) => item.id === toolId)
+                if (!tool) return null
+                const keys =
+                  collection.stack?.steps
+                    .find((step) => step.toolId === toolId)
+                    ?.requireEnvKeys?.join(', ') || ''
+                return (
+                  <EnvKeyField
+                    key={toolId}
+                    toolId={toolId}
+                    toolName={tool.name}
+                    keys={keys}
+                    collection={collection}
+                    saveCollection={saveCollection}
+                  />
+                )
+              })
+            : null}
+        </section>
+      ) : null}
 
       {editing ? (
         <section className="panel">

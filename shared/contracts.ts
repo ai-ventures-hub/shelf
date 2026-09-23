@@ -40,6 +40,29 @@ export interface ToolReadiness {
 }
 
 /** Curated library destination; a tool may belong to many collections. */
+/**
+ * One member of a stack contract. Order is the collection's toolIds, not
+ * this array. Only key names are stored. Values stay on the tool.
+ */
+export interface StackStep {
+  toolId: string
+  requireEnvKeys?: string[]
+}
+
+/**
+ * How a collection launches. Absent means the original concurrent start.
+ * Agents may read it. A GUI save is the only write.
+ */
+export interface StackContract {
+  /**
+   * Start members in toolIds order. ProcessManager already waits for a
+   * member's port before start() resolves, so the next command does not
+   * run until that wait finishes. A failed or blocked step skips the rest.
+   */
+  ordered: boolean
+  steps: StackStep[]
+}
+
 export interface Collection {
   id: string
   name: string
@@ -54,6 +77,11 @@ export interface Collection {
    * Additive optional — no library version bump.
    */
   origin?: 'agent'
+  /**
+   * Optional launch contract. Additive optional, no library version bump.
+   * Omitted when the collection still starts every member together.
+   */
+  stack?: StackContract
   createdAt: string
   updatedAt: string
 }
@@ -728,6 +756,23 @@ export interface RegisterProjectOptions {
   source?: ToolSource
 }
 
+/**
+ * An agent registration that is not in the library yet.
+ * Env values are never stored. Accept is what calls registerProject.
+ */
+export interface ToolDraft {
+  id: string
+  projectPath: string
+  name: string
+  launchCommand: string
+  port?: number
+  url?: string
+  envKeys: string[]
+  client?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface RegisterProjectResult {
   outcome: RegisterOutcome
   /** Saved tool (present for every outcome that persisted). */
@@ -770,12 +815,18 @@ export type CollectionToolOutcome =
   | 'not_running'
   /** Running listener Shelf does not own — left alone (stop_refused_not_owner). */
   | 'skipped_external'
+  /** Ordered contract refused this member before any command ran. */
+  | 'blocked'
+  /** Ordered contract stopped because an earlier step failed or was blocked. */
+  | 'skipped'
 
 export interface CollectionToolResult {
   toolId: string
   name: string
   outcome: CollectionToolOutcome
   state?: ToolRuntimeState
+  /** Why a step was blocked or skipped. Key names only, never values. */
+  message?: string
 }
 
 export interface CollectionActionResult {

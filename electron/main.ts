@@ -17,6 +17,9 @@ import {
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { listClientObservations } from '../shared/client-observation'
+import { buildMorningBoard } from '../shared/morning-board'
+import { acceptToolDraft, ToolDraftStore } from '../shared/tool-draft-store'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
 import { containsLikelySecret, deriveToolReadiness } from '../shared/capability-intelligence'
 import { startCollection, stopCollection } from '../shared/collection-launch'
@@ -119,6 +122,7 @@ let receipts: ReceiptStore
 let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let teamCatalogs: TeamCatalogStore
+let toolDrafts: ToolDraftStore
 let isQuitting = false
 let quitDiscardApproved = false
 let quitPreparing = false
@@ -643,6 +647,50 @@ function registerIpc(): void {
     return `data:${mime};base64,${buf.toString('base64')}`
   })
 
+  ipcMain.handle('activity:board', () => {
+    const verifications = store.list().flatMap((tool) => {
+      try {
+        return verification.get(tool.id).runs.map((run) => ({
+          toolId: tool.id,
+          toolName: tool.name,
+          status: run.status,
+          at: run.endedAt || run.startedAt,
+          message: run.message,
+        }))
+      } catch {
+        // A damaged workflow is opened on its own page. It does not blank the board.
+        return []
+      }
+    })
+    return buildMorningBoard({
+      receipts: receipts.list({ limit: 80 }),
+      gaps: capabilityGaps.list({ limit: 40 }),
+      profiles: designProfiles.list(),
+      verifications,
+      clients: listClientObservations(),
+      drafts: toolDrafts.list().map((draft) => ({
+        id: draft.id,
+        name: draft.name,
+        at: draft.updatedAt,
+        client: draft.client,
+      })),
+    })
+  })
+  ipcMain.handle('drafts:list', () => toolDrafts.list())
+  ipcMain.handle('drafts:accept', (_e, id: string) => {
+    const uiPrefs = prefs.get()
+    return acceptToolDraft(id, toolDrafts, { store, processes }, {
+      toolDefaults: {
+        iconLucide: uiPrefs.defaultIconLucide,
+        iconColor: uiPrefs.defaultIconColor,
+        iconBackground: uiPrefs.defaultIconBackground,
+      },
+    })
+  })
+  ipcMain.handle('drafts:reject', (_e, id: string) => {
+    toolDrafts.delete(id)
+  })
+
   ipcMain.handle('collections:list', () => store.listCollections())
   // Any GUI save adopts the collection: an agent draft becomes user-owned
   // and shelf_upsert_collection can no longer touch it.
@@ -1136,6 +1184,7 @@ if (gotLock) {
     capabilityGaps = new CapabilityGapStore()
     designProfiles = new DesignProfileStore()
     teamCatalogs = new TeamCatalogStore()
+    toolDrafts = new ToolDraftStore()
     // Scratch clones from adds that never reached approve/cancel.
     cleanStagingRoot(store.getRoot())
     processes = new ProcessManager(store, {

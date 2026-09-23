@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
+import { useToolDrafts } from '../hooks/useToolDrafts'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { STARTER_TOKENS } from '../lib/designTokens'
@@ -66,6 +67,19 @@ function NavIcon({ name }: { name: string }) {
         <svg {...common}>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 7v5l3 2" />
+        </svg>
+      )
+    case 'activity':
+      return (
+        <svg {...common}>
+          <path d="M4 6h16M4 12h16M4 18h10" />
+        </svg>
+      )
+    case 'drafts':
+      return (
+        <svg {...common}>
+          <path d="M6 3.5h8l4 4V20.5H6z" />
+          <path d="M14 3.5V8h4" />
         </svg>
       )
     case 'gaps':
@@ -137,6 +151,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
   useLayoutEffect(() => { window.scrollTo(0, 0) }, [pathname, settingsSearch])
   const navigate = useNavigate()
   const { tools, collections, states, saveCollection } = useLibrary()
+  const { drafts } = useToolDrafts()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
   const mcpLabel = isDeveloper ? 'MCP Connections' : 'AI Connections'
@@ -330,6 +345,27 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavLabel collapsed={collapsed}>Recent</NavLabel>
             <NavCount collapsed={collapsed} value={recent} />
           </NavLink>
+          <NavLink
+            to="/activity"
+            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+            title="Activity"
+            aria-label="Activity"
+          >
+            <NavIcon name="activity" />
+            <NavLabel collapsed={collapsed}>Activity</NavLabel>
+          </NavLink>
+          {drafts.length > 0 ? (
+            <NavLink
+              to="/drafts"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title="Waiting for you"
+              aria-label="Waiting for you"
+            >
+              <NavIcon name="drafts" />
+              <NavLabel collapsed={collapsed}>Waiting</NavLabel>
+              <NavCount collapsed={collapsed} value={drafts.length} />
+            </NavLink>
+          ) : null}
           {isDeveloper ? (
             <NavLink
               to="/gaps"

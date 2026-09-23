@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0 - 2026-09-23
+
+- Add an Activity page that sorts launches, open gaps, agent design drafts,
+  failed checks, connected clients, and registrations still waiting on you.
+  It reads the existing local files and does not add another log.
+- Let a collection start in member order. Each tool's port check finishes
+  before the next command. A missing env key name blocks that step and skips
+  the rest. Agents can read the contract and cannot change it.
+- Stage agent registrations of new folders until you accept them. The sheet
+  shows the command, folder, port, and env key names. Accept saves through
+  the existing register path and does not launch. Reject deletes the draft.
+  A folder already in the library still updates in place.
+
 ## 2.0.2 - 2026-09-21
 
 - Move Compact view warnings to a top-right icon with the existing click-open

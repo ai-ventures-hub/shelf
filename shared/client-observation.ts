@@ -23,6 +23,36 @@ export function recordClientObservation(serverPath: string, name?: string): void
   atomicWriteFileSync(file, JSON.stringify({ lastSeenAt: new Date().toISOString() }))
 }
 
+/**
+ * Every client that has talked to this data root. The filename prefix is the
+ * kind. The hash only distinguishes which MCP bundle they connected through.
+ */
+export function listClientObservations(): Array<{ kind: ClientKind; lastSeenAt: string }> {
+  const dir = path.join(resolveShelfDataRoot(), 'client-observations')
+  let names: string[] = []
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return []
+  }
+  const kinds: ClientKind[] = ['claude', 'claude-code', 'cursor', 'codex']
+  const latest = new Map<ClientKind, string>()
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const kind = kinds.find((candidate) => name.startsWith(`${candidate}-`))
+    if (!kind) continue
+    try {
+      const value = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as { lastSeenAt?: unknown }
+      if (typeof value.lastSeenAt !== 'string' || !Number.isFinite(Date.parse(value.lastSeenAt))) continue
+      const previous = latest.get(kind)
+      if (!previous || Date.parse(value.lastSeenAt) > Date.parse(previous)) latest.set(kind, value.lastSeenAt)
+    } catch {
+      // A damaged observation is not a client.
+    }
+  }
+  return Array.from(latest, ([kind, lastSeenAt]) => ({ kind, lastSeenAt }))
+}
+
 export function clientObservation(serverPath: string, kind: ClientKind): { lastSeenAt?: string } {
   try {
     const value = JSON.parse(fs.readFileSync(observationPath(serverPath, kind), 'utf8'))

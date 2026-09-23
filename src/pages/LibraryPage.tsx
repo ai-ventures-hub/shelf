@@ -16,6 +16,7 @@ import {
 import { ToolCard, ToolListRow } from '../components/ToolCard'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
+import { useToolDrafts } from '../hooks/useToolDrafts'
 import { usePrefs } from '../hooks/usePrefs'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
@@ -36,6 +37,7 @@ export function LibraryPage({
 }) {
   const { tools, collections, states, health, loading, error, startTool, stopTool, saveTool } =
     useLibrary()
+  const { drafts } = useToolDrafts()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
   const { suggestions } = useGapSuggestions()
@@ -299,6 +301,17 @@ export function LibraryPage({
       {error ? (
         <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
           {error}
+        </div>
+      ) : null}
+
+      {mode === 'all' && drafts.length > 0 ? (
+        <div className="draft-banner">
+          <p>
+            {drafts.length} tool{drafts.length === 1 ? '' : 's'} waiting for you to accept.
+          </p>
+          <Link className="btn btn-primary btn-sm" to="/drafts">
+            Review
+          </Link>
         </div>
       ) : null}
 
