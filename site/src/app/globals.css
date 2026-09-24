@@ -678,6 +678,7 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
 .header-nav > a {
   color: var(--av-text-secondary);
+  white-space: nowrap;
   transition: color var(--av-dur-fast) var(--av-ease-out);
 }
 
@@ -2608,6 +2609,18 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
   .hero-caption {
     padding: 0 20px;
+  }
+}
+
+/* Portrait tablets (about 710–780px) still show the desktop labels, and
+   those labels wrap onto two lines inside the 70px header. They fit on
+   one line from 800px up. Below that, keep the mark and the download. */
+@media (max-width: 799px) {
+  .header-nav a[href='/#how'],
+  .header-nav a[href='/#app'],
+  .header-nav a[href='/#agents'],
+  .header-nav a[href='/#dev'] {
+    display: none;
   }
 }
 

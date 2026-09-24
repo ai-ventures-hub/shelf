@@ -6,6 +6,8 @@
   Say that a command waits for approval, and that a stack can start in order.
 - Drop the design-section essay. The profile window already shows the
   colors, type, and voice, so the column is a headline and one sentence.
+- Keep the landing header on one line at tablet width. Section links hide
+  below 800px, where they were wrapping inside the 70px bar.
 
 ## 2.1.0 - 2026-09-23
 
