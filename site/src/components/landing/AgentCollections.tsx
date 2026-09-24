@@ -14,20 +14,17 @@ export function AgentCollections() {
         <div className="coll-grid">
           <div className="coll-copy">
             <p className="eyebrow" data-reveal>
-              New in 1.3 · Agent-built collections
+              Stacks
             </p>
             <h2 id="collections-heading" className="sec-h2" data-reveal>
               Ask for the stack. It’s on your shelf.
             </h2>
             <p className="sec-lead" data-reveal>
-              A collection is the three or four tools that only make sense
-              together, and one button starts all of them. Now you can ask for one
-              without opening Shelf. Your agent names it, puts your tools in it,
-              and it lands in your sidebar marked <strong>From agent</strong>. It
-              installed nothing and launched nothing. It wrote you a list.
+              Ask for a stack. It lands marked <strong>From agent</strong>.
+              Start it together, or in order so each port is up first.
             </p>
             <p className="mcp-verbs be-verb" data-reveal>
-              “group these into a shelf I can start at once” → shelf_upsert_collection
+              “group these into a shelf” → shelf_upsert_collection
             </p>
           </div>
 
@@ -49,7 +46,7 @@ export function AgentCollections() {
                 <span className="pill" data-tone="accent">
                   From agent
                 </span>
-                <span className="mock-btn mock-btn--primary">Start stack</span>
+                <span className="mock-btn mock-btn--primary">Start in order</span>
               </div>
               <div className="coll-page-body">
                 <p className="coll-page-kicker">3 tools</p>
@@ -63,8 +60,7 @@ export function AgentCollections() {
                   </div>
                 ))}
                 <p className="coll-page-foot">
-                  Add a tool, drop one, pick its design profile. It’s yours from that
-                  moment on.
+                  Script Room answers, then Voice Bench starts.
                 </p>
               </div>
             </div>

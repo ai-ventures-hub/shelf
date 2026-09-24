@@ -10,14 +10,12 @@ export function DevMode() {
     <section id="dev" className="section" aria-labelledby="dev-heading">
       <div className="section-inner mode-grid">
         <ModeToggle>
-          <p className="eyebrow">New in 0.7</p>
+          <p className="eyebrow">Two ways to look at it</p>
           <h2 id="dev-heading" className="sec-h2">
             Simple by default. Developer when you want it.
           </h2>
           <p className="sec-lead">
-            One toggle. Simple hides MCP configs, capability panels, and launch
-            flags behind plain language. Developer shows every wire. Same
-            engine, same files. Nothing deleted, nothing dumbed down.
+            Simple hides the wires. Developer shows them. Same files.
           </p>
         </ModeToggle>
       </div>

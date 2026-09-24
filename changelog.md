@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Shorten the shelfmcp.com landing copy and drop the old version stamps.
+  Say that a command waits for approval, and that a stack can start in order.
+- Drop the design-section essay. The profile window already shows the
+  colors, type, and voice, so the column is a headline and one sentence.
+
 ## 2.1.0 - 2026-09-23
 
 - Add an Activity page that sorts launches, open gaps, agent design drafts,

@@ -12,17 +12,17 @@ export const HOW_CARDS = [
   {
     n: '01',
     title: 'Drop a folder',
-    body: 'Anything your AI tool built: a Next.js site, a Python script, a Docker stack.',
+    body: 'A site, a script, or a Docker stack.',
   },
   {
     n: '02',
-    title: 'Shelf reads the setup',
-    body: 'Shelf detects the launch and setup commands. You review them before installation or launch; Shelf handles busy ports.',
+    title: 'You approve the command',
+    body: 'Shelf suggests how it runs. Nothing installs until you accept.',
   },
   {
     n: '03',
-    title: 'It runs, and stays found',
-    body: 'One click to launch, today and next month. Your AI tools can find it too.',
+    title: 'It stays found',
+    body: 'Launch it again next month. Your agents can find it too.',
   },
 ] as const
 
@@ -36,7 +36,6 @@ export const HONEST_CARDS = [
     statusTone: 'success',
     edge: 'success',
     line: ':4173 · Ready on http://127.0.0.1:4173',
-    body: 'Port answering and agent access declared. The only card where both facts are green.',
     readiness: 'Agent-ready',
     readinessTone: 'success',
     action: 'Open · Logs · Stop',
@@ -49,7 +48,6 @@ export const HONEST_CARDS = [
     statusTone: 'neutral',
     edge: 'neutral',
     line: ':8080 · docker compose up',
-    body: 'Starts fine when you ask. Agents can’t reach it yet, because the MCP entrypoint needs setup.',
     readiness: 'Needs setup',
     readinessTone: 'warning',
     action: 'Start · Configure',
@@ -62,7 +60,6 @@ export const HONEST_CARDS = [
     statusTone: 'neutral',
     edge: 'neutral',
     line: 'one-shot · .venv/bin/python convert.py',
-    body: 'A one-shot script with no port. Agents can find and launch it through Shelf, even without a separate agent interface.',
     readiness: 'Manual only',
     readinessTone: 'neutral',
     action: 'Run once',
@@ -75,50 +72,28 @@ export const HONEST_CARDS = [
   statusTone: PillTone
   edge: 'success' | 'neutral'
   line: string
-  body: string
   readiness: string
   readinessTone: PillTone
   action: string
 }[]
 
-/** #design — the proof points under the lead. */
-export const DESIGN_POINTS = [
-  {
-    title: 'Extracted from your code.',
-    body: 'Point Shelf at a project and it reads the tokens already there, from CSS variables and Tailwind config. It guesses nothing, and tells you what it skipped.',
-  },
-  {
-    title: 'DTCG tokens.',
-    body: 'Standard design-token JSON: colors, type, radius. Any agent can read it.',
-  },
-  {
-    title: 'A brief agents can read.',
-    body: 'A markdown brand brief rides along: voice, personality, the rules that don’t fit in a hex code.',
-  },
-  {
-    title: 'Drafts you approve.',
-    body: 'Your agent can extract a brand it saw and save a draft. You review. Agents never set the default.',
-  },
-] as const satisfies readonly { title: string; body: string }[]
-
-
 /** #share — the Tool Sharing proof points (1.2). */
 export const SHARE_POINTS = [
   {
-    title: 'Secrets never travel.',
-    body: 'Share writes the setup: launch command, port, capabilities, even which env keys the tool needs. Only the names. No code path can put a value in the file.',
+    title: 'Secrets never travel',
+    body: 'Key names only. Values stay on your Mac.',
   },
   {
-    title: 'One consent sheet.',
-    body: 'Your coworker sees the exact commands, the destination folder, and an input for each key before anything happens. A link never runs anything on its own.',
+    title: 'One consent sheet',
+    body: 'The command is on the sheet. Nothing runs before you approve.',
   },
   {
-    title: 'Your git host is the transport.',
-    body: 'A shelf:// link points at the repo you already use. Or send a bundle. No Shelf server, no account, no registry. Same promise as everything else here.',
+    title: 'Git carries it',
+    body: 'A link to the repo you already use. No Shelf account.',
   },
   {
-    title: 'Updates you approve.',
-    body: 'Check for updates shows the incoming commits and the manifest diff. You pull when you want. If your copy has drifted, Shelf says so instead of guessing. Never automatic.',
+    title: 'Updates you approve',
+    body: 'You see the diff. Shelf never pulls it for you.',
   },
 ] as const satisfies readonly { title: string; body: string }[]
 
@@ -139,19 +114,19 @@ export const SHARE_SHEET_ROWS = [
 export const COLLECTION_POINTS = [
   {
     title: 'Agents draft. You decide.',
-    body: 'Anything an agent builds arrives marked From agent. Edit it once in Shelf and it belongs to you, and agents can’t change it after that, by id or by name. They never attach a design profile to one either.',
+    body: 'It arrives marked From agent. One edit makes it yours.',
   },
   {
-    title: 'A collection grants nothing new.',
-    body: 'It’s a named list of tools your agent could already see and launch. Delete the collection and every tool in it stays exactly where it was.',
+    title: 'Start in order',
+    body: 'Each port answers before the next command. A missing key stops the rest.',
   },
   {
-    title: 'No look-alike names.',
-    body: 'A name that differs from one of yours only by an invisible character, an accent form, spacing, or case is refused, and Shelf strips invisible characters out of every name it stores.',
+    title: 'Or start together',
+    body: 'Launch every member at once. Tools already running stay up.',
   },
   {
-    title: 'One button starts the stack.',
-    body: 'Start stack brings up every tool in the collection at once and leaves the ones already running alone. Stop stack takes them down together.',
+    title: 'Delete the list, keep the tools',
+    body: 'The collection is a name. The tools stay in the library.',
   },
 ] as const satisfies readonly { title: string; body: string }[]
 

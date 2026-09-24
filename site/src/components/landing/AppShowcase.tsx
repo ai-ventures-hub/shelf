@@ -39,8 +39,8 @@ export function AppShowcase() {
           This is Shelf.
         </h2>
         <p className="sec-lead">
-          The real macOS app. The library, the gaps, the sharing, and the
-          connections your agents see over MCP.
+          The library, the checks, and a handoff you review before it reaches
+          an agent.
         </p>
         <div className="showcase-tabs" role="tablist" aria-label="App views">
           {APP_TABS.map((t) => (
@@ -261,7 +261,7 @@ export function AppShowcase() {
                 <div className="showcase-panel" key="register">
                   <h3>Add a tool</h3>
                   <p className="showcase-panel-sub">
-                    Shelf looked at this folder and filled in the setup for you.
+                    Shelf suggests the command. You accept it before it joins the library.
                   </p>
                   <dl className="reg-fields">
                     {IMPORT_FIELDS.map((field) => (

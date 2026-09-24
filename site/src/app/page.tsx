@@ -24,7 +24,7 @@ const SOFTWARE_JSON_LD = {
   url: 'https://shelfmcp.com',
   downloadUrl: 'https://shelfmcp.com/download',
   description:
-    'A local tool library for macOS. Keep every script, server, and one-off you build, launch them in a click, share them with a coworker as a portable tool or with your whole team through a catalog repo, and hand them to your AI agents over MCP, along with design profiles so agents build in your brand. Agents can group your tools into collections you own. No cloud, no account.',
+    'A local tool library for macOS. Launch the tools you build, hand them to your agents over MCP, and approve a command before it runs. No cloud, no account.',
 }
 
 /** Landing v2 — the scroll-scrubbed hero leads, the story beats follow. */

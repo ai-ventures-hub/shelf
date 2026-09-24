@@ -12,9 +12,8 @@ export function HowItWorks() {
             You built it with AI. Now it just runs.
           </h2>
           <p className="sec-lead">
-            Drop the project folder onto Shelf. It figures out how the thing
-            runs, installs what’s missing, starts it. No terminal. No config
-            files. No <strong>“what’s a port?”</strong>
+            Drop a folder on Shelf. It suggests the command. You accept it.
+            Then it runs.
           </p>
         </div>
         <LandingVideo

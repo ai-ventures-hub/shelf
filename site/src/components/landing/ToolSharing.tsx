@@ -16,17 +16,14 @@ export function ToolSharing() {
         <div className="share-grid">
           <div className="share-copy">
             <p className="eyebrow" data-reveal>
-              New in 1.2 · Tool Sharing
+              Share a tool
             </p>
             <h2 id="share-heading" className="sec-h2" data-reveal>
               Works on your Shelf. Two clicks to a coworker’s.
             </h2>
             <p className="sec-lead" data-reveal>
-              The hard part of “works on my machine” was never the code. Your
-              team already has GitHub. It’s the launch command, the port, the
-              setup steps, and the keys. Shelf packs all of that
-              into a <code>shelf.json</code> beside your project and hands over a
-              link. Your coworker approves one sheet, and it’s running.
+              A <code>shelf.json</code> and a link. Your coworker approves one
+              sheet. Values never leave your Mac.
             </p>
             <p className="mcp-verbs be-verb" data-reveal>
               “share this with my team” → shelf_export_tool
@@ -88,19 +85,14 @@ export function ToolSharing() {
         <div className="team-band">
           <div className="team-band-copy">
             <p className="eyebrow" data-reveal>
-              New in 1.4 · Team Tools
+              Or the whole team
             </p>
             <h3 className="team-band-h" data-reveal>
               One coworker, or the whole team.
             </h3>
             <p className="team-band-lead" data-reveal>
-              A link only reaches the person you remember to send it to. A team
-              is a git repo holding a <code>catalog.json</code>, so point Shelf
-              at it once and everything your teammates published is standing
-              there, one Install away, through the same consent sheet. Anyone
-              who can clone the repo is on the team: access is whatever your
-              git host already says it is. Still no Shelf server, still no
-              account.
+              Point Shelf at a <code>catalog.json</code> repo. Install uses the
+              same sheet. Access is whoever can already clone it.
             </p>
             <p className="mcp-verbs be-verb" data-reveal>
               Share with team → your entry, committed and pushed

@@ -1968,21 +1968,7 @@ html[data-reveal-ready] [data-reveal]:not(.is-visible) {
 
 .be-copy .sec-lead {
   margin-top: 16px;
-}
-
-.be-points {
-  margin: 22px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 10px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--av-text-secondary);
-}
-
-.be-points strong {
-  color: var(--av-text-primary);
+  max-width: 28em;
 }
 
 .be-verb {

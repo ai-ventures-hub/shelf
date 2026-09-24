@@ -19,9 +19,8 @@ export function AgentChat() {
             Your agent asks. Your shelf answers.
           </h2>
           <p className="sec-lead">
-            Connect Claude Code, Claude Desktop, Cursor, or Codex in one click.
-            They see the same library you do. They launch your tools, check
-            what’s running, and find the right one for a job.
+            Claude, Cursor, and Codex see the same library. They can launch
+            what you already saved.
           </p>
           <div className="chat-chips">
             {chips.map((client) => (

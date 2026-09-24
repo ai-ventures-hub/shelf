@@ -10,9 +10,7 @@ export function HonestCards() {
           Every tool tells the truth twice.
         </h2>
         <p className="sec-lead">
-          Once about its process: Starting, Running, Stopped. Once about agent
-          access: ready, needs setup, or manual only. Open the URL, watch live
-          logs, stop when done.
+          Running is not the same as ready for an agent.
         </p>
         <ul className="honest-grid">
           {HONEST_CARDS.map((card, i) => (
@@ -33,7 +31,6 @@ export function HonestCards() {
                 </span>
               </div>
               <span className="honest-card-line">{card.line}</span>
-              <p>{card.body}</p>
               <div className="honest-card-foot">
                 <span
                   className="pill"
