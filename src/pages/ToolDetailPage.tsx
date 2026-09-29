@@ -7,7 +7,7 @@ import { Sparkles, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
-import { LogPanel } from '../components/LogPanel'
+import { LogPanel, LogTail } from '../components/LogPanel'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
 import { StatusPill } from '../components/StatusPill'
@@ -17,10 +17,11 @@ import { UpdateSheet } from '../components/sharing/UpdateSheet'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { useReceipts } from '../hooks/useReceipts'
+import { useToolLogs } from '../hooks/useToolLogs'
 import { useUiMode } from '../hooks/useUiMode'
 import { friendlyLaunchError } from '../lib/launchErrorCopy'
 import { formatRelativeTime } from '../lib/relativeTime'
-import type { DesignMdResult, LogLine, ToolReadiness } from '../types'
+import type { DesignMdResult, ToolReadiness } from '../types'
 
 export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' | 'runs' }) {
   const { id } = useParams()
@@ -36,8 +37,6 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
     stopTool,
     restartTool,
     deleteTool,
-    getLogs,
-    subscribeLogs,
   } = useLibrary()
 
   const tool = tools.find((t) => t.id === id)
@@ -55,9 +54,20 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
       return next
     })
   }
-  const [logError, setLogError] = useState<string | null>(null)
-  const [logRevision, setLogRevision] = useState(0)
-  const [logs, setLogs] = useState<LogLine[]>([])
+  // Runs shows the selected run; Overview shows a short live tail while the
+  // tool is up or has just failed. Status changes never reset the buffer.
+  const showTail =
+    section === 'overview' &&
+    (status === 'starting' || status === 'running' || status === 'stopping' || status === 'error')
+  const {
+    lines: logs,
+    error: logError,
+    reload: reloadLogs,
+  } = useToolLogs(id, section === 'runs' ? selectedRun || undefined : undefined, {
+    enabled: section === 'runs' || showTail,
+    pollExternal:
+      !selectedRun && state?.origin === 'external' && (status === 'starting' || status === 'running'),
+  })
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(() => {
     const result = (location.state as { registration?: import('../types').RegisterProjectResult } | null)?.registration
@@ -85,40 +95,6 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   // The Library card links here to confirm/deny a resolve suggestion.
   const { suggestions, resolve, dismiss } = useGapSuggestions()
   const toolSuggestions = suggestions.filter((s) => s.toolId === id)
-
-  useEffect(() => {
-    if (!id || section !== 'runs') return
-    let active = true
-    let fetching = false
-    let changedDuringRead = false
-    setLogs([])
-    const refreshLogs = async () => {
-      if (fetching) { changedDuringRead = true; return }
-      if (document.hidden) return
-      fetching = true
-      changedDuringRead = false
-      try {
-        const lines = await getLogs(id, selectedRun || undefined)
-        if (active) { setLogs(lines.slice(-3000)); setLogError(null) }
-      } catch { if (active) setLogError('Could not read this run’s logs.') }
-      finally {
-        fetching = false
-        if (active && changedDuringRead) void refreshLogs()
-      }
-    }
-    void refreshLogs()
-    // Local runs push events. Only external running tools need periodic disk reads.
-    const timer = !selectedRun && state?.origin === 'external' && ['starting', 'running'].includes(status)
-      ? window.setInterval(() => { void refreshLogs() }, 3000) : undefined
-    let scheduled: number | undefined
-    const off = subscribeLogs(id, () => {
-      if (selectedRun || scheduled !== undefined) return
-      scheduled = window.setTimeout(() => { scheduled = undefined; void refreshLogs() }, 150)
-    })
-    const offReceipt = window.shelf.onReceiptUpdate((receipt) => { if (receipt.toolId === id) void refreshLogs() })
-    document.addEventListener('visibilitychange', refreshLogs)
-    return () => { active = false; window.clearInterval(timer); window.clearTimeout(scheduled); off(); offReceipt(); document.removeEventListener('visibilitychange', refreshLogs) }
-  }, [id, getLogs, subscribeLogs, selectedRun, status, state?.origin, logRevision, section])
 
   useEffect(() => {
     if (!id || !window.shelf?.getDesignMd) {
@@ -499,6 +475,22 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
 
       </>}
 
+      {showTail && logs.length > 0 ? (
+        <section className="panel" aria-labelledby="recent-output-title">
+          <div className="panel-header">
+            <h2 className="panel-title" id="recent-output-title">
+              {status === 'error' ? 'Last output' : 'Recent output'}
+            </h2>
+            <Link className="btn btn-quiet btn-sm" to={`/tools/${encodeURIComponent(toolId)}/runs`}>
+              View all output
+            </Link>
+          </div>
+          <div className="panel-body">
+            <LogTail lines={logs} />
+          </div>
+        </section>
+      ) : null}
+
       {section === 'overview' && <section className="panel">
         <div className="panel-header"><h2 className="panel-title">Last run</h2></div>
         <div className="panel-body stack">
@@ -564,7 +556,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
           <div className="panel-body run-output-body">
             <label className="field"><span className="field-label">Run to inspect</span><select className="field-input" value={selectedRun} onChange={(event) => setSelectedRun(event.target.value)}><option value="">Latest output (live when running)</option>{receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{new Date(receipt.startedAt).toLocaleString()} · {receipt.outcome}</option>)}</select></label>
             {logError && <p role="alert">{logError}</p>}
-            <button className="btn btn-quiet btn-sm" onClick={() => setLogRevision((revision) => revision + 1)}>Refresh output</button>
+            <button className="btn btn-quiet btn-sm" onClick={reloadLogs}>Refresh output</button>
             <LogPanel lines={logs} />
           </div>
         </section>

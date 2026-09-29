@@ -604,3 +604,15 @@
 .tool-compact-add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; min-height:114px; border:1px dashed var(--line); border-radius:12px; color:var(--muted); font-size:13px; text-decoration:none; }
 .tool-compact-add:hover { color:var(--brand-strong); border-color:var(--brand); background:var(--panel); }
 .compact-suggestion-name { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* One-off scripts that ran to completion: result plus a way to the output.
+   Links sit above the card's stretched title link. */
+.tool-card .run-finished { margin-top:.25rem; min-height:2.6em; align-content:flex-start; }
+.run-finished-link,.run-finished-compact { position:relative; z-index:1; }
+.run-finished-compact { display:block; max-width:100%; color:var(--muted); font-size:10px; line-height:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-decoration:none; }
+.run-finished-compact:hover { color:var(--brand-strong); text-decoration:underline; }
+
+/* A card action that failed (launch, stop, favorite): stays until the next try. */
+.tool-card-error { position:relative; z-index:1; margin:0; color:var(--danger); font-size:.8rem; line-height:1.4; overflow-wrap:anywhere; }
+.tool-card-compact .tool-card-error { position:absolute; left:16px; right:16px; bottom:4px; font-size:10px; line-height:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tool-list .tool-card-error { margin-top:.35rem; }

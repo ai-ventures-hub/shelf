@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AddToolButton } from '../components/StudioShell'
 import { OverflowMenu } from '../components/OverflowMenu'
@@ -13,14 +13,15 @@ import {
   SuggestionGridCard,
   SuggestionListRow,
 } from '../components/SuggestionGridCard'
-import { ToolCard, ToolListRow } from '../components/ToolCard'
+import { ToolCard, ToolListRow, type CardAction } from '../components/ToolCard'
+import { notify } from '../components/feedback/Toasts'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { useToolDrafts } from '../hooks/useToolDrafts'
 import { usePrefs } from '../hooks/usePrefs'
 import { useReceipts } from '../hooks/useReceipts'
 import { useUiMode } from '../hooks/useUiMode'
-import type { ToolStatus } from '../types'
+import type { Tool, ToolStatus } from '../types'
 
 export type LibraryMode =
   | 'all'
@@ -35,21 +36,77 @@ export function LibraryPage({
 }: {
   mode?: LibraryMode
 }) {
-  const { tools, collections, states, health, loading, error, startTool, stopTool, saveTool } =
-    useLibrary()
+  const {
+    tools,
+    collections,
+    states,
+    health,
+    finishedAt,
+    loading,
+    error,
+    refresh,
+    startTool,
+    stopTool,
+    saveTool,
+  } = useLibrary()
   const { drafts } = useToolDrafts()
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
-  const { suggestions } = useGapSuggestions()
+  // Suggestion cards link to the developer-only Capability gaps page and only
+  // appear on the All view, so nothing is read anywhere else.
+  const { suggestions } = useGapSuggestions({ enabled: isDeveloper && mode === 'all' })
   const [receiptFilter, setReceiptFilter] = useState<ReceiptOutcomeFilter>('all')
   const [receiptExporting, setReceiptExporting] = useState(false)
+  // Receipts are only shown on Recent; other views make no receipt reads.
   const {
     receipts: recentReceipts,
     exportReceipts,
   } = useReceipts({
     limit: 40,
     outcomes: outcomesForFilter(receiptFilter),
+    enabled: mode === 'recent',
   })
+  // Card actions in flight and their failures, by tool id.
+  const [pending, setPending] = useState<Record<string, CardAction>>({})
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
+  const act = useCallback(
+    async (tool: Tool, action: CardAction, work: () => Promise<unknown>) => {
+      setPending((prev) => ({ ...prev, [tool.id]: action }))
+      setActionErrors((prev) => {
+        if (!(tool.id in prev)) return prev
+        const next = { ...prev }
+        delete next[tool.id]
+        return next
+      })
+      try {
+        await work()
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        const verb =
+          action === 'launch' ? 'launch' : action === 'stop' ? 'stop' : action === 'open' ? 'open' : 'update'
+        setActionErrors((prev) => ({ ...prev, [tool.id]: `Could not ${verb} ${tool.name}. ${reason}` }))
+      } finally {
+        setPending((prev) => {
+          const next = { ...prev }
+          delete next[tool.id]
+          return next
+        })
+      }
+    },
+    [],
+  )
+  const onLaunch = useCallback((tool: Tool) => void act(tool, 'launch', () => startTool(tool.id)), [act, startTool])
+  const onStop = useCallback((tool: Tool) => void act(tool, 'stop', () => stopTool(tool.id)), [act, stopTool])
+  const onOpenUrl = useCallback(
+    (tool: Tool) => {
+      if (tool.url) void act(tool, 'open', () => window.shelf.openUrl(tool.url!))
+    },
+    [act],
+  )
+  const onToggleFavorite = useCallback(
+    (tool: Tool) => void act(tool, 'favorite', () => saveTool({ ...tool, favorite: !tool.favorite })),
+    [act, saveTool],
+  )
   const { tag, collectionId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
@@ -68,6 +125,7 @@ export function LibraryPage({
   // to the tool — linking to the Capability gaps page for the decision.
   const shownSuggestions = useMemo(() => {
     const browsing =
+      isDeveloper &&
       mode === 'all' &&
       !query.trim() &&
       tagFilter.length === 0 &&
@@ -83,7 +141,7 @@ export function LibraryPage({
       }
     }
     return Array.from(byTool.values()).slice(0, 3)
-  }, [mode, query, tagFilter, statusFilter, suggestions])
+  }, [isDeveloper, mode, query, tagFilter, statusFilter, suggestions])
 
   // Redirect legacy /tags/:tag into filter tokens on the main library.
   useEffect(() => {
@@ -230,8 +288,10 @@ export function LibraryPage({
 
   const emptyBecauseFilters =
     tools.length > 0 && filtered.length === 0
+  // The library could not be read: show the error alone, never the welcome.
+  const loadFailed = !loading && Boolean(error) && tools.length === 0
   // True zero-library welcome — hide search/filter chrome until there is something to find.
-  const isFirstRun = !loading && tools.length === 0 && mode === 'all'
+  const isFirstRun = !loading && !loadFailed && tools.length === 0 && mode === 'all'
 
   const emptyCopy = emptyBecauseFilters
     ? {
@@ -301,6 +361,13 @@ export function LibraryPage({
       {error ? (
         <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
           {error}
+          {loadFailed ? (
+            <div className="action-row" style={{ margin: '0.6rem 0 0' }}>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => void refresh()}>
+                Try again
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -315,7 +382,7 @@ export function LibraryPage({
         </div>
       ) : null}
 
-      {!isFirstRun ? (
+      {!isFirstRun && !loadFailed ? (
       <div className="toolbar">
         <input
           ref={searchRef}
@@ -462,9 +529,12 @@ export function LibraryPage({
                 void exportReceipts(format)
                   .then((result) => {
                     if (result.saved && result.path) {
-                      window.alert(`Saved receipts to ${result.path}`)
+                      notify(`Saved receipts to ${result.path}`, { tone: 'success' })
                     }
                   })
+                  .catch((err: unknown) =>
+                    notify(`Could not export receipts. ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' }),
+                  )
                   .finally(() => setReceiptExporting(false))
               }}
               emptyLabel="No launches yet. Start a tool to begin recording history."
@@ -474,8 +544,8 @@ export function LibraryPage({
       ) : null}
 
       {loading ? (
-        <p style={{ color: 'var(--muted)' }}>Loading library…</p>
-      ) : filtered.length === 0 ? (
+        <p className="muted" role="status">Loading library…</p>
+      ) : loadFailed ? null : filtered.length === 0 ? (
         <div className="empty-state">
           <div>
             {isFirstRun ? (
@@ -542,8 +612,10 @@ export function LibraryPage({
                   tool={tool}
                   state={states[tool.id]}
                   health={health[tool.id]}
-                  onLaunch={() => void startTool(tool.id)}
-                  onStop={() => void stopTool(tool.id)}
+                  pending={pending[tool.id] ?? null}
+                  error={actionErrors[tool.id] ?? null}
+                  onLaunch={onLaunch}
+                  onStop={onStop}
                 />
               ))}
             </tbody>
@@ -566,16 +638,13 @@ export function LibraryPage({
               health={health[tool.id]}
               hideChips={!isDeveloper}
               compact={prefs.viewMode === 'compact'}
-              onLaunch={() => void startTool(tool.id)}
-              onStop={() => void stopTool(tool.id)}
-              onOpenUrl={
-                tool.url
-                  ? () => void window.shelf.openUrl(tool.url!)
-                  : undefined
-              }
-              onToggleFavorite={() =>
-                void saveTool({ ...tool, favorite: !tool.favorite })
-              }
+              finishedAt={finishedAt[tool.id]}
+              pending={pending[tool.id] ?? null}
+              error={actionErrors[tool.id] ?? null}
+              onLaunch={onLaunch}
+              onStop={onStop}
+              onOpenUrl={tool.url ? onOpenUrl : undefined}
+              onToggleFavorite={onToggleFavorite}
             />
           ))}
           {prefs.viewMode === 'compact' && mode === 'all' && !query.trim() && !activeFilters.length && (

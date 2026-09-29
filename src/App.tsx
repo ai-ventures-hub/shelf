@@ -32,14 +32,14 @@ export default function App() {
         <OnboardingGate>
           <StudioShell>
           <Suspense fallback={<p role="status">Loading page…</p>}><Routes>
-            <Route path="/" element={<LibraryPage mode="all" />} />
-            <Route path="/favorites" element={<LibraryPage mode="favorites" />} />
-            <Route path="/running" element={<LibraryPage mode="running" />} />
-            <Route path="/recent" element={<LibraryPage mode="recent" />} />
+            <Route path="/" element={<LibraryPage key="all" mode="all" />} />
+            <Route path="/favorites" element={<LibraryPage key="favorites" mode="favorites" />} />
+            <Route path="/running" element={<LibraryPage key="running" mode="running" />} />
+            <Route path="/recent" element={<LibraryPage key="recent" mode="recent" />} />
             <Route path="/activity" element={<MorningBoardPage />} />
             <Route path="/drafts" element={<DraftToolsPage />} />
             <Route path="/gaps" element={<CapabilityGapsPage />} />
-            <Route path="/tags/:tag" element={<LibraryPage mode="tag" />} />
+            <Route path="/tags/:tag" element={<LibraryPage key="tag" mode="tag" />} />
             <Route path="/collections/:collectionId" element={<CollectionPage />} />
             <Route path="/design" element={<DesignListPage />} />
             <Route path="/design/:id" element={<DesignProfilePage />} />

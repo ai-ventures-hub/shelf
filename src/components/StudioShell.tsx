@@ -155,7 +155,8 @@ export function StudioShell({ children }: { children: ReactNode }) {
   const { prefs, updatePrefs } = usePrefs()
   const { isDeveloper } = useUiMode()
   const mcpLabel = isDeveloper ? 'MCP Connections' : 'AI Connections'
-  const { gaps: openGaps } = useCapabilityGaps({ status: 'open', limit: 200 })
+  // The open-gap count only shows in Developer mode; Simple mode reads nothing.
+  const { gaps: openGaps } = useCapabilityGaps({ status: 'open', limit: 200, enabled: isDeveloper, withSuggestions: false })
   const { profiles: designProfiles, saveProfile: saveDesignProfile } = useDesignProfiles()
   const dragRef = useRef<{
     startX: number
@@ -170,12 +171,18 @@ export function StudioShell({ children }: { children: ReactNode }) {
   // Add-shared-tool sheet (Tool Sharing): opened by the Library page buttons
   // or a shelf://add link; hosted here so it works from every route.
   const [pendingImports, setPendingImports] = useState<{ id: string; name: string; destination: string }[]>([])
-  useEffect(() => {
-    let active = true
-    void window.shelf?.getPendingImports().then((items) => { if (active) setPendingImports(items) }).catch(() => {})
-    return () => { active = false }
-  }, [tools])
   const [addShared, setAddShared] = useState<AddSharedRequest | null>(null)
+  // Unfinished imports change only when the add sheet closes or the library
+  // file changes (an agent finished one), not on every tool update.
+  const addSheetOpen = addShared !== null
+  useEffect(() => {
+    if (addSheetOpen || !window.shelf?.getPendingImports) return
+    let active = true
+    const read = () => void window.shelf.getPendingImports().then((items) => { if (active) setPendingImports(items) }).catch(() => {})
+    read()
+    const off = window.shelf.onExternalDataChange((filename) => { if (filename === 'library.json') read() })
+    return () => { active = false; off() }
+  }, [addSheetOpen])
   // Highlight the window as a drop target while files are dragged over it.
   // Counter, not boolean: dragenter/dragleave fire per child element.
   const dragDepth = useRef(0)

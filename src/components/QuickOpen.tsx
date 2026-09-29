@@ -1,4 +1,5 @@
 import { Modal } from './Modal'
+import { notify } from './feedback/Toasts'
 import {
   useEffect,
   useMemo,
@@ -24,6 +25,8 @@ type Runnable = QuickOpenCandidate & {
   /** Secondary (⌘↵): launch or stop a tool when applicable. */
   runSecondary?: () => void | Promise<void>
   secondaryHint?: string
+  /** Toast text when the secondary action fails, e.g. "Could not launch X." */
+  secondaryFailure?: string
   status?: ToolStatus
 }
 
@@ -45,9 +48,9 @@ export function QuickOpen({
   const { isDeveloper } = useUiMode()
   const { tools, collections, states, startTool, stopTool } = useLibrary()
   const { profiles: designProfiles } = useDesignProfiles()
-  // Recent receipts for relaunch / jump-to-tool from the palette.
-  const { receipts } = useReceipts({ limit: 8 })
   const [open, setOpen] = useState(false)
+  // Recent receipts for relaunch / jump-to-tool, read only while open.
+  const { receipts } = useReceipts({ limit: 8, enabled: open })
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -119,6 +122,7 @@ export function QuickOpen({
         boost,
         status,
         secondaryHint: canToggle ? '⌘↵ Stop' : '⌘↵ Launch',
+        secondaryFailure: `Could not ${canToggle ? 'stop' : 'launch'} ${tool.name}.`,
         run: () => navigate(`/tools/${tool.id}`),
         runSecondary: async () => {
           if (canToggle) await stopTool(tool.id)
@@ -167,6 +171,7 @@ export function QuickOpen({
         boost: 18,
         status,
         secondaryHint: canToggle ? '⌘↵ Stop' : '⌘↵ Launch',
+        secondaryFailure: `Could not ${canToggle ? 'stop' : 'launch'} ${receipt.toolName}.`,
         run: () => navigate(`/tools/${receipt.toolId}`),
         runSecondary: async () => {
           if (canToggle) await stopTool(receipt.toolId)
@@ -330,16 +335,26 @@ export function QuickOpen({
     el?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex, open])
 
+  // The palette closes before the action finishes, so failures are reported
+  // in a toast instead of vanishing.
   async function runPrimary(item: Runnable | undefined) {
     if (!item) return
     setOpen(false)
-    await item.run()
+    try {
+      await item.run()
+    } catch (err) {
+      notify(`Could not open ${item.title}. ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+    }
   }
 
   async function runSecondary(item: Runnable | undefined) {
     if (!item?.runSecondary) return
     setOpen(false)
-    await item.runSecondary()
+    try {
+      await item.runSecondary()
+    } catch (err) {
+      notify(`${item.secondaryFailure || 'That action did not finish.'} ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+    }
   }
 
   function onKeyDown(e: KeyboardEvent) {

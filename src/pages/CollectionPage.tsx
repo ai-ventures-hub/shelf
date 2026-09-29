@@ -89,7 +89,7 @@ function EnvKeyField({
 export function CollectionPage() {
   const { collectionId } = useParams()
   const navigate = useNavigate()
-  const { tools, collections, states, refresh, saveCollection, deleteCollection } =
+  const { tools, collections, states, loading, refresh, saveCollection, deleteCollection } =
     useLibrary()
   const { prefs } = usePrefs()
   const collection = collections.find((c) => c.id === collectionId)
@@ -107,6 +107,10 @@ export function CollectionPage() {
     const status = states[t.id]?.status
     return status === 'running' || status === 'starting'
   }).length
+
+  // Collections arrive with the first library read; until then "not found"
+  // would be a false claim.
+  if (loading && !collection) return <p className="muted" role="status">Loading collection…</p>
 
   if (!collection || !collectionId) {
     return (
@@ -317,7 +321,8 @@ export function CollectionPage() {
         </section>
       ) : null}
 
-      <LibraryPage mode="collection" />
+      {/* Keyed so search and filters never carry over between collections. */}
+      <LibraryPage key={collectionId} mode="collection" />
     </>
   )
 }
