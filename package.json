@@ -39,7 +39,7 @@
     "smoke:mcp-path": "tsc -p tsconfig.electron.json && node scripts/smoke-mcp-path.mjs",
     "smoke:receipt-export": "tsc -p tsconfig.electron.json && node scripts/smoke-receipt-export.mjs",
     "smoke:electron": "tsc -p tsconfig.electron.json && env -u ELECTRON_RUN_AS_NODE electron scripts/smoke-electron.cjs",
-    "smoke:compact-ui": "npm run build && env -u ELECTRON_RUN_AS_NODE electron scripts/smoke-compact-ui.cjs",
+    "smoke:compact-ui": "npm run build && node scripts/run-electron-smoke.mjs scripts/smoke-compact-ui.cjs",
     "smoke:mcp": "npm run mcp:build && node scripts/smoke-mcp.mjs",
     "smoke:sharing": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-sharing.mjs",
     "smoke:catalog": "tsc -p tsconfig.electron.json && node scripts/smoke-catalog.mjs",

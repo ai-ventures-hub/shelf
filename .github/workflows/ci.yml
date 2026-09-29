@@ -38,13 +38,13 @@ jobs:
         run: npm run smoke:all
 
       - name: Compact library renderer checks
-        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-compact-ui.cjs
+        run: node scripts/run-electron-smoke.mjs scripts/smoke-compact-ui.cjs
 
       - name: Start a new tool renderer checks
-        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-starter-ui.cjs
+        run: node scripts/run-electron-smoke.mjs scripts/smoke-starter-ui.cjs
 
       - name: Renderer UX checks
-        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-renderer-ux.cjs
+        run: node scripts/run-electron-smoke.mjs scripts/smoke-renderer-ux.cjs
 
   site:
     runs-on: ubuntu-latest

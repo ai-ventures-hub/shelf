@@ -200,6 +200,8 @@ app.on('browser-window-created', (_event, win) => {
 })
 function finish(code) {
   app.once('quit', () => fs.rmSync(root, { recursive: true, force: true }))
+  // The verdict for scripts/run-electron-smoke.mjs, which bounds a hung exit.
+  console.log(`SMOKE_RESULT ${code === 0 ? 'pass' : 'fail'}`)
   app.exit(code)
 }
 require('../dist-electron/electron/main')
