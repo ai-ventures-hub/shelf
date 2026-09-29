@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Update `ip-address` to 10.7.2 for two moderate advisories
+  (GHSA-rpw4-54j3-4h4q, GHSA-2vr4-cq9g-pvrc). It arrives through the MCP
+  SDK's HTTP rate limiter, which Shelf's stdio server never loads.
+- Run CI and releases on `actions/checkout@v7` and `actions/setup-node@v7`,
+  which use Node 24 instead of the retired Node 20 runtime.
+
 ## 2.2.0 - 2026-09-28
 
 ### Start a new tool
