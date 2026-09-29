@@ -1,5 +1,6 @@
 import { Modal } from './Modal'
 import { notify } from './feedback/Toasts'
+import { errorText } from '../lib/errorText'
 import {
   useEffect,
   useMemo,
@@ -22,6 +23,8 @@ import type { ToolStatus } from '../types'
 type Runnable = QuickOpenCandidate & {
   /** Primary: navigate / run action. */
   run: () => void | Promise<void>
+  /** Toast text when the primary action fails. */
+  failure?: string
   /** Secondary (⌘↵): launch or stop a tool when applicable. */
   runSecondary?: () => void | Promise<void>
   secondaryHint?: string
@@ -130,6 +133,21 @@ export function QuickOpen({
         },
       }
     })
+
+    // Running tools with a URL can be opened straight from the palette.
+    const openItems: Runnable[] = tools
+      .filter((tool) => tool.url && states[tool.id]?.status === 'running')
+      .map((tool) => ({
+        id: `open:${tool.id}`,
+        kind: 'action',
+        title: `Open ${tool.name} in browser`,
+        subtitle: tool.url,
+        keywords: [tool.name, 'open', 'browser', 'url', 'web', 'localhost'],
+        // Above navigation actions: a live tool is usually why you are here.
+        boost: 24,
+        failure: `Could not open ${tool.name} in the browser.`,
+        run: () => window.shelf.openUrl(tool.url!),
+      }))
 
     const collectionItems: Runnable[] = collections.map((c) => ({
       id: `collection:${c.id}`,
@@ -299,7 +317,7 @@ export function QuickOpen({
       },
     ]
 
-    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...actions]
+    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...openItems, ...actions]
   }, [
     tools,
     collections,
@@ -343,7 +361,7 @@ export function QuickOpen({
     try {
       await item.run()
     } catch (err) {
-      notify(`Could not open ${item.title}. ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+      notify(`${item.failure || `Could not open ${item.title}.`} ${errorText(err)}`, { tone: 'error' })
     }
   }
 
@@ -353,7 +371,7 @@ export function QuickOpen({
     try {
       await item.runSecondary()
     } catch (err) {
-      notify(`${item.secondaryFailure || 'That action did not finish.'} ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+      notify(`${item.secondaryFailure || 'That action did not finish.'} ${errorText(err)}`, { tone: 'error' })
     }
   }
 

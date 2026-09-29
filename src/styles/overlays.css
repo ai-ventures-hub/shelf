@@ -446,6 +446,10 @@ dialog.diagnostic-report::backdrop { background:rgb(0 0 0 / 65%); }
   border-color:color-mix(in srgb,var(--danger) 55%,var(--line));
 }
 
+.toast[data-tone=warning] {
+  border-color:color-mix(in srgb,var(--warning) 50%,var(--line));
+}
+
 .toast[data-tone=success] {
   border-color:color-mix(in srgb,var(--success) 45%,var(--line));
 }

@@ -1,7 +1,7 @@
 import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { OnboardingGate } from './components/onboarding/OnboardingFlow'
+import { OnboardingGate } from './components/onboarding/OnboardingGate'
 import { StudioShell } from './components/StudioShell'
 import { DesignProfilesProvider } from './hooks/useDesignProfiles'
 import { LibraryProvider } from './hooks/useLibrary'

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { errorText } from '../lib/errorText'
 import { subscribeDataRefresh } from '../lib/refreshTriggers'
 import { formatRelativeTime } from '../lib/relativeTime'
 import type { MorningEvent, MorningKind } from '../../shared/morning-board'
@@ -41,7 +42,7 @@ export function MorningBoardPage() {
       setEvents(rows)
       setError(null)
     } catch (err: unknown) {
-      if (ticket === generation.current) setError(err instanceof Error ? err.message : String(err))
+      if (ticket === generation.current) setError(errorText(err))
     } finally {
       if (ticket === generation.current) setLoading(false)
     }

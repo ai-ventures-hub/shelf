@@ -17,6 +17,7 @@ import {
 import { DesignPreview } from '../components/design/DesignPreview'
 import { ImportTokensDialog } from '../components/design/ImportTokensDialog'
 import { NamePromptDialog } from '../components/NamePromptDialog'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { usePrefs } from '../hooks/usePrefs'
 import { useUiMode } from '../hooks/useUiMode'
@@ -51,6 +52,7 @@ export function DesignProfilePage() {
   const navigate = useNavigate()
   const { isDeveloper } = useUiMode()
   const { resolvedTheme } = usePrefs()
+  const confirm = useConfirm()
   const {
     profiles,
     loading,
@@ -286,10 +288,16 @@ export function DesignProfilePage() {
     if (!profile) return
     const others = profiles.filter((p) => p.id !== profile.id)
     const successor = profile.isDefault && others.length > 0 ? others[0] : null
-    const message = successor
-      ? `Delete “${profile.name}”? “${successor.name}” will become the default profile and agents will pick it up immediately.`
-      : `Delete “${profile.name}”? Agents will no longer find this brand.`
-    if (!window.confirm(message)) return
+    const confirmed = await confirm({
+      title: `Delete “${profile.name}”?`,
+      message: successor
+        ? `“${successor.name}” becomes the default profile, and agents pick it up immediately.`
+        : 'Agents will no longer find this brand.',
+      confirmLabel: 'Delete profile',
+      cancelLabel: 'Keep profile',
+      danger: true,
+    })
+    if (!confirmed) return
     await deleteProfile(profile.id)
     if (successor) await setDefaultProfile(successor.id)
     guard.allowNavigation()
@@ -371,6 +379,9 @@ export function DesignProfilePage() {
     <>
       {guard.prompt}
       <header className="page-header-compact design-editor-header">
+        {/* The editable name is the visual title; this heading names the page
+            for screen readers, the window title, and route focus. */}
+        <h1 className="sr-only">{draft.name.trim() || 'Design profile'}</h1>
         <Link className="btn btn-quiet btn-sm" to="/design" title="Back to Design">
           ← Design
         </Link>
@@ -582,14 +593,15 @@ export function DesignProfilePage() {
             }
             onRemove={(asset) => {
               const basename = asset.path.split('/').pop() || asset.path
-              if (
-                !window.confirm(
-                  `Remove ${basename}? Shelf deletes its copied file; the original stays where it came from.`,
-                )
-              ) {
-                return
-              }
-              void runAssetOp(() => removeAsset(profile.id, asset.path))
+              void confirm({
+                title: `Remove ${basename}?`,
+                message: 'Shelf deletes its copied file. The original stays where it came from.',
+                confirmLabel: 'Remove file',
+                cancelLabel: 'Keep file',
+                danger: true,
+              }).then((confirmed) => {
+                if (confirmed) void runAssetOp(() => removeAsset(profile.id, asset.path))
+              })
             }}
             onKindChange={(asset, kind) =>
               void runAssetOp(() =>

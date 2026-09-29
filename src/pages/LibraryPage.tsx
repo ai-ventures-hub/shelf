@@ -15,6 +15,7 @@ import {
 } from '../components/SuggestionGridCard'
 import { ToolCard, ToolListRow, type CardAction } from '../components/ToolCard'
 import { notify } from '../components/feedback/Toasts'
+import { errorText } from '../lib/errorText'
 import { useGapSuggestions } from '../hooks/useGapSuggestions'
 import { useLibrary } from '../hooks/useLibrary'
 import { useToolDrafts } from '../hooks/useToolDrafts'
@@ -81,7 +82,7 @@ export function LibraryPage({
       try {
         await work()
       } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err)
+        const reason = errorText(err)
         const verb =
           action === 'launch' ? 'launch' : action === 'stop' ? 'stop' : action === 'open' ? 'open' : 'update'
         setActionErrors((prev) => ({ ...prev, [tool.id]: `Could not ${verb} ${tool.name}. ${reason}` }))
@@ -119,6 +120,8 @@ export function LibraryPage({
   )
   const searchRef = useRef<HTMLInputElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+  const filterButtonRef = useRef<HTMLButtonElement>(null)
+  const filterPopoverRef = useRef<HTMLDivElement>(null)
 
   // Suggestions render as standalone cards in the grid (home view only,
   // never inside an active search/filter) — uniform silhouette, not attached
@@ -160,6 +163,8 @@ export function LibraryPage({
 
   useEffect(() => {
     if (!filterOpen) return
+    // Opening moves focus to the first filter control.
+    filterPopoverRef.current?.querySelector<HTMLElement>('select, input, button')?.focus()
     const onDoc = (e: MouseEvent) => {
       if (!filterRef.current?.contains(e.target as Node)) setFilterOpen(false)
     }
@@ -336,7 +341,7 @@ export function LibraryPage({
         <div className="action-row" style={{ margin: 0, alignItems: 'center' }}>
           <OverflowMenu
             triggerLabel="Add from…"
-            label="Add a shared tool"
+            label="Add from a shared link or bundle"
             items={[
               {
                 id: 'url',
@@ -388,24 +393,49 @@ export function LibraryPage({
           ref={searchRef}
           className="search-input"
           type="search"
-          placeholder="Search name, tags, or command"
+          placeholder="Search tools · ⌘K opens Quick Open"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search tools"
+          aria-keyshortcuts="Meta+F"
+          title="Search name, tags, or command (⌘F). Press ⌘K to open Quick Open."
         />
 
-        <div className="filter-anchor" ref={filterRef}>
+        <div
+          className="filter-anchor"
+          ref={filterRef}
+          onBlur={(event) => {
+            // Tabbing past the popover closes it; it is not a focus trap.
+            const next = event.relatedTarget as Node | null
+            if (filterOpen && next && !filterRef.current?.contains(next)) setFilterOpen(false)
+          }}
+        >
           <button
+            ref={filterButtonRef}
             type="button"
             className={`btn btn-quiet${activeFilters.length ? ' is-active-filter' : ''}`}
             aria-expanded={filterOpen}
             aria-haspopup="dialog"
+            aria-controls={filterOpen ? 'library-filter-popover' : undefined}
             onClick={() => setFilterOpen((v) => !v)}
           >
             Filter{activeFilters.length ? ` (${activeFilters.length})` : ''}
           </button>
           {filterOpen ? (
-            <div className="filter-popover" role="dialog" aria-label="Filter tools">
+            <div
+              ref={filterPopoverRef}
+              id="library-filter-popover"
+              className="filter-popover"
+              role="dialog"
+              aria-label="Filter tools"
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') return
+                event.preventDefault()
+                event.stopPropagation()
+                setFilterOpen(false)
+                filterButtonRef.current?.focus()
+              }}
+            >
               <div className="field">
                 <label className="field-label" htmlFor="status-filter">
                   Status
@@ -533,7 +563,7 @@ export function LibraryPage({
                     }
                   })
                   .catch((err: unknown) =>
-                    notify(`Could not export receipts. ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' }),
+                    notify(`Could not export receipts. ${errorText(err)}`, { tone: 'error' }),
                   )
                   .finally(() => setReceiptExporting(false))
               }}

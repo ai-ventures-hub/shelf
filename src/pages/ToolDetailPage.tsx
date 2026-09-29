@@ -7,6 +7,7 @@ import { Sparkles, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { LogPanel, LogTail } from '../components/LogPanel'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
 import { ReceiptHistory } from '../components/ReceiptHistory'
@@ -28,6 +29,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   const navigate = useNavigate()
   const location = useLocation()
   const { isDeveloper } = useUiMode()
+  const confirm = useConfirm()
   const {
     tools,
     collections,
@@ -183,14 +185,15 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
     })
   }
 
-  function confirmRemove() {
-    if (
-      !window.confirm(
-        `Remove “${current.name}” from Shelf? This does not delete the project files.`,
-      )
-    ) {
-      return
-    }
+  async function confirmRemove() {
+    const confirmed = await confirm({
+      title: `Remove “${current.name}” from Shelf?`,
+      message: 'This does not delete the project files.',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep tool',
+      danger: true,
+    })
+    if (!confirmed) return
     void run(async () => {
       await deleteTool(toolId)
       navigate('/')
@@ -269,7 +272,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
       label: 'Remove',
       danger: true,
       disabled: busy,
-      onSelect: confirmRemove,
+      onSelect: () => void confirmRemove(),
     },
   ]
 
@@ -692,9 +695,15 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
               type="button"
               className="btn btn-quiet btn-sm"
               onClick={() => {
-                if (window.confirm('Clear run history for this tool?')) {
-                  void run(clearReceipts)
-                }
+                void confirm({
+                  title: 'Clear run history for this tool?',
+                  message: 'Finished runs are removed from its history. A run in progress is kept.',
+                  confirmLabel: 'Clear history',
+                  cancelLabel: 'Keep history',
+                  danger: true,
+                }).then((confirmed) => {
+                  if (confirmed) void run(clearReceipts)
+                })
               }}
             >
               Clear

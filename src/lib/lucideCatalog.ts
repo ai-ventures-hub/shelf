@@ -1,19 +1,30 @@
 /** Icon names are metadata; SVG code loads only for icons actually rendered. */
-import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { selectedIcon } from './selectedIcon'
 
-export const LUCIDE_ICON_NAMES = [
-  ...new Map(
-    Object.keys(dynamicIconImports)
-      .map((name) =>
-        name
-          .split('-')
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(''),
-      )
-      .map((name) => [name.toLowerCase(), name]),
-  ).values(),
-].sort((a, b) => a.localeCompare(b))
+let names: Promise<string[]> | null = null
+
+/** All Lucide icon names (PascalCase), fetched the first time the picker opens. */
+export function loadLucideNames(): Promise<string[]> {
+  names ??= import('lucide-react/dynamicIconImports').then((module) =>
+    [
+      ...new Map(
+        Object.keys(module.default)
+          .map((name) =>
+            name
+              .split('-')
+              .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+              .join(''),
+          )
+          .map((name) => [name.toLowerCase(), name]),
+      ).values(),
+    ].sort((a, b) => a.localeCompare(b)),
+  ).catch((err: unknown) => {
+    // Let the next open retry instead of caching the failure.
+    names = null
+    throw err
+  })
+  return names
+}
 
 export const getLucideIcon = selectedIcon
 
@@ -23,10 +34,10 @@ export function humanizeLucideName(name: string): string {
 }
 
 /** Case-insensitive substring filter for the picker search box. */
-export function filterLucideNames(query: string, limit = 180): string[] {
+export function filterLucideNames(all: readonly string[], query: string, limit = 180): string[] {
   const q = query.trim().toLowerCase()
-  if (!q) return LUCIDE_ICON_NAMES.slice(0, limit)
-  const matched = LUCIDE_ICON_NAMES.filter((name) => {
+  if (!q) return all.slice(0, limit)
+  const matched = all.filter((name) => {
     const label = humanizeLucideName(name).toLowerCase()
     return name.toLowerCase().includes(q) || label.includes(q)
   })

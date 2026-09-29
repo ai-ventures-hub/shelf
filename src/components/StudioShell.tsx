@@ -1,7 +1,7 @@
 import { VerificationActivity } from './VerificationActivity'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useLibrary } from '../hooks/useLibrary'
 import { useToolDrafts } from '../hooks/useToolDrafts'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
@@ -11,10 +11,15 @@ import { usePrefs } from '../hooks/usePrefs'
 import { useUiMode } from '../hooks/useUiMode'
 import { NamePromptDialog } from './NamePromptDialog'
 import { QuickOpen } from './QuickOpen'
-import { AddSharedToolDialog } from './sharing/AddSharedToolDialog'
 import { onAddSharedRequest, type AddSharedRequest } from '../lib/sharingEvents'
 import { ShelfMark } from './ShelfMark'
 import { SidebarUpdate } from './SidebarUpdate'
+
+// The add-shared sheet loads on first use; once opened it stays mounted so a
+// later open can still discard the previous scratch stage.
+const AddSharedToolDialog = lazy(() =>
+  import('./sharing/AddSharedToolDialog').then((module) => ({ default: module.AddSharedToolDialog })),
+)
 
 /** Compact SVG marks used when the sidebar is collapsed to an icon rail. */
 function NavIcon({ name }: { name: string }) {
@@ -140,6 +145,11 @@ function NavLabel({
   return collapsed ? null : <span className="nav-label-text">{children}</span>
 }
 
+/** Accessible name that keeps the visible count: "Favorites, 3 tools". */
+function counted(label: string, value: number, noun: string): string {
+  return `${label}, ${value} ${value === 1 ? noun : `${noun}s`}`
+}
+
 function NavCount({ collapsed, value }: { collapsed: boolean; value: number }) {
   if (collapsed) return null
   return <span className="nav-count">{value}</span>
@@ -175,6 +185,8 @@ export function StudioShell({ children }: { children: ReactNode }) {
   // Unfinished imports change only when the add sheet closes or the library
   // file changes (an agent finished one), not on every tool update.
   const addSheetOpen = addShared !== null
+  const [addSheetUsed, setAddSheetUsed] = useState(false)
+  if (addSheetOpen && !addSheetUsed) setAddSheetUsed(true)
   useEffect(() => {
     if (addSheetOpen || !window.shelf?.getPendingImports) return
     let active = true
@@ -316,7 +328,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             end
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             title="All tools"
-            aria-label="All tools"
+            aria-label={counted('All tools', tools.length, 'tool')}
           >
             <NavIcon name="all" />
             <NavLabel collapsed={collapsed}>All tools</NavLabel>
@@ -326,7 +338,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             to="/favorites"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             title="Favorites"
-            aria-label="Favorites"
+            aria-label={counted('Favorites', favorites, 'tool')}
           >
             <NavIcon name="favorites" />
             <NavLabel collapsed={collapsed}>Favorites</NavLabel>
@@ -336,7 +348,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             to="/running"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             title="Running"
-            aria-label="Running"
+            aria-label={counted('Running', running, 'tool')}
           >
             <NavIcon name="running" />
             <NavLabel collapsed={collapsed}>Running</NavLabel>
@@ -346,7 +358,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             to="/recent"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             title="Recent"
-            aria-label="Recent"
+            aria-label={counted('Recent', recent, 'tool')}
           >
             <NavIcon name="recent" />
             <NavLabel collapsed={collapsed}>Recent</NavLabel>
@@ -366,7 +378,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
               to="/drafts"
               className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
               title="Waiting for you"
-              aria-label="Waiting for you"
+              aria-label={counted('Waiting for you', drafts.length, 'draft')}
             >
               <NavIcon name="drafts" />
               <NavLabel collapsed={collapsed}>Waiting</NavLabel>
@@ -378,7 +390,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
               to="/gaps"
               className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
               title="Capability gaps"
-              aria-label="Capability gaps"
+              aria-label={counted('Capability gaps', openGaps.length, 'open gap')}
             >
               <NavIcon name="gaps" />
               <NavLabel collapsed={collapsed}>Capability gaps</NavLabel>
@@ -393,7 +405,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
               to={`/collections/${c.id}`}
               className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
               title={c.name}
-              aria-label={c.name}
+              aria-label={counted(c.name, c.toolIds.length, 'tool')}
             >
               <NavIcon name="collection" />
               <NavLabel collapsed={collapsed}>{c.name}</NavLabel>
@@ -417,7 +429,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             to="/design"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             title="Design profiles"
-            aria-label="Design profiles"
+            aria-label={counted('Design profiles', designProfiles.length, 'profile')}
           >
             <NavIcon name="design" />
             <NavLabel collapsed={collapsed}>Profiles</NavLabel>
@@ -502,14 +514,18 @@ export function StudioShell({ children }: { children: ReactNode }) {
         onRequestNewDesignProfile={() => setDesignPromptOpen(true)}
       />
 
-      <AddSharedToolDialog
-        resumeStageId={addShared?.resumeStageId}
-        open={addShared !== null}
-        initialRepo={addShared?.repo}
-        initialBundlePath={addShared?.bundlePath}
-        autoFetch={addShared?.autoFetch}
-        onClose={() => setAddShared(null)}
-      />
+      {addSheetUsed ? (
+        <Suspense fallback={null}>
+          <AddSharedToolDialog
+            resumeStageId={addShared?.resumeStageId}
+            open={addShared !== null}
+            initialRepo={addShared?.repo}
+            initialBundlePath={addShared?.bundlePath}
+            autoFetch={addShared?.autoFetch}
+            onClose={() => setAddShared(null)}
+          />
+        </Suspense>
+      ) : null}
 
       <NamePromptDialog
         open={collectionPromptOpen}

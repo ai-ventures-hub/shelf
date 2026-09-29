@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react'
 
-export type ToastTone = 'info' | 'success' | 'error'
+export type ToastTone = 'info' | 'success' | 'warning' | 'error'
 
 interface Toast {
   id: number
@@ -34,7 +34,7 @@ export function notify(message: string, { tone = 'info' }: { tone?: ToastTone } 
   const id = ++nextId
   // Keep the stack short; the oldest message goes first.
   publish([...toasts.slice(-2), { id, message, tone }])
-  timers.set(id, window.setTimeout(() => dismissToast(id), tone === 'error' ? 10_000 : 6_000))
+  timers.set(id, window.setTimeout(() => dismissToast(id), tone === 'error' || tone === 'warning' ? 10_000 : 6_000))
   return id
 }
 
