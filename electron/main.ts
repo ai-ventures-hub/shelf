@@ -60,6 +60,10 @@ import {
 } from '../shared/team-catalog-sync'
 import { deriveLibraryHealth } from '../shared/tool-health'
 import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
+import { createToolProject, defaultToolsRoot, pickStarterPort, STARTER_KICKOFF_PROMPT } from '../shared/tool-starter'
+import { resolveNodeCommand } from '../shared/node-resolve'
+import { detectInstalledClients } from '../shared/mcp-client-detect'
+import type { ToolStarterAgent, ToolStarterRequest } from '../shared/contracts'
 import { folderNameFor } from '../shared/tool-manifest'
 import {
   applyToolUpdate,
@@ -665,6 +669,58 @@ function registerIpc(): void {
   })
   ipcMain.handle('drafts:reject', (_e, id: string) => {
     toolDrafts.delete(id)
+  })
+
+  // Start a new tool from an idea. Creation is a user action here, so the
+  // tool is saved directly; nothing is installed or launched.
+  ipcMain.handle('starter:prepare', async () => {
+    const installed = new Set(detectInstalledClients().filter((client) => client.installed).map((client) => client.kind))
+    return {
+      toolsRoot: defaultToolsRoot(),
+      port: await pickStarterPort(store.list()).catch(() => null),
+      agents: (['claude-code', 'codex', 'cursor'] as const).map((id) => ({ id, installed: installed.has(id) })),
+    }
+  })
+  ipcMain.handle('starter:create', async (_e, input: ToolStarterRequest) => {
+    if (!input || typeof input !== 'object') throw new Error('Describe the tool to start.')
+    const uiPrefs = prefs.get()
+    const node = await resolveNodeCommand()
+    return createToolProject({
+      name: String(input.name ?? ''),
+      idea: String(input.idea ?? ''),
+      parentDir: typeof input.parentDir === 'string' ? input.parentDir : undefined,
+      port: typeof input.port === 'number' ? input.port : undefined,
+      designProfileId: input.designProfileId === null ? null : typeof input.designProfileId === 'string' ? input.designProfileId : undefined,
+    }, {
+      store,
+      designProfiles,
+      nodeCommand: { command: node.ok ? node.command : 'node', env: node.env },
+      toolDefaults: {
+        iconColor: uiPrefs.defaultIconColor,
+        iconBackground: uiPrefs.defaultIconBackground,
+      },
+    })
+  })
+  ipcMain.handle('starter:chooseFolder', async () => {
+    const root = defaultToolsRoot()
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Choose where new tools go',
+      buttonLabel: 'Use this folder',
+      defaultPath: fs.existsSync(root) ? root : app.getPath('home'),
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0] || null
+  })
+  ipcMain.handle('starter:openAgent', async (_e, toolId: string, agent: ToolStarterAgent) => {
+    const folder = store.get(toolId)?.projectPath
+    if (!folder || !fs.existsSync(folder)) throw new Error('This tool has no project folder on this Mac.')
+    // The kickoff prompt points at AGENTS.md, so only offer it where one exists.
+    if (!fs.existsSync(path.join(folder, 'AGENTS.md'))) throw new Error('This project has no AGENTS.md build brief.')
+    if (agent === 'claude-code' || agent === 'codex') await system.openAgentInTerminal(folder, agent)
+    else if (agent === 'cursor') await system.openEditor(folder)
+    else if (agent === 'terminal') await system.openTerminal(folder)
+    else throw new Error('Choose Claude Code, Codex, Cursor, or Terminal.')
+    return { prompt: STARTER_KICKOFF_PROMPT }
   })
 
   ipcMain.handle('collections:list', () => store.listCollections())

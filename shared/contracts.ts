@@ -762,6 +762,34 @@ export interface RegisterProjectOptions {
   exactOverrides?: boolean
 }
 
+/** Start a new tool from an idea (desktop only; see shared/tool-starter.ts). */
+export interface ToolStarterRequest {
+  name: string
+  idea: string
+  /** Parent folder; the tool gets its own folder inside. Default ~/Shelf Tools. */
+  parentDir?: string
+  port?: number
+  /** Omitted = the default profile; null = no profile. */
+  designProfileId?: string | null
+}
+
+export type ToolStarterAgent = 'claude-code' | 'codex' | 'cursor' | 'terminal'
+
+export interface ToolStarterPrepared {
+  toolsRoot: string
+  /** A suggested free port no library tool claims; null when none was found. */
+  port: number | null
+  agents: { id: Exclude<ToolStarterAgent, 'terminal'>; installed: boolean }[]
+}
+
+export interface ToolStarterCreated {
+  tool: Tool
+  folder: string
+  files: string[]
+  prompt: string
+  profileName?: string
+}
+
 /**
  * An agent registration that is not in the library yet.
  * Env values are never stored. Accept is what calls registerProject.

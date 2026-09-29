@@ -60,6 +60,7 @@ async function main() {
   await run('morning board', 'node', ['scripts/smoke-morning.mjs'])
   await run('tool drafts', 'node', ['scripts/smoke-drafts.mjs'])
   await run('draft acceptance', 'node', ['scripts/smoke-draft-accept.mjs'])
+  await run('tool starter', 'node', ['scripts/smoke-tool-starter.mjs'])
   await run('adopt-by-port', 'node', ['scripts/smoke-adopt.mjs'])
   await run('adopt deep/cross-process', 'node', ['scripts/smoke-adopt-deep.mjs'])
   await run('stack + provenance', 'node', ['scripts/smoke-stack.mjs'])

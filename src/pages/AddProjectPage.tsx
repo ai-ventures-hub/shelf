@@ -109,6 +109,9 @@ export function AddProjectPage() {
             installed or started.
           </p>
         </div>
+        <Link className="btn" to="/tools/start">
+          Start a new tool instead
+        </Link>
       </header>
       <section className="panel project-review">
         <button

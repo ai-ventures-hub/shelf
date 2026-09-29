@@ -20,6 +20,7 @@ const ToolDetailPage = lazy(() => import('./pages/ToolDetailPage').then((module)
 const ToolFormPage = lazy(() => import('./pages/ToolFormPage').then((module) => ({ default: module.ToolFormPage })))
 
 const AddProjectPage = lazy(() => import('./pages/AddProjectPage').then((module) => ({ default: module.AddProjectPage })))
+const StartToolPage = lazy(() => import('./pages/StartToolPage').then((module) => ({ default: module.StartToolPage })))
 const MorningBoardPage = lazy(() => import('./pages/MorningBoardPage').then((module) => ({ default: module.MorningBoardPage })))
 const DraftToolsPage = lazy(() => import('./pages/DraftToolsPage').then((module) => ({ default: module.DraftToolsPage })))
 
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/mcp" element={<McpConnectPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tools/new" element={<AddProjectPage />} />
+            <Route path="/tools/start" element={<StartToolPage />} />
             <Route path="/tools/new/manual" element={<ToolFormPage />} />
             <Route path="/tools/:id" element={<ToolDetailPage />} />
             <Route path="/tools/:id/runs" element={<ToolDetailPage section="runs" />} />

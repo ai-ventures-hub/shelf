@@ -40,6 +40,9 @@ jobs:
       - name: Compact library renderer checks
         run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-compact-ui.cjs
 
+      - name: Start a new tool renderer checks
+        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-starter-ui.cjs
+
   site:
     runs-on: ubuntu-latest
     timeout-minutes: 15

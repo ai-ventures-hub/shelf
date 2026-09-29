@@ -115,6 +115,11 @@ export function CapabilityGapsPage() {
             const params = new URLSearchParams({
               capabilities: gap.capabilities.join('\n'),
             })
+            const startParams = new URLSearchParams({
+              idea: [gap.task, gap.capabilities.length ? `It should be able to:\n${gap.capabilities.map((capability) => `- ${capability}`).join('\n')}` : '']
+                .filter(Boolean)
+                .join('\n\n'),
+            })
             return (
               <article className="panel gap-card" key={gap.id}>
                 <div className="panel-header gap-card-header">
@@ -207,8 +212,11 @@ export function CapabilityGapsPage() {
                     </div>
                   ))}
                   <div className="action-row gap-actions">
-                    <Link className="btn btn-primary btn-sm" to={`/tools/new?${params.toString()}`}>
-                      Create tool
+                    <Link className="btn btn-primary btn-sm" to={`/tools/start?${startParams.toString()}`}>
+                      Start a new tool
+                    </Link>
+                    <Link className="btn btn-quiet btn-sm" to={`/tools/new?${params.toString()}`}>
+                      Add existing project
                     </Link>
                     <button
                       type="button"
