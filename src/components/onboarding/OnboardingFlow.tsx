@@ -191,13 +191,4 @@ export function OnboardingFlow() {
   )
 }
 
-/** Blocks the app with the onboarding flow until it has run once. */
-export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { prefs, loading, error, refresh } = usePrefs()
-  // Browser dev (no preload bridge): the gate is off.
-  if (typeof window !== 'undefined' && !window.shelf) return <>{children}</>
-  if (loading) return <p role="status">Loading preferences…</p>
-  if (error && !prefs.onboardingCompletedVersion) return <div className="empty-state"><div><p role="alert">{error}</p><button className="btn" onClick={() => void refresh()}>Retry preferences</button></div></div>
-  if (!prefs.onboardingCompletedVersion) return <OnboardingFlow />
-  return <>{children}</>
-}
+// The gate lives in OnboardingGate.tsx so this flow loads only on first launch.

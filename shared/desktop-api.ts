@@ -59,6 +59,10 @@ import type {
   ToolRuntimeState,
   UiPrefs,
   ToolDraft,
+  ToolStarterAgent,
+  ToolStarterCreated,
+  ToolStarterPrepared,
+  ToolStarterRequest,
   UpdateCheck,
 } from './contracts'
 import type { MorningEvent } from './morning-board'
@@ -98,8 +102,16 @@ export interface ShelfApi {
   getIconDataUrl: (iconPath: string) => Promise<string | null>
   getActivityBoard: () => Promise<MorningEvent[]>
   listToolDrafts: () => Promise<ToolDraft[]>
-  acceptToolDraft: (id: string) => Promise<RegisterProjectResult>
+  /** expectedUpdatedAt: the draft revision the sheet showed; a changed draft is refused. */
+  acceptToolDraft: (id: string, expectedUpdatedAt?: string) => Promise<RegisterProjectResult>
   rejectToolDraft: (id: string) => Promise<void>
+  /** Defaults for Start a new tool: folder, a free port, installed agents. */
+  prepareToolStarter: () => Promise<ToolStarterPrepared>
+  /** Create, register, and return a starter project. Runs no command. */
+  createToolFromIdea: (input: ToolStarterRequest) => Promise<ToolStarterCreated>
+  chooseToolsFolder: () => Promise<string | null>
+  /** Open an agent (or the folder) for a tool with an AGENTS.md build brief. */
+  openToolInAgent: (toolId: string, agent: ToolStarterAgent) => Promise<{ prompt: string }>
   listCollections: () => Promise<Collection[]>
   saveCollection: (collection: Collection) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>

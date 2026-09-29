@@ -139,6 +139,12 @@
 }
 
 .log-follow { display: flex; align-items: center; gap: 8px; margin-block: 12px; }
+.log-earlier { display: flex; margin: 0 0 .6rem; font-family: inherit; }
+/* Overview tail: a few recent lines, not the full run. */
+.log-tail { max-height: 12rem; }
+/* "Finished · exit 0 · 12s ago" summary under a card or on the Overview. */
+.run-finished { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .6rem; margin: 0; color: var(--muted); font-size: .82rem; }
+.run-finished a { font-weight: 620; }
 
 .context-fields { border: 0; margin: 0; padding: 0; display: grid; gap: 1rem; min-width: 0; }
 .context-check { display: flex; align-items: center; gap: 0.6rem; }

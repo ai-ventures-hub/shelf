@@ -1,6 +1,9 @@
 import { shell } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { agentLauncherScript, type StarterAgentCli } from '../shared/tool-starter'
 
 /**
  * macOS system bridges — prefer `open` over AppleScript to avoid Automation prompts.
@@ -75,5 +78,22 @@ export async function openApp(appName: string): Promise<void> {
       if (code === 0) resolve()
       else reject(new Error(`Could not open ${appName}. Is it installed?`))
     })
+  })
+}
+
+/**
+ * Open a coding agent in a tool's folder with the starter's kickoff prompt.
+ * Writes a one-shot .command script (see agentLauncherScript) and hands it
+ * to Terminal with `open`, so no Automation permission is involved.
+ */
+export async function openAgentInTerminal(folder: string, agent: StarterAgentCli): Promise<void> {
+  if (!folder || !fs.existsSync(folder)) throw new Error('Project folder is missing.')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-agent-'))
+  const script = path.join(dir, 'start-agent.command')
+  fs.writeFileSync(script, agentLauncherScript(folder, agent), { mode: 0o700 })
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('open', ['-a', 'Terminal', script], { stdio: 'ignore' })
+    child.on('error', reject)
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`Terminal open exited with code ${code}`))))
   })
 }

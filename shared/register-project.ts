@@ -36,6 +36,35 @@ export interface RegisterProjectDeps {
   processes: ProcessManager
 }
 
+/**
+ * Comparison key for "is this the same folder". Symlinks resolve through
+ * realpath.native (which on macOS also returns the on-disk case). On macOS
+ * the key is additionally case-folded: APFS is case-insensitive by default,
+ * so /Users/me/App and /users/me/APP are one folder there, and a stored path
+ * that no longer exists can only be compared lexically. A case-sensitive
+ * APFS volume holding App and app side by side would read as one folder —
+ * that fails toward updating an existing tool, never toward a new one.
+ */
+export function canonicalFolderKey(projectPath: string): string {
+  const resolved = path.resolve(projectPath.trim())
+  try {
+    // The native realpath returns the on-disk case, so an existing folder
+    // compares exactly: right on case-insensitive and case-sensitive volumes.
+    return fs.realpathSync.native(resolved)
+  } catch {
+    // Missing folder: best effort on the default case-insensitive volume.
+    return process.platform === 'darwin' ? resolved.toLowerCase() : resolved
+  }
+}
+
+/** The library tool registered for this folder, through any spelling of it. */
+export function findToolByFolder(store: LibraryStore, projectPath: string): Tool | undefined {
+  const exact = store.findByProjectPath(projectPath)
+  if (exact) return exact
+  const key = canonicalFolderKey(projectPath)
+  return store.list().find((tool) => tool.projectPath && canonicalFolderKey(tool.projectPath) === key)
+}
+
 /** The one Python hint that means "the launch command is a guess". */
 const UNCERTAIN_HINT = /confirm the launch command/i
 
@@ -91,40 +120,58 @@ function newToolFrom(
   defaults: RegisterProjectOptions['toolDefaults'],
   overrides: RegisterOverrides = {},
   source?: ToolSource,
+  exact = false,
 ): Tool {
   const now = new Date().toISOString()
-  const launchCommand = overrides.launchCommand || suggestion.launchCommand || ''
+  const launchCommand = exact ? overrides.launchCommand || '' : overrides.launchCommand || suggestion.launchCommand || ''
   // A manifest port wins; its url is a loopback template the launch path
   // port-rewrites if the port gets healed.
-  const port = overrides.port ?? suggestion.port
-  const url = overrides.url || suggestion.url
+  const port = exact ? overrides.port : overrides.port ?? suggestion.port
+  const url = exact ? overrides.url : overrides.url || suggestion.url
+  // Exact mode (draft acceptance) saves only what the review sheet showed:
+  // nothing below may come from a scan of the folder at click time.
   return {
     id: '',
-    name: overrides.name?.trim() || suggestion.name?.trim() || path.basename(resolved),
-    description: overrides.description || suggestion.description,
+    name: overrides.name?.trim() || (exact ? '' : suggestion.name?.trim()) || path.basename(resolved),
+    description: exact ? overrides.description : overrides.description || suggestion.description,
     iconLucide: defaults?.iconLucide,
     iconColor: defaults?.iconColor,
     iconBackground: defaults?.iconBackground,
-    tags: overrides.tags?.length ? overrides.tags : suggestion.tags,
+    tags: overrides.tags?.length ? overrides.tags : exact ? [] : suggestion.tags,
     capabilities: overrides.capabilities || [],
-    agentAccess: overrides.agentAccess?.length ? overrides.agentAccess : suggestion.agentAccess,
+    agentAccess: overrides.agentAccess?.length ? overrides.agentAccess : exact ? [] : suggestion.agentAccess,
     favorite: false,
     projectPath: resolved,
     launchCommand,
     url,
     port,
     env: overrides.env,
-    notes: overrides.notes || suggestion.notesHint,
+    notes: exact ? overrides.notes : overrides.notes || suggestion.notesHint,
     source,
     createdAt: now,
     updatedAt: now,
   }
 }
 
+/**
+ * Thrown only for `existingOnly` callers (agent registrations): the folder was
+ * not in the library when saving, so nothing was written. The caller stages it
+ * for the user instead of creating a tool the user never accepted.
+ */
+export class NotInLibraryError extends Error {
+  constructor(folder: string) {
+    super(`That folder is not in the Shelf library: ${folder}`)
+    this.name = 'NotInLibraryError'
+  }
+}
+
 export async function registerProject(
   projectPath: string,
   deps: RegisterProjectDeps,
-  options: RegisterProjectOptions = {},
+  options: RegisterProjectOptions & {
+    /** Update an existing library tool only; never create one (agent path). */
+    existingOnly?: boolean
+  } = {},
 ): Promise<RegisterProjectResult> {
   const autoLaunch = options.autoLaunch ?? true
   const onPortConflict = options.onPortConflict ?? 'reassign'
@@ -154,7 +201,9 @@ export async function registerProject(
 
   const facts = readProjectFacts(resolved)
   const suggestion = await inspectProject(resolved, facts)
-  const existing = deps.store.findByProjectPath(resolved)
+  // Any spelling of a registered folder (symlink, different case) updates
+  // that tool instead of creating a duplicate beside it.
+  const existing = findToolByFolder(deps.store, resolved)
   const overrides = options.overrides
   const gateResult = existing?.launchCommand
     ? {
@@ -169,8 +218,9 @@ export async function registerProject(
       : gate(suggestion)
 
   const setupNeeds = options.setupSteps ?? detectBootstrapNeeds(resolved, facts)
-  const launchCommand =
-    existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
+  const launchCommand = options.exactOverrides && !existing
+    ? overrides?.launchCommand || ''
+    : existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
   const issues: PreflightIssue[] = preflightProject(resolved, launchCommand, facts)
   if (usesDocker(launchCommand)) {
     const docker = await checkDockerDaemon()
@@ -190,13 +240,15 @@ export async function registerProject(
     }
   }
 
+  if (!existing && options.existingOnly) throw new NotInLibraryError(resolved)
+
   const tool = deps.store.save(
     existing
       ? {
           ...mergeIntoExisting(existing, suggestion),
           ...(options.source ? { source: existing.source || options.source } : {}),
         }
-      : newToolFrom(suggestion, resolved, options.toolDefaults, overrides, options.source),
+      : newToolFrom(suggestion, resolved, options.toolDefaults, overrides, options.source, options.exactOverrides),
   )
   const base = {
     tool,

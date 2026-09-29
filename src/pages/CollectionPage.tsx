@@ -6,6 +6,8 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Play, Square } from 'lucide-react'
 import { LibraryPage } from './LibraryPage'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
+import { errorText } from '../lib/errorText'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
@@ -89,9 +91,10 @@ function EnvKeyField({
 export function CollectionPage() {
   const { collectionId } = useParams()
   const navigate = useNavigate()
-  const { tools, collections, states, refresh, saveCollection, deleteCollection } =
+  const { tools, collections, states, loading, refresh, saveCollection, deleteCollection } =
     useLibrary()
   const { prefs } = usePrefs()
+  const confirm = useConfirm()
   const collection = collections.find((c) => c.id === collectionId)
   const [editing, setEditing] = useState(false)
   const [stackBusy, setStackBusy] = useState<'start' | 'stop' | null>(null)
@@ -107,6 +110,10 @@ export function CollectionPage() {
     const status = states[t.id]?.status
     return status === 'running' || status === 'starting'
   }).length
+
+  // Collections arrive with the first library read; until then "not found"
+  // would be a false claim.
+  if (loading && !collection) return <p className="muted" role="status">Loading collection…</p>
 
   if (!collection || !collectionId) {
     return (
@@ -206,11 +213,21 @@ export function CollectionPage() {
         <button
           type="button"
           className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (!window.confirm(`Delete collection “${collection.name}”? Tools stay in the library.`)) {
-              return
+          onClick={async () => {
+            const confirmed = await confirm({
+              title: `Delete collection “${collection.name}”?`,
+              message: 'Tools stay in the library.',
+              confirmLabel: 'Delete collection',
+              cancelLabel: 'Keep collection',
+              danger: true,
+            })
+            if (!confirmed) return
+            try {
+              await deleteCollection(collection.id)
+              navigate('/')
+            } catch (err) {
+              setStackSummary(`Could not delete the collection. ${errorText(err)}`)
             }
-            void deleteCollection(collection.id).then(() => navigate('/'))
           }}
         >
           Delete collection
@@ -317,7 +334,8 @@ export function CollectionPage() {
         </section>
       ) : null}
 
-      <LibraryPage mode="collection" />
+      {/* Keyed so search and filters never carry over between collections. */}
+      <LibraryPage key={collectionId} mode="collection" />
     </>
   )
 }

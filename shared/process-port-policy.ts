@@ -5,6 +5,7 @@ import type { LibraryStore } from './library-store'
 import { findFreePort, findPortOccupants, urlForPort, withForcedPort } from './ports'
 import type { ExternalOwner } from './process-reconcile'
 import type { ProcessRuntimeSupport } from './process-runtime-support'
+import { adoptedRunNote } from './types'
 
 interface PortPolicyDependencies {
   store: LibraryStore
@@ -37,7 +38,7 @@ export async function resolvePortConflict(
           toolId,
           status: 'running',
           pid: owner.ownerPid,
-          message: `Running · port ${port} (external)`,
+          message: `Running · port ${port} ${adoptedRunNote(owner.startedBy)}`,
           port,
           origin: 'external',
           startedBy: owner.startedBy,

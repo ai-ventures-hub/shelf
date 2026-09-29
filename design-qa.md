@@ -19,8 +19,7 @@ warning remains. Checks cover real pointer targeting, warning/title separation,
 provenance/action containment, keyboard access, preference reload, long titles,
 multiple blockers, and dark/light themes at wide and narrow window sizes.
 
-Inspected captures are in
-`/Users/cjm/.codex/visualizations/2026/09/11/01a0913c-ad75-7253-a949-a1f18fd3cb03/video-feedback/after/`.
+Inspected captures were kept with the local review session, outside the repository.
 The wide and narrow Compact views, open warning, and light-theme multiple-blocker
 and suggestion state passed visual review.
 
@@ -32,9 +31,9 @@ set this patch to 2.0.2. Release verification follows the renderer checks.
 
 ## Visual target and evidence
 
-- Selected source: `/Users/cjm/.codex/generated_images/01a0913c-ad75-7253-a949-a1f18fd3cb03/exec-b2c9915f-9102-47af-814a-0dc79fdc47ec.png`.
+- Selected source: a generated reference image kept with the local review session.
 - Approved behavior: smaller 24px icons and 13px titles, full 32px actions, a separate warning row, fewer columns as available width decreases. The previously selected warning opens details on click.
-- Implementation captures: `/Users/cjm/.codex/visualizations/2026/09/11/01a0913c-ad75-7253-a949-a1f18fd3cb03/shelf-compact/`.
+- Implementation captures: kept with the local review session, outside the repository.
 - Full comparison: `comparison-full.png`. Focused comparison: `comparison-warning.png`. Both contain source and implementation in one image and were opened for review.
 - Source pixels: 1726×911. It was generated for a nominal 1440×760 content viewport. Full comparison normalizes it to 1440×760.
 - Native Electron window sizes: 1800×910 and 900×600. Captured client sizes: 1800×878 and 900×568 at 1×. Native macOS title chrome accounts for the height difference.

@@ -21,7 +21,7 @@ import { resolveDesignProfile } from '../shared/design-resolve'
 import type { LibraryStore } from '../shared/library-store'
 import type { DesignMdResult, DesignTokenGroup } from '../shared/types'
 import { maskSecrets } from '../shared/types'
-import { errorResult, textResult } from './result'
+import { LOCAL_WRITE, READ_ONLY, errorResult, textResult } from './result'
 
 function isTokenGroup(value: unknown): value is DesignTokenGroup {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -45,7 +45,8 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
     'shelf_list_design_profiles',
     {
       description:
-        "List the user's design/brand profiles stored in Shelf — brand colors, typography, logo assets, voice — with a summary and the collections each is bound to. Use shelf_get_design_profile to retrieve tokens and the full brand brief, or shelf_upsert_design_profile to save a brand you extracted for the user.",
+        "List the user's design/brand profiles (colors, typography, logo assets, voice) with a summary and the collections each is bound to.",
+      annotations: READ_ONLY,
     },
     async () => {
       const collections = store.listCollections()
@@ -66,14 +67,19 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
     'shelf_get_design_profile',
     {
       description:
-        "The user's brand/design source of truth: colors, typography, logo assets, and voice/style direction. Call when asked to build 'with my branding', use the user's colors, or match their style. Zero arguments resolves the default profile; pass toolId or collectionId for scoped resolution. Returns design tokens (DTCG JSON) plus a paste-ready markdown brand brief. For a project's own DESIGN.md use shelf_get_design_md; to save a brand you extracted, use shelf_upsert_design_profile.",
+        "The user's brand source of truth (colors, type, logo assets, voice); call it to build with their branding. No arguments: the default profile; toolId/collectionId: that binding. format: brief (default, markdown with every token), tokens (DTCG JSON + assets), or full (both).",
       inputSchema: {
         id: z.string().optional().describe('Explicit design profile id'),
         collectionId: z.string().optional().describe('Resolve via a Shelf collection binding'),
         toolId: z.string().optional().describe("Resolve via the tool's collection binding"),
+        format: z
+          .enum(['brief', 'tokens', 'full'])
+          .optional()
+          .describe('brief (default), tokens, or full'),
       },
+      annotations: READ_ONLY,
     },
-    async ({ id, collectionId, toolId }) => {
+    async ({ id, collectionId, toolId, format }) => {
       const allProfiles = profiles.list()
       const resolved = resolveDesignProfile(allProfiles, store.listCollections(), {
         id,
@@ -81,7 +87,7 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
         toolId,
       })
       if (!resolved.profile) {
-        if (id) return errorResult(`Design profile not found: ${id}`)
+        if (id) return errorResult(`Design profile not found: ${id}. Call shelf_list_design_profiles for ids.`)
         // Profiles-without-a-default is reachable (e.g. the default was
         // deleted) — telling the agent "none exist" there would be wrong.
         return errorResult(
@@ -101,15 +107,23 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
         }
       }
       const profile = resolved.profile
+      const mode = format ?? 'brief'
+      // One copy of each fact by default: the brief already renders every
+      // token value and the direction, so structured fields ride only on
+      // format tokens/full.
+      const structured = {
+        tokens: profile.tokens,
+        modes: profile.modes,
+        assets: profile.assets,
+      }
       return textResult({
         resolvedVia: resolved.via,
         resolvedCollectionId: resolved.collectionId,
         profile: { id: profile.id, name: profile.name, isDefault: profile.isDefault },
-        tokens: profile.tokens,
-        modes: profile.modes,
-        assets: profile.assets,
-        direction: maskSecrets(profile.direction),
-        brief: buildDesignBrief(profile, { designMd }),
+        format: mode,
+        ...(mode === 'brief' ? {} : structured),
+        ...(mode === 'full' ? { direction: maskSecrets(profile.direction) } : {}),
+        ...(mode === 'tokens' ? {} : { brief: buildDesignBrief(profile, { designMd }) }),
       })
     },
   )
@@ -118,7 +132,8 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
     'shelf_upsert_design_profile',
     {
       description:
-        "Save a design/brand profile you extracted yourself — from a website, screenshot, or style guide the user gave you. Do the extraction with your own vision/reading; Shelf only stores the result. Creates a DRAFT the user reviews in Shelf's Design section: agents can never set the default profile and can never modify a user-owned profile (create or update only profiles created by agents). Re-calling with the same name updates your earlier draft. Include where the brand came from in sourceNote.",
+        'Save a brand you extracted (site, screenshot, style guide) as a draft profile the user reviews in Shelf. You can update only agent-created profiles and never set the default; the same name updates your draft. Put the source in sourceNote.',
+      annotations: LOCAL_WRITE,
       inputSchema: {
         id: z.string().optional().describe('Update an agent-created profile by id'),
         name: z.string().min(1).describe('Profile name, e.g. the brand or site name'),
@@ -140,7 +155,7 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
         sourceNote: z
           .string()
           .optional()
-          .describe('Where this brand came from (URL or description of the source)'),
+          .describe('Source URL or description'),
       },
     },
     async ({ id, name, tokens, modes, direction, sourceNote }) => {
@@ -207,10 +222,11 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
             isDefault: saved.isDefault,
             origin: saved.origin,
           },
+          summary: summarizeDesignProfile(saved),
           note: saved.isDefault
             ? 'Saved as the only profile, so it is the default. The user reviews it in Shelf (Design section).'
             : 'Saved as a draft. The user reviews it in Shelf (Design section) and chooses "Make default" there — agents cannot.',
-          brief: buildDesignBrief(saved),
+          next: 'Call shelf_get_design_profile with this id to read back the rendered brief.',
         })
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err))
@@ -235,7 +251,7 @@ export function registerDesignTools({ server, store, profiles }: DesignToolHost)
             {
               uri: uri.href,
               mimeType: 'application/json',
-              text: JSON.stringify({ found: false, profileId: id }, null, 2),
+              text: JSON.stringify({ found: false, profileId: id }),
             },
           ],
         }

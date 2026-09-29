@@ -80,6 +80,9 @@ async function startConcurrent(
  * finishes before the next command. Missing env key names block the step
  * and everything after it. No command is spawned for a blocked member.
  */
+/** Longest a step waits for a member another launch is still starting. */
+const STARTING_WAIT_MS = 65_000
+
 async function startOrdered(
   collection: Collection,
   deps: CollectionDeps,
@@ -99,13 +102,31 @@ async function startOrdered(
       })
       continue
     }
-    const current = await deps.processes.getState(toolId)
-    if (current.status === 'running' || current.status === 'starting') {
+    let current = await deps.processes.getState(toolId)
+    // A member still starting has not answered on its port yet. The next
+    // command waits for it, as the ordered contract promises.
+    const deadline = Date.now() + STARTING_WAIT_MS
+    while (current.status === 'starting' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      current = await deps.processes.getState(toolId)
+    }
+    if (current.status === 'running') {
       results.push({
         toolId,
         name: tool.name,
         outcome: 'already_running',
         state: current,
+      })
+      continue
+    }
+    if (current.status === 'starting') {
+      stopped = true
+      results.push({
+        toolId,
+        name: tool.name,
+        outcome: 'failed',
+        state: current,
+        message: 'Still starting. Later steps did not run.',
       })
       continue
     }

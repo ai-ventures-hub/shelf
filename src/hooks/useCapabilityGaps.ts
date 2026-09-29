@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { subscribeDataRefresh } from '../lib/refreshTriggers'
 import type {
   AgentAccessKind,
   CapabilityGap,
@@ -6,10 +7,21 @@ import type {
   GapResolveSuggestion,
 } from '../types'
 
+/**
+ * Gaps (and optional resolve suggestions) read on mount and again when
+ * capability-gaps.json or library.json changes, or the window regains focus.
+ * `enabled: false` skips all reads where nothing is displayed.
+ */
 export function useCapabilityGaps(
-  opts: { status?: CapabilityGapStatus; limit?: number } = {},
+  opts: {
+    status?: CapabilityGapStatus
+    limit?: number
+    enabled?: boolean
+    /** Also read resolve suggestions (a second IPC call). */
+    withSuggestions?: boolean
+  } = {},
 ) {
-  const { status, limit } = opts
+  const { status, limit, enabled = true, withSuggestions = true } = opts
   const [gaps, setGaps] = useState<CapabilityGap[]>([])
   const [suggestions, setSuggestions] = useState<GapResolveSuggestion[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,8 +38,9 @@ export function useCapabilityGaps(
         window.shelf.listCapabilityGaps({ status, limit }),
         // Suggestions are a nudge, never load-bearing: a failure here must
         // not take down the gaps list (or the sidebar's open-gap count).
-        window.shelf.listGapSuggestions?.().catch(() => []) ??
-          Promise.resolve([]),
+        withSuggestions
+          ? window.shelf.listGapSuggestions?.().catch(() => []) ?? Promise.resolve([])
+          : Promise.resolve([]),
       ])
       setGaps(nextGaps)
       setSuggestions(nextSuggestions)
@@ -37,20 +50,14 @@ export function useCapabilityGaps(
     } finally {
       setLoading(false)
     }
-  }, [status, limit])
+  }, [status, limit, withSuggestions])
 
   useEffect(() => {
+    if (!enabled) return
     void refresh()
-    const timer = window.setInterval(() => void refresh(), 5_000)
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [refresh])
+    // Suggestions depend on tool capabilities, so library edits count too.
+    return subscribeDataRefresh(['capability-gaps.json', 'library.json'], () => void refresh())
+  }, [refresh, enabled])
 
   const updateStatus = useCallback(
     async (id: string, next: CapabilityGapStatus) => {

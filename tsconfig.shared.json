@@ -4,14 +4,12 @@
     "lib": ["ES2022"],
     "module": "CommonJS",
     "moduleResolution": "node",
-    "outDir": "dist-shared",
+    "noEmit": true,
     "rootDir": "shared",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "sourceMap": true,
     "types": ["node"]
   },
   "include": ["shared"]

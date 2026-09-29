@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import { ToolFormAdvanced } from '../components/ToolFormAdvanced'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
 import { useUiMode } from '../hooks/useUiMode'
@@ -19,6 +20,7 @@ export function ToolFormPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { tools, saveTool } = useLibrary()
+  const confirm = useConfirm()
   const { prefs } = usePrefs()
   const { isDeveloper } = useUiMode()
   const existing = tools.find((t) => t.id === id)
@@ -227,8 +229,10 @@ export function ToolFormPage() {
           .split(',')
           .map((t) => t.trim())
           .filter(Boolean),
+        // One phrase per line (the field's hint). Commas belong to the phrase:
+        // "Collect client, production and development details" is one task.
         capabilities: capabilitiesText
-          .split(/[\n,]/)
+          .split('\n')
           .map((capability) => capability.trim())
           .filter(Boolean),
         env: textToEnv(envText),
@@ -512,8 +516,16 @@ export function ToolFormPage() {
           <div className="action-row" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
             {conflicted && <div role="alert">
               This tool changed elsewhere. Your edits are preserved. Reload to review the latest version before saving.
-              <button type="button" className="btn" onClick={() => {
-                if (!existing || !window.confirm('Discard your unsaved edits and load the latest version?')) return
+              <button type="button" className="btn" onClick={async () => {
+                if (!existing) return
+                const confirmed = await confirm({
+                  title: 'Load the latest version?',
+                  message: 'Your unsaved edits on this page are discarded.',
+                  confirmLabel: 'Discard my edits',
+                  cancelLabel: 'Keep editing',
+                  danger: true,
+                })
+                if (!confirmed) return
                 baseRef.current = existing
                 setForm(existing)
                 setTagsText(existing.tags.join(', '))

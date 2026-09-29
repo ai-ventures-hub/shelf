@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ClientConnectionRow } from '../components/mcp/ClientConnectionRow'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { McpAdvancedPanel } from '../components/mcp/McpAdvancedPanel'
 import type { OverflowMenuItem } from '../components/OverflowMenu'
 import { MCP_TEST_PROMPT } from '../lib/mcpClientGuides'
@@ -23,6 +24,7 @@ import type {
  */
 export function McpConnectPage() {
   const { isDeveloper } = useUiMode()
+  const confirm = useConfirm()
   const [serverPath, setServerPath] = useState(
     '/path/to/Shelf.app/Contents/Resources/mcp/mcp/server.js',
   )
@@ -135,7 +137,15 @@ export function McpConnectPage() {
   }
 
   async function disconnect(kind: McpClientKind) {
-    if (!window.confirm(`Disconnect Shelf from ${labelFor(kind)}?`)) return
+    const label = labelFor(kind)
+    const confirmed = await confirm({
+      title: `Disconnect Shelf from ${label}?`,
+      message: `${label} stops seeing your Shelf tools until you connect it again.`,
+      confirmLabel: 'Disconnect',
+      cancelLabel: 'Stay connected',
+      danger: true,
+    })
+    if (!confirmed) return
     setClientBusy(kind, true)
     try {
       if (kind === 'claude') {
@@ -289,7 +299,7 @@ export function McpConnectPage() {
         </div>
       </header>
 
-      <section className="mcp-clients" aria-label="Supported clients">
+      <section aria-label="Supported clients">
         <h2 className="mcp-section-label">Supported clients</h2>
         <div className="mcp-client-list">
           {visibleClients.map((client) => (

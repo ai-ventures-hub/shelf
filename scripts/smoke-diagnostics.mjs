@@ -18,6 +18,18 @@ const line = (text, stream = 'stderr') => ({ toolId: 't', stream, text, at })
 
 const cases = [
   [[line("Error: Cannot find module 'express'")], 'deps_missing'],
+  [[line("Error: Cannot find module '@scope/pkg'")], 'deps_missing'],
+  // Regression (2.1.x audit): a missing ENTRY FILE is a bad launch command,
+  // not missing dependencies — install_deps would never fix it.
+  [[line("Error: Cannot find module '/Users/me/app/dev-server.mjs'")], 'bad_launch_command'],
+  [[line("Error: Cannot find module './scripts/dev-server.mjs'")], 'bad_launch_command'],
+  // CommonJS app code requiring a missing file lists a require stack.
+  [[line("Error: Cannot find module './lib/x'"), line('Require stack:'), line('- /Users/me/app/server.js')], 'app_crashed'],
+  [
+    [line("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/me/app/lib/util.js' imported from /Users/me/app/index.js")],
+    'app_crashed',
+  ],
+  [[line("Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /Users/me/app/index.js")], 'deps_missing'],
   [[line('node:internal/modules/esm: ERR_MODULE_NOT_FOUND')], 'deps_missing'],
   [[line("ModuleNotFoundError: No module named 'flask'")], 'deps_missing'],
   [[line('zsh: command not found: pnpm')], 'runtime_missing'],

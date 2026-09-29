@@ -47,7 +47,7 @@
 .search-input,.field-input,.field-textarea {
   width:100%;
   min-height:var(--control-height);
-  border:1px solid var(--line);
+  border:1px solid var(--line-strong);
   border-radius:var(--radius-control);
   background:var(--input);
   color:var(--ink);
@@ -147,8 +147,8 @@
 }
 
 .btn-danger {
-  background:#f0787d1a;
-  border-color:#f0787d73;
+  background:var(--tint-danger);
+  border-color:color-mix(in srgb,var(--danger) 45%,transparent);
   color:var(--danger);
 }
 
@@ -173,8 +173,7 @@
 
 /* Page sections share outer spacing. Panels inside grids/stacks keep their
    parent's gap, so nested cards and header/body seams never get double spacing. */
-.content-inner > .panel,
-.content-inner > .detail-layout {
+.content-inner > .panel {
   margin-bottom:var(--space-4);
 }
 
@@ -211,4 +210,31 @@
   gap:.55rem;
   color:var(--ink);
   font-size:.9rem;
+}
+
+/* Text utilities. */
+.muted {
+  color:var(--muted);
+}
+
+.mono {
+  font-family:var(--font-mono);
+  font-size:.9em;
+}
+
+/* Inline status banner (e.g. "Verification running"): informational, so it
+   uses the brand tint rather than the amber warning-card. */
+.notice {
+  margin:0 0 var(--space-4);
+  padding:.75rem .9rem;
+  border:1px solid color-mix(in srgb,var(--brand) 35%,var(--line));
+  border-radius:12px;
+  background:var(--tint-brand);
+  color:var(--ink);
+  font-size:.9rem;
+  overflow-wrap:anywhere;
+}
+
+.notice a {
+  font-weight:620;
 }

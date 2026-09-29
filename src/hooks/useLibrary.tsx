@@ -22,8 +22,12 @@ interface LibraryContextValue {
   collections: Collection[]
   states: Record<string, ToolRuntimeState>
   health: Record<string, ToolHealth>
+  /** When this window saw a run end on its own (exit without Stop), by tool id. */
+  finishedAt: Record<string, string>
   loading: boolean
   error: string | null
+  /** The library itself could not be read (not a recovery notice). */
+  loadFailed: boolean
   refresh: () => Promise<void>
   saveTool: (tool: Tool) => Promise<Tool>
   deleteTool: (id: string) => Promise<void>
@@ -47,8 +51,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [states, setStates] = useState<Record<string, ToolRuntimeState>>({})
   const [health, setHealth] = useState<Record<string, ToolHealth>>({})
+  const [finishedAt, setFinishedAt] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const healthTimerRef = useRef<number | null>(null)
 
   const refreshHealth = useCallback(async () => {
@@ -77,9 +83,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setCollections(nextCollections)
       setStates(Object.fromEntries(nextStates.map((s) => [s.toolId, s])))
       setError(await window.shelf.getLibraryRecovery())
+      setLoadFailed(false)
       void refreshHealth()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -100,6 +108,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
     const offRuntime = window.shelf.onRuntimeUpdate((state) => {
       setStates((prev) => ({ ...prev, [state.toolId]: state }))
+      // Runtime state has no end time; remember when a script finished so
+      // its card can say "Finished · 2m ago".
+      if (state.status === 'stopped' && state.exitCode !== undefined) {
+        setFinishedAt((prev) =>
+          prev[state.toolId] ? prev : { ...prev, [state.toolId]: new Date().toISOString() },
+        )
+      } else if (state.status === 'starting' || state.status === 'running') {
+        setFinishedAt((prev) => {
+          if (!(state.toolId in prev)) return prev
+          const next = { ...prev }
+          delete next[state.toolId]
+          return next
+        })
+      }
       // Start/stop changes what counts as a port conflict — refresh the
       // launchability glyphs, debounced across bursts of updates.
       if (healthTimerRef.current !== null) window.clearTimeout(healthTimerRef.current)
@@ -188,8 +210,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       collections,
       states,
       health,
+      finishedAt,
       loading,
       error,
+      loadFailed,
       refresh,
       saveTool,
       deleteTool,
@@ -206,8 +230,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       collections,
       states,
       health,
+      finishedAt,
       loading,
       error,
+      loadFailed,
       refresh,
       saveTool,
       deleteTool,

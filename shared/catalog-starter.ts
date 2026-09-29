@@ -6,12 +6,16 @@ import { containsLikelySecret } from './capability-intelligence'
 export function validateCatalogStarter(content: string): string {
   if (typeof content !== 'string' || Buffer.byteLength(content) > 512 * 1024)
     throw new Error('Catalog is too large.')
-  if (containsLikelySecret(content))
-    throw new Error('The catalog appears to contain a credential. Remove it before exporting.')
   const result = normalizeCatalog(JSON.parse(content))
   if (!result.catalog.name?.trim()) throw new Error('Give this team catalog a name.')
   if (result.warnings.length) throw new Error(result.warnings.join(' '))
-  return JSON.stringify(result.catalog, null, 2) + '\n'
+  const output = JSON.stringify(result.catalog, null, 2) + '\n'
+  // Check what will be written, after normalization strips invisible
+  // characters: a zero-width space inside a token hides it from a check
+  // on the raw input, and stripping then rebuilds the live credential.
+  if (containsLikelySecret(content) || containsLikelySecret(output))
+    throw new Error('The catalog appears to contain a credential. Remove it before exporting.')
+  return output
 }
 
 /** Reuse the catalog format and Git remote validation; never export launch/env data. */

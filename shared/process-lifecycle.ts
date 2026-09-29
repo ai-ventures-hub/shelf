@@ -73,7 +73,10 @@ async function terminateTargets(targets: number[]): Promise<void> {
       const { stdout } = await execFileAsync('ps', ['-axo', 'pgid=,stat='], { timeout: 2_000 })
       const rows = stdout.trim().split('\n').map((line) => line.trim().match(/^(\d+)\s+(\S+)$/))
       if (rows.some((row) => !row)) return false
-      return !rows.some((row) => Number(row![1]) === -target && !row![2].startsWith('Z'))
+      // Zombies (Z) and members flagged "trying to exit" (E, see ps(1)) are
+      // not live. Counting E as live reported update-time stops of exiting
+      // groups as "Stop failed: kill EPERM".
+      return !rows.some((row) => Number(row![1]) === -target && !row![2].startsWith('Z') && !row![2].includes('E'))
     } catch { return false }
   }
   const exists = async (target: number) => {
@@ -107,19 +110,6 @@ async function terminateTargets(targets: number[]): Promise<void> {
   await signal('SIGKILL')
   await wait(1_000)
   if (await alive()) throw new Error('The owned process group did not stop. Retry Stop or inspect the remaining processes.')
-}
-
-export function waitForExit(child: ChildProcess, ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return }
-    const done = () => {
-      clearTimeout(timer)
-      child.off('exit', done)
-      resolve()
-    }
-    const timer = setTimeout(done, ms)
-    child.once('exit', done)
-  })
 }
 
 /**

@@ -754,6 +754,40 @@ export interface RegisterProjectOptions {
   setupSteps?: BootstrapStep[]
   /** Provenance recorded on the saved tool (shared tools). */
   source?: ToolSource
+  /**
+   * Use the overrides' launch command, port, and url exactly as given, never
+   * filling a blank from a fresh folder scan. Draft acceptance saves what the
+   * review sheet showed, not what the folder holds by the time of the click.
+   */
+  exactOverrides?: boolean
+}
+
+/** Start a new tool from an idea (desktop only; see shared/tool-starter.ts). */
+export interface ToolStarterRequest {
+  name: string
+  idea: string
+  /** Parent folder; the tool gets its own folder inside. Default ~/Shelf Tools. */
+  parentDir?: string
+  port?: number
+  /** Omitted = the default profile; null = no profile. */
+  designProfileId?: string | null
+}
+
+export type ToolStarterAgent = 'claude-code' | 'codex' | 'cursor' | 'terminal'
+
+export interface ToolStarterPrepared {
+  toolsRoot: string
+  /** A suggested free port no library tool claims; null when none was found. */
+  port: number | null
+  agents: { id: Exclude<ToolStarterAgent, 'terminal'>; installed: boolean }[]
+}
+
+export interface ToolStarterCreated {
+  tool: Tool
+  folder: string
+  files: string[]
+  prompt: string
+  profileName?: string
 }
 
 /**
@@ -769,6 +803,9 @@ export interface ToolDraft {
   url?: string
   envKeys: string[]
   client?: string
+  /** Agent-supplied; saved on accept exactly as the sheet shows them. */
+  description?: string
+  capabilities?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -805,6 +842,8 @@ export interface StartOptions {
   onPortConflict?: PortConflictPolicy
   /** Who initiated this launch; falls back to the manager's defaultOrigin. */
   origin?: LaunchOrigin
+  /** False skips opening the tool's URL once ready (e.g. resuming after an update). */
+  openUrlWhenReady?: boolean
 }
 
 export type CollectionToolOutcome =

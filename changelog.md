@@ -2,6 +2,73 @@
 
 ## Unreleased
 
+### Start a new tool
+
+- Describe what you need and Shelf writes a small project that already
+  runs: a zero-dependency Node server on a loopback port no other tool
+  claims, your design profile as DESIGN.md and CSS variables, and an
+  AGENTS.md build brief with the Shelf tool contract. The tool is added to
+  your library, and Claude Code or Codex opens in Terminal inside the
+  folder with the kickoff prompt. Cursor opens the folder with the prompt
+  copied. Nothing is installed or started until you choose to.
+- Find it under Add tool, in the empty library, in Quick Open, and as the
+  first action on a capability gap. Agents get the same recipe through the
+  new-tool MCP prompt and register the result as a draft you accept.
+
+### Fixes
+
+- Stored logs, run URLs, and status messages stay readable. Short or
+  ordinary env values such as `PYTHONUNBUFFERED=1` or a `*_PORT` no longer
+  replace every matching character with `***`; credential-named values are
+  still masked. Output already written this way cannot be recovered.
+- Saving a tool keeps commas inside a capability instead of splitting one
+  task into fragments.
+- Restart and update starts your running tools again once Shelf reopens,
+  without opening their pages. A normal quit still stops them.
+- Agents see who started a run ("started in Shelf") instead of "external",
+  and interrupted runs no longer keep a "Running" message.
+- Stopping a tool while its process group is exiting no longer reports
+  `kill EPERM`, and a lease left by a crashed host whose pid was reused no
+  longer blocks the tool.
+- Ordered stacks wait for a member that is still starting.
+- Accepting an agent's registration saves exactly what the sheet showed,
+  and refuses a draft that changed, has no command, or duplicates a tool.
+- An agent can no longer add a new folder with `shelf_upsert_tool` and skip
+  the registration review.
+- Handoffs, receipts, and run logs mask lowercase inline env assignments.
+  Credential checks see through zero-width characters everywhere.
+- Deleting a tool removes its project notes and verification history.
+  An agent removing a tool mid-check no longer blocks Quit.
+- The run log no longer flashes or re-renders on every line, secondary
+  text and notices have their intended styling, and status pills, buttons,
+  and input borders meet WCAG AA contrast in both themes.
+- The sidebar Waiting count, Activity, and collections update without a
+  refocus or a flash of "not found"; failed launches from cards and Quick
+  Open say why.
+- Idle windows stop polling every 5 seconds; changes from agents arrive as
+  events. The initial renderer bundle is 30% smaller.
+- Confirmations use in-app dialogs with named actions, page titles and
+  focus follow navigation, and menus work with the keyboard.
+
+### For agents
+
+- Tool lists, logs, and collections come back at a fifth to a third of
+  their old size. Every tool
+  is annotated (read-only, destructive, runs commands), and shared policy
+  moved into server instructions.
+- A launch still starting after 45 seconds returns `starting` instead of a
+  client timeout; `shelf_get_status` accepts `waitForMs`. Failures include
+  the next step and the last log lines.
+- `shelf_get_logs` accepts a `runId`, `shelf_launch_tool` and
+  `shelf_stop_tool` accept a `collectionId` (ordered stacks apply), and
+  capability search lists team catalog tools you have not installed.
+- Changed defaults: `list_receipts` returns 10 rows, `list_capability_gaps`
+  returns open gaps, `get_design_profile` returns the brief unless
+  `format: "tokens"` or `"full"`, and `clear_receipts` without a tool id
+  needs `all: true`.
+
+### Site
+
 - Shorten the shelfmcp.com landing copy and drop the old version stamps.
   Say that a command waits for approval, and that a stack can start in order.
 - Drop the design-section essay. The profile window already shows the

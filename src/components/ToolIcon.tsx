@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { selectedIcon } from '../lib/selectedIcon'
+import { selectedIcon, useIconLoaderState } from '../lib/selectedIcon'
 import { useToolIcon } from '../hooks/useToolIcon'
 
 /** Shared tool mark: Lucide → custom image → letter fallback. */
@@ -20,6 +20,9 @@ export function ToolIcon({
 }) {
   const { src, failed } = useToolIcon(iconPath)
   const initial = name.trim().charAt(0).toUpperCase() || 'T'
+  // Subscribes this icon to the map loading, so unknown names settle on the
+  // letter even inside a memoized card.
+  useIconLoaderState()
   const Lucide = selectedIcon(iconLucide)
 
   if (Lucide) {

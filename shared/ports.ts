@@ -102,11 +102,6 @@ export async function findProcessGroupId(pid: number): Promise<number | null> {
   }
 }
 
-export async function processBelongsToGroup(pid: number, pgid: number): Promise<boolean> {
-  if (pid === pgid) return true
-  return (await findProcessGroupId(pid)) === pgid
-}
-
 /**
  * Every TCP port with a LISTEN socket, from ONE lsof call — the batch
  * primitive for health checks over a whole library (per-tool lsof calls
@@ -297,16 +292,4 @@ export function sniffLocalUrlFromText(text: string): string | null {
     if (match?.[1]) return match[1].replace(/\/$/, '') + '/'
   }
   return null
-}
-
-/** Extract port number from a local URL, if present. */
-export function portFromUrl(url: string): number | null {
-  try {
-    const parsed = new URL(url)
-    if (!parsed.port) return parsed.protocol === 'https:' ? 443 : 80
-    const n = Number(parsed.port)
-    return Number.isFinite(n) ? n : null
-  } catch {
-    return null
-  }
 }

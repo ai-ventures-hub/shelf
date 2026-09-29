@@ -3,6 +3,7 @@ import {
   filterLucideNames,
   getLucideIcon,
   humanizeLucideName,
+  loadLucideNames,
 } from '../lib/lucideCatalog'
 
 /**
@@ -28,7 +29,19 @@ export function LucideIconPicker({
   const searchRef = useRef<HTMLInputElement>(null)
   const listId = useId()
 
-  const names = useMemo(() => filterLucideNames(query), [query])
+  // The full name list loads the first time the picker opens.
+  const [allNames, setAllNames] = useState<string[] | null>(null)
+  const [namesError, setNamesError] = useState(false)
+  useEffect(() => {
+    if (!open || allNames) return
+    let active = true
+    setNamesError(false)
+    loadLucideNames()
+      .then((loaded) => { if (active) setAllNames(loaded) })
+      .catch(() => { if (active) setNamesError(true) })
+    return () => { active = false }
+  }, [open, allNames])
+  const names = useMemo(() => filterLucideNames(allNames ?? [], query), [allNames, query])
   const Selected = getLucideIcon(value)
   const label = value ? humanizeLucideName(value) : 'Choose icon…'
 
@@ -86,7 +99,11 @@ export function LucideIconPicker({
             role="group"
             aria-label="Lucide icons"
           >
-            {names.length === 0 ? (
+            {namesError ? (
+              <p className="lucide-picker-empty" role="alert">Could not load icons. Close and reopen to retry.</p>
+            ) : !allNames ? (
+              <p className="lucide-picker-empty" role="status">Loading icons…</p>
+            ) : names.length === 0 ? (
               <p className="lucide-picker-empty">No icons match</p>
             ) : (
               names.map((name) => {

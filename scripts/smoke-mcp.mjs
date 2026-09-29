@@ -1,5 +1,6 @@
 /**
- * MCP client smoke: upsert fixture → list → launch → logs → stop → remove.
+ * MCP client smoke: stage fixture → accept (GUI path) → upsert → list →
+ * launch → logs → stop → remove, plus the agent-policy regressions.
  * Run: npm run smoke:mcp
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -33,21 +34,64 @@ async function callTool(client, name, args = {}) {
   return parseToolText(result)
 }
 
-async function main() {
-  const transport = new StdioClientTransport({
+/** Plain-text tools (logs, handoffs) return one text block, not JSON. */
+async function callText(client, name, args = {}) {
+  const result = await client.callTool({ name, arguments: args })
+  const text = result.content?.find((c) => c.type === 'text')?.text
+  if (result.isError) throw new Error(text)
+  return text
+}
+
+function connectServer(extraEnv = {}) {
+  return new StdioClientTransport({
     command: 'node',
     args: [serverEntry],
     // The SDK intentionally forwards only a small default env allowlist.
     // Preserve the isolated SHELF_DATA_ROOT supplied by smoke:all.
-    env: { ...process.env, SHELF_DATA_ROOT: smokeDataRoot },
+    env: { ...process.env, SHELF_DATA_ROOT: smokeDataRoot, ...extraEnv },
     stderr: 'pipe',
   })
+}
 
+async function main() {
   const client = new Client({ name: 'shelf-smoke', version: '0.1.0' })
-  await client.connect(transport)
+  await client.connect(connectServer())
+
+  const { LibraryStore: SmokeLibraryStore } = requireCjs('../dist-electron/shared/library-store.js')
+  const { ProcessManager } = requireCjs('../dist-electron/shared/process-manager.js')
+  const { ReceiptStore } = requireCjs('../dist-electron/shared/receipt-store.js')
+  const { ToolDraftStore, acceptToolDraft } = requireCjs('../dist-electron/shared/tool-draft-store.js')
+  const guiStore = new SmokeLibraryStore(smokeDataRoot)
+  const guiProcesses = new ProcessManager(guiStore, { receipts: new ReceiptStore(smokeDataRoot) })
+  const guiDrafts = new ToolDraftStore(smokeDataRoot)
+  /** The user pressing Accept on a draft card in Shelf. */
+  const acceptInGui = (draftId) => acceptToolDraft(draftId, guiDrafts, { store: guiStore, processes: guiProcesses })
 
   try {
-    const upserted = await callTool(client, 'shelf_upsert_tool', {
+    // Every tool declares annotations: unannotated tools read as
+    // destructive/open-world to clients.
+    const listing = await client.listTools()
+    const missingAnnotations = listing.tools.filter(
+      (tool) => !tool.annotations || typeof tool.annotations.readOnlyHint !== 'boolean',
+    )
+    if (missingAnnotations.length) {
+      throw new Error(`Tools without annotations: ${missingAnnotations.map((t) => t.name).join(', ')}`)
+    }
+    const hint = (name, key) => listing.tools.find((t) => t.name === name)?.annotations?.[key]
+    for (const name of ['shelf_list_tools', 'shelf_get_tool', 'shelf_get_status', 'shelf_get_logs', 'shelf_find_capability', 'shelf_inspect_project', 'shelf_list_receipts', 'shelf_get_verification', 'shelf_prepare_handoff']) {
+      if (hint(name, 'readOnlyHint') !== true || hint(name, 'openWorldHint') !== false) throw new Error(`${name} must be read-only and closed-world`)
+    }
+    for (const name of ['shelf_remove_tool', 'shelf_clear_receipts', 'shelf_stop_tool']) {
+      if (hint(name, 'destructiveHint') !== true) throw new Error(`${name} must be marked destructive`)
+    }
+    for (const name of ['shelf_launch_tool', 'shelf_register_project']) {
+      if (hint(name, 'openWorldHint') !== true) throw new Error(`${name} must be marked open-world`)
+    }
+    if (!client.getInstructions()?.includes('staged')) throw new Error('server instructions missing the draft policy')
+    if (JSON.stringify(listing).includes('"pattern"')) throw new Error('tools/list still carries regex patterns')
+    console.log(`OK: ${listing.tools.length} tools annotated; instructions carry shared policy; ${JSON.stringify(listing).length} B listing`)
+
+    const toolArgs = {
       name: smokeName,
       description: 'Temporary MCP smoke fixture',
       tags: ['Fixtures', 'Smoke'],
@@ -71,7 +115,38 @@ async function main() {
         // Not a "secret-looking" key name — ALL values must mask regardless.
         DATABASE_URL: 'postgres://user:hunter2@localhost/db',
       },
-    })
+    }
+
+    // Regression (2.1 policy bypass): creating a tool for a folder the user
+    // never accepted must stage a draft, not write library.json.
+    const staged = await callTool(client, 'shelf_upsert_tool', toolArgs)
+    if (staged.outcome !== 'pending_consent' || staged.action !== 'staged' || !staged.draft?.id) {
+      throw new Error(`upsert of a new folder must stage a draft, got ${JSON.stringify(staged).slice(0, 200)}`)
+    }
+    if (guiStore.list().length !== 0) throw new Error('upsert wrote library.json for an unaccepted folder')
+    if (staged.draft.launchCommand !== `PORT=${fixturePort} node server.mjs`) {
+      throw new Error('draft must carry the agent launchCommand for review')
+    }
+    if (JSON.stringify(staged).includes('hunter2') || !staged.draft.envKeys.includes('DATABASE_URL')) {
+      throw new Error('draft must carry env key names only')
+    }
+    if (!staged.notCarried?.fields?.includes('agentAccess')) {
+      throw new Error('upsert staging must say which fields the draft does not carry')
+    }
+    console.log('OK: upsert of a new folder stages a draft (no library write)')
+
+    // The user accepts in Shelf; then agent updates to the accepted tool work.
+    const accepted = await acceptInGui(staged.draft.id)
+    if (!accepted.tool?.id) throw new Error(`accept failed: ${accepted.outcome}`)
+    // Update by id WITHOUT launchCommand: fields merge onto the stored record.
+    const { name: _n, launchCommand: _l, projectPath: _p, ...updateArgs } = toolArgs
+    const upserted = await callTool(client, 'shelf_upsert_tool', { id: accepted.tool.id, ...updateArgs })
+    if (upserted.action !== 'updated' || upserted.tool.id !== accepted.tool.id) {
+      throw new Error('upsert by id must update the accepted tool')
+    }
+    if (guiStore.get(accepted.tool.id).launchCommand !== `PORT=${fixturePort} node server.mjs`) {
+      throw new Error('omitted launchCommand must keep the stored command')
+    }
     console.log('upsert', upserted.action, upserted.tool.id)
     if (upserted.tool.env?.SMOKE_SECRET_TOKEN !== '***') {
       throw new Error('Expected secret env value to be masked in MCP output')
@@ -92,9 +167,6 @@ async function main() {
       env: upserted.tool.env,
       notes: 'Round-trip touched only this field.',
     })
-    const { LibraryStore: SmokeLibraryStore } = requireCjs(
-      '../dist-electron/shared/library-store.js',
-    )
     const rawStore = new SmokeLibraryStore(smokeDataRoot)
     const rawTool = rawStore.get(echoed.tool.id)
     if (rawTool.env?.SMOKE_SECRET_TOKEN !== 'should-be-masked') {
@@ -124,13 +196,25 @@ async function main() {
 
     const toolId = upserted.tool.id
     const listed = await callTool(client, 'shelf_list_tools')
-    if (!listed.tools.some((t) => t.id === toolId)) {
+    const row = listed.tools.find((t) => t.id === toolId)
+    if (!row) {
       throw new Error('upserted tool missing from shelf_list_tools')
     }
-    console.log('OK: listed')
+    // Compact rows: one-word readiness, no per-tool boilerplate.
+    if (row.readiness !== 'needs_setup' || 'projectPath' in row || 'message' in row || typeof row.status !== 'string') {
+      throw new Error(`list rows must be compact, got ${JSON.stringify(row)}`)
+    }
+    console.log('OK: listed (compact rows)')
 
     const got = await callTool(client, 'shelf_get_tool', { id: toolId })
     if (got.tool.name !== smokeName) throw new Error('get_tool name mismatch')
+    if (!got.readiness?.shelfActions?.includes('shelf_launch_tool') || got.tool.projectPath !== fs.realpathSync.native(fixture)) {
+      throw new Error('get_tool keeps full readiness and the project folder')
+    }
+    const notFound = await client.callTool({ name: 'shelf_get_tool', arguments: { id: 'nope' } })
+    if (!notFound.isError || !/shelf_list_tools/.test(notFound.content[0].text)) {
+      throw new Error('Tool not found must point at shelf_list_tools')
+    }
     console.log('OK: get')
 
     const found = await callTool(client, 'shelf_find_capability', {
@@ -140,7 +224,39 @@ async function main() {
     if (found.matches?.[0]?.toolId !== toolId || !found.matches[0].reasons?.length) {
       throw new Error('shelf_find_capability did not return an explainable match')
     }
-    console.log('OK: capability match')
+    if (typeof found.matches[0].readiness !== 'string' || 'runtime' in found.matches[0]) {
+      throw new Error('capability matches must use compact readiness/status')
+    }
+    const nothing = await callTool(client, 'shelf_find_capability', { task: 'render holographic weather forecasts' })
+    if (nothing.count !== 0 || !/shelf_record_capability_gap/.test(nothing.next || '')) {
+      throw new Error('zero matches must point at shelf_record_capability_gap')
+    }
+    // Subscribed team-catalog entries the user has not installed are visible,
+    // read-only, and never installable by the agent.
+    fs.writeFileSync(
+      path.join(smokeDataRoot, 'team-catalogs.json'),
+      JSON.stringify({
+        version: 1,
+        catalogs: [
+          {
+            id: 'team-1',
+            url: 'https://git.example.com/team/tools.git',
+            name: 'Team Tools',
+            addedAt: new Date().toISOString(),
+            entries: [
+              { name: 'Podcast Scribe', description: 'Transcribes podcast audio', capabilities: ['transcribe podcast audio'], repo: 'https://git.example.com/team/scribe.git' },
+            ],
+          },
+        ],
+      }),
+    )
+    const teamFound = await callTool(client, 'shelf_find_capability', { task: 'transcribe podcast audio' })
+    const teamHit = teamFound.teamMatches?.[0]
+    if (!teamHit || teamHit.installed !== false || teamHit.source !== 'team' || !/Team Tools in Shelf/.test(teamHit.note) || 'repo' in teamHit) {
+      throw new Error(`team catalog entries must surface as not installed: ${JSON.stringify(teamFound)}`)
+    }
+    fs.rmSync(path.join(smokeDataRoot, 'team-catalogs.json'))
+    console.log('OK: capability match (compact, zero-match next step, team catalog read-only)')
 
     const readiness = await callTool(client, 'shelf_check_tool_readiness', { id: toolId })
     if (readiness.readiness?.state !== 'needs_setup') {
@@ -165,6 +281,12 @@ async function main() {
     if (!smokeGap || smokeGap.relatedToolIds.includes('unknown-tool')) {
       throw new Error('Capability gap list or related-tool validation failed')
     }
+    const defaultGaps = await callTool(client, 'shelf_list_capability_gaps')
+    if (defaultGaps.status !== 'open' || defaultGaps.gaps[0]?.examples || defaultGaps.gaps[0]?.exampleCount !== 1) {
+      throw new Error('gap list defaults: open, examples omitted with a count')
+    }
+    const withExamples = await callTool(client, 'shelf_list_capability_gaps', { includeExamples: true })
+    if (!Array.isArray(withExamples.gaps[0]?.examples)) throw new Error('includeExamples must return examples')
     console.log('OK: capability gap')
 
     const briefResult = await callTool(client, 'shelf_get_gap_brief', { id: smokeGap.id })
@@ -258,6 +380,7 @@ async function main() {
         scripts: { start: 'node server.mjs' },
       }),
     )
+    const linkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-mcp-links-'))
     try {
       const dry = await callTool(client, 'shelf_register_project', {
         projectPath: registerProj,
@@ -266,11 +389,14 @@ async function main() {
       if (dry.outcome !== 'dry_run' || dry.autoRunnable !== true) {
         throw new Error(`Unexpected dryRun result: ${dry.outcome}/${dry.autoRunnable}`)
       }
+      if (dry.draft?.status !== 'none') throw new Error('dryRun must report draft.status none before staging')
       const beforeRegister = await callTool(client, 'shelf_list_tools')
       const registered = await callTool(client, 'shelf_register_project', {
         projectPath: registerProj,
         launch: true,
         runSetup: true,
+        description: 'Registered by smoke-mcp',
+        capabilities: ['serve a registered fixture'],
       })
       if (registered.outcome !== 'pending_consent' || !registered.draft?.id) {
         throw new Error(
@@ -279,6 +405,14 @@ async function main() {
       }
       if (registered.draft.envKeys?.some((key) => key.includes('='))) {
         throw new Error('draft exposed an env value')
+      }
+      if (
+        registered.draft.status !== 'pending' ||
+        registered.draft.description !== 'Registered by smoke-mcp' ||
+        registered.draft.capabilities?.[0] !== 'serve a registered fixture' ||
+        'suggestion' in registered
+      ) {
+        throw new Error(`draft must carry description/capabilities once, got ${JSON.stringify(registered).slice(0, 300)}`)
       }
       const afterRegister = await callTool(client, 'shelf_list_tools')
       if (afterRegister.count !== beforeRegister.count) {
@@ -290,9 +424,85 @@ async function main() {
       if (again.draft?.id !== registered.draft.id) {
         throw new Error('a second registration must refresh the same draft')
       }
-      console.log('OK: register_project stages a draft')
+      console.log('OK: register_project stages a draft with description/capabilities')
+
+      // Regression (reproduced bypass): register → pending, then upsert the
+      // same folder with a new command, then register again. Nothing may be
+      // saved or launched until the user accepts.
+      const bypass = await callTool(client, 'shelf_upsert_tool', {
+        name: 'Bypass Attempt',
+        projectPath: registerProj,
+        launchCommand: 'node server.mjs --evil',
+      })
+      if (bypass.outcome !== 'pending_consent' || bypass.draft.id !== registered.draft.id) {
+        throw new Error('upsert of a pending folder must refresh the same draft')
+      }
+      const reRegistered = await callTool(client, 'shelf_register_project', { projectPath: registerProj })
+      if (reRegistered.outcome !== 'pending_consent' || reRegistered.state) {
+        throw new Error(`register after upsert must stay pending, got ${reRegistered.outcome}`)
+      }
+      if ((await callTool(client, 'shelf_list_tools')).count !== beforeRegister.count) {
+        throw new Error('upsert/register bypass wrote library.json')
+      }
+      // Status read path without side effects.
+      const pendingDry = await callTool(client, 'shelf_register_project', { projectPath: registerProj, dryRun: true })
+      if (pendingDry.draft?.status !== 'pending' || pendingDry.draft.id !== registered.draft.id) {
+        throw new Error('dryRun must report the pending draft')
+      }
+      console.log('OK: upsert→register bypass stays pending; dryRun reports the draft')
+
+      // Symlinked spelling of the same new folder shares the card.
+      const pendingLink = path.join(linkDir, 'pending-link')
+      fs.symlinkSync(registerProj, pendingLink)
+      const viaLink = await callTool(client, 'shelf_register_project', { projectPath: pendingLink })
+      if (viaLink.draft?.id !== registered.draft.id || viaLink.draft.projectPath !== fs.realpathSync.native(registerProj)) {
+        throw new Error('a symlinked path must refresh the same draft, showing the real folder')
+      }
+
+      // The user accepts → dryRun reports accepted with the new tool id.
+      const acceptedReg = await acceptInGui(registered.draft.id)
+      const acceptedDry = await callTool(client, 'shelf_register_project', { projectPath: registerProj, dryRun: true })
+      if (acceptedDry.draft?.status !== 'accepted' || acceptedDry.draft.toolId !== acceptedReg.tool.id) {
+        throw new Error(`dryRun must report accepted → toolId, got ${JSON.stringify(acceptedDry.draft)}`)
+      }
+      if (guiDrafts.list().length !== 0) throw new Error('accepted draft must not linger')
+      await callTool(client, 'shelf_remove_tool', { id: acceptedReg.tool.id })
+      console.log('OK: symlink shares the draft; dryRun reports accepted → toolId')
+
+      // Regression: a nonexistent folder is invalid, never pending_consent.
+      const missingFolder = path.join(registerProj, 'does-not-exist')
+      const invalid = await callTool(client, 'shelf_register_project', { projectPath: missingFolder })
+      if (invalid.outcome !== 'invalid_folder' || invalid.draft) {
+        throw new Error(`nonexistent folder must be invalid_folder, got ${invalid.outcome}`)
+      }
+      const invalidUpsert = await client.callTool({
+        name: 'shelf_upsert_tool',
+        arguments: { name: 'Ghost', projectPath: missingFolder, launchCommand: 'true' },
+      })
+      if (!invalidUpsert.isError) throw new Error('upsert into a nonexistent folder must be refused')
+      if (guiDrafts.list().length !== 0) throw new Error('an invalid folder must not stage a draft')
+      console.log('OK: nonexistent folder → invalid_folder')
+
+      // Regression: a symlinked or different-case path to an ALREADY
+      // registered folder updates that tool; it never stages a duplicate.
+      const registeredLink = path.join(linkDir, 'registered-link')
+      fs.symlinkSync(fixture, registeredLink)
+      const spellings = [registeredLink]
+      if (process.platform === 'darwin' && fs.existsSync(fixture.toUpperCase())) spellings.push(fixture.toUpperCase())
+      const countBefore = guiStore.list().length
+      for (const spelling of spellings) {
+        const viaSpelling = await callTool(client, 'shelf_register_project', { projectPath: spelling, launch: false })
+        if (viaSpelling.outcome === 'pending_consent' || viaSpelling.created !== false || viaSpelling.tool?.id !== toolId) {
+          throw new Error(`${spelling} must update the registered tool, got ${viaSpelling.outcome}`)
+        }
+      }
+      if (guiStore.list().length !== countBefore || guiDrafts.list().length !== 0) {
+        throw new Error('another spelling of a registered folder created a duplicate or a draft')
+      }
+      console.log(`OK: ${spellings.length} alternate spelling(s) of a registered folder update in place`)
     } finally {
       fs.rmSync(registerProj, { recursive: true, force: true })
+      fs.rmSync(linkDir, { recursive: true, force: true })
     }
 
     const design = await callTool(client, 'shelf_get_design_md', { id: toolId })
@@ -450,14 +660,26 @@ async function main() {
     const defaultProfile = await callTool(client, 'shelf_get_design_profile')
     if (
       defaultProfile.resolvedVia !== 'default' ||
-      defaultProfile.tokens?.color?.brand?.$value !== '#7895ff' ||
       !defaultProfile.brief?.includes('#7895ff') ||
       !defaultProfile.brief.includes('Calm, precise')
     ) {
-      throw new Error('Zero-arg shelf_get_design_profile must return default tokens + brief')
+      throw new Error('Zero-arg shelf_get_design_profile must return the default brief')
+    }
+    // Default format sends each fact once: the brief renders every token and
+    // the direction, so the structured copies stay out.
+    if ('tokens' in defaultProfile || 'direction' in defaultProfile) {
+      throw new Error('default brief format must not duplicate tokens/direction')
+    }
+    const tokensOnly = await callTool(client, 'shelf_get_design_profile', { format: 'tokens' })
+    if (tokensOnly.tokens?.color?.brand?.$value !== '#7895ff' || 'brief' in tokensOnly) {
+      throw new Error('format tokens must return DTCG tokens without the brief')
+    }
+    const fullProfile = await callTool(client, 'shelf_get_design_profile', { format: 'full' })
+    if (!fullProfile.tokens || !fullProfile.brief || typeof fullProfile.direction !== 'string') {
+      throw new Error('format full must return tokens, direction, and brief')
     }
     if (
-      defaultProfile.direction.includes('leakme') ||
+      fullProfile.direction.includes('leakme') ||
       defaultProfile.brief.includes('leakme')
     ) {
       throw new Error('Design profile direction must be masked in MCP output')
@@ -562,11 +784,16 @@ async function main() {
     if (agentUpsert.profile.isDefault) {
       throw new Error('Agent-created profile must not become default when one exists')
     }
+    // The write response no longer echoes the whole brief; read it back.
+    if ('brief' in agentUpsert || typeof agentUpsert.summary !== 'string') {
+      throw new Error('Upsert response must summarize, not echo the brief')
+    }
+    const agentBrief = (await callTool(client, 'shelf_get_design_profile', { id: agentUpsert.profile.id })).brief
     if (
-      !agentUpsert.brief?.includes('#a1b2c3') ||
-      !agentUpsert.brief.includes('Source: https://example.com/brand-page')
+      !agentBrief?.includes('#a1b2c3') ||
+      !agentBrief.includes('Source: https://example.com/brand-page')
     ) {
-      throw new Error('Upsert response brief missing tokens or sourceNote')
+      throw new Error('Saved agent profile brief missing tokens or sourceNote')
     }
     const agentReupsert = await callTool(client, 'shelf_upsert_design_profile', {
       name: 'Extracted Brand',
@@ -732,17 +959,32 @@ async function main() {
     }
     console.log('OK: gap brief brand section')
 
+    // Collections launch through the stack contract, not member by member.
+    const stack = await callTool(client, 'shelf_upsert_collection', { name: 'Launch Stack', toolIds: [toolId] })
+    const bothIds = await client.callTool({ name: 'shelf_launch_tool', arguments: { id: toolId, collectionId: stack.collection.id } })
+    if (!bothIds.isError) throw new Error('id and collectionId are mutually exclusive')
+    const stackStarted = await callTool(client, 'shelf_launch_tool', { collectionId: stack.collection.id })
+    if (stackStarted.results?.[0]?.outcome !== 'started' || stackStarted.results[0].status !== 'running' || 'state' in stackStarted.results[0]) {
+      throw new Error(`collection launch must report compact member outcomes, got ${JSON.stringify(stackStarted)}`)
+    }
+    const stackStopped = await callTool(client, 'shelf_stop_tool', { collectionId: stack.collection.id })
+    if (stackStopped.results?.[0]?.outcome !== 'stopped') {
+      throw new Error(`collection stop must stop the member, got ${JSON.stringify(stackStopped)}`)
+    }
+    console.log('OK: launch/stop by collectionId')
+
     const launched = await callTool(client, 'shelf_launch_tool', { id: toolId })
     console.log('launch', launched.state.status, launched.state.message)
-    if (launched.state.status !== 'running') {
+    if (launched.state.status !== 'running' || launched.status !== 'running') {
       throw new Error(`Expected running, got ${launched.state.status}`)
     }
 
-    const logs = await callTool(client, 'shelf_get_logs', { id: toolId, limit: 50 })
-    if (!logs.lines.some((l) => String(l.text).includes('Sample tool listening'))) {
-      throw new Error('Expected ready log line missing')
+    const logs = await callText(client, 'shelf_get_logs', { id: toolId, limit: 50 })
+    if (!logs.includes('Sample tool listening') || !logs.startsWith(`${smokeName} (${toolId})`)) {
+      throw new Error('Expected ready log line missing from the text log block')
     }
-    console.log('OK: logs')
+    if (/"toolId"|"stream"/.test(logs)) throw new Error('logs must be plain text, not per-line JSON')
+    console.log('OK: logs (plain text)')
 
     const stopped = await callTool(client, 'shelf_stop_tool', { id: toolId })
     if (stopped.state.status !== 'stopped') {
@@ -758,6 +1000,86 @@ async function main() {
       throw new Error('Expected at least one run receipt after launch/stop')
     }
     console.log('OK: receipts', receiptList.count)
+    const onlyFailed = await callTool(client, 'shelf_list_receipts', { id: toolId, outcomes: ['failed', 'error'] })
+    if (onlyFailed.receipts.some((r) => r.outcome !== 'failed' && r.outcome !== 'error')) {
+      throw new Error('outcomes filter must apply')
+    }
+    // A past run's output by runId (receipt ids are run ids).
+    const pastRun = receiptList.receipts[receiptList.receipts.length - 1]
+    const pastLogs = await callText(client, 'shelf_get_logs', { id: toolId, runId: pastRun.id })
+    if (!pastLogs.includes(`run ${pastRun.id}`) || !pastLogs.includes('Sample tool listening')) {
+      throw new Error('get_logs runId must return that run')
+    }
+    const unknownRun = await client.callTool({ name: 'shelf_get_logs', arguments: { id: toolId, runId: 'not-a-run' } })
+    if (!unknownRun.isError || !/shelf_list_receipts/.test(unknownRun.content[0].text)) {
+      throw new Error('unknown runId must point at shelf_list_receipts')
+    }
+    console.log('OK: receipts outcomes filter; logs by runId')
+
+    // A launch failure carries agent-actionable next steps and the output
+    // tail; a missing entry file is a bad command, not missing deps.
+    const brokenPort = fixturePort + 1
+    const broken = await callTool(client, 'shelf_upsert_tool', {
+      name: `${smokeName} broken`,
+      projectPath: fixture,
+      launchCommand: 'node ./missing-entry.mjs',
+      port: brokenPort,
+      checkPort: false,
+    })
+    if (broken.action !== 'created') throw new Error('a second tool in an accepted folder may be created')
+    const failedLaunch = await callTool(client, 'shelf_launch_tool', { id: broken.tool.id })
+    if (
+      failedLaunch.state.status !== 'error' ||
+      failedLaunch.state.code !== 'bad_launch_command' ||
+      !/shelf_upsert_tool/.test(failedLaunch.next || '') ||
+      !/Cannot find module/.test(failedLaunch.logTail || '')
+    ) {
+      throw new Error(`failed launch must carry code/next/logTail, got ${JSON.stringify(failedLaunch).slice(0, 400)}`)
+    }
+    await callTool(client, 'shelf_remove_tool', { id: broken.tool.id })
+    console.log('OK: failed launch → bad_launch_command with next + logTail')
+
+    // Regression: a tool that never listens returns "starting" instead of
+    // holding the request past the client timeout (wait shortened by env).
+    const slowClient = new Client({ name: 'shelf-smoke-slow', version: '0.1.0' })
+    await slowClient.connect(connectServer({ SHELF_MCP_LAUNCH_WAIT_MS: '1500' }))
+    try {
+      const slow = await callTool(slowClient, 'shelf_upsert_tool', {
+        name: `${smokeName} never listens`,
+        projectPath: fixture,
+        launchCommand: 'node -e "setInterval(() => {}, 1000)"',
+        port: fixturePort + 2,
+        checkPort: false,
+      })
+      const t0 = Date.now()
+      const slowLaunch = await callTool(slowClient, 'shelf_launch_tool', { id: slow.tool.id })
+      const elapsed = Date.now() - t0
+      if (slowLaunch.status !== 'starting' || !/shelf_get_status/.test(slowLaunch.next) || elapsed > 10_000) {
+        throw new Error(`slow launch must return starting quickly, got ${slowLaunch.status} after ${elapsed}ms`)
+      }
+      const waited = await callTool(slowClient, 'shelf_get_status', { id: slow.tool.id, waitForMs: 800 })
+      if (waited.state.status !== 'starting' || waited.waitedMs < 700 || !waited.next) {
+        throw new Error(`get_status waitForMs must wait while starting, got ${JSON.stringify(waited)}`)
+      }
+      const slowStopped = await callTool(slowClient, 'shelf_stop_tool', { id: slow.tool.id })
+      if (slowStopped.state.status !== 'stopped') throw new Error('stop must cancel a pending launch')
+      await callTool(slowClient, 'shelf_remove_tool', { id: slow.tool.id })
+      console.log(`OK: never-listening launch returned "starting" after ${elapsed}ms; waitForMs polls`)
+    } finally {
+      await slowClient.close()
+    }
+
+    // Regression: {} must not wipe every tool's history.
+    const clearAll = await client.callTool({ name: 'shelf_clear_receipts', arguments: {} })
+    if (!clearAll.isError || !/all: true/.test(clearAll.content[0].text)) {
+      throw new Error('clear_receipts without id must require all: true')
+    }
+    if ((await callTool(client, 'shelf_list_receipts', { id: toolId })).count < 1) {
+      throw new Error('refused clear must keep history')
+    }
+    const clearedOne = await callTool(client, 'shelf_clear_receipts', { id: toolId })
+    if (typeof clearedOne.removed !== 'number') throw new Error('clear by id must still work')
+    console.log('OK: clear_receipts requires all:true')
 
     // Provenance: the server must stamp receipts with the client identity it
     // learned from the initialize handshake (Client name above).

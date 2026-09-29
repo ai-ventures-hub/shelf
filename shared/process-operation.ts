@@ -45,11 +45,20 @@ export class ProcessOperations {
       const acquired = withFileLockSync(file, () => {
         const state = this.read(file)
         if (state.lease) {
-          try {
-            process.kill(state.lease.pid, 0)
-            if (!state.lease.startedAt || processIdentity(state.lease.pid) === state.lease.startedAt) return false
+          const { pid, startedAt } = state.lease
+          let alive = true
+          try { process.kill(pid, 0) }
+          catch (err) {
+            const code = (err as NodeJS.ErrnoException).code
+            // ESRCH: the host is gone. EPERM: the pid now belongs to another
+            // user, so it cannot be a Shelf host (they run as the user); only
+            // an identity match keeps the lease. Returning "held" on EPERM
+            // left a crashed host's lease stuck for good once its pid was reused.
+            if (code === 'ESRCH') alive = false
+            else if (code === 'EPERM') alive = Boolean(startedAt) && processIdentity(pid) === startedAt
+            else return false
           }
-          catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ESRCH') return false }
+          if (alive && (!startedAt || processIdentity(pid) === startedAt)) return false
         }
         state.lease = { pid: process.pid, token, startedAt: this.startedAt }
         atomicWriteFileSync(file, JSON.stringify(state))

@@ -22,15 +22,17 @@ export function DraftToolsPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  async function accept(id: string) {
+  async function accept(id: string, shownRevision: string) {
     setBusyId(id)
     setNotice(null)
     try {
-      const result = await window.shelf.acceptToolDraft(id)
+      const result = await window.shelf.acceptToolDraft(id, shownRevision)
       setNotice(OUTCOME_COPY[result.outcome] || `Saved (${result.outcome}).`)
       await refresh()
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
+      // A changed or removed draft: show the current sheet, not the old one.
+      await refresh()
     } finally {
       setBusyId(null)
     }
@@ -112,13 +114,25 @@ export function DraftToolsPage() {
                     <dd>{draft.client}</dd>
                   </div>
                 ) : null}
+                {draft.description ? (
+                  <div>
+                    <dt>Description</dt>
+                    <dd>{draft.description}</dd>
+                  </div>
+                ) : null}
+                {draft.capabilities?.length ? (
+                  <div>
+                    <dt>Can do</dt>
+                    <dd>{draft.capabilities.join(' · ')}</dd>
+                  </div>
+                ) : null}
               </dl>
               <div className="action-row">
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
                   disabled={busyId !== null}
-                  onClick={() => void accept(draft.id)}
+                  onClick={() => void accept(draft.id, draft.updatedAt)}
                 >
                   {busyId === draft.id ? 'Saving…' : 'Accept'}
                 </button>

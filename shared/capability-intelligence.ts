@@ -3,6 +3,7 @@ import {
   BARE_SECRET_BOUNDARY,
   BARE_SECRET_SOURCE,
   maskSecrets,
+  stripInvisibleChars,
   type AgentAccess,
   type AgentAccessKind,
   type AgentAccessSummary,
@@ -196,7 +197,24 @@ export function findCapabilityMatches(
   return matches.slice(0, Math.max(1, Math.min(opts.limit ?? 5, 10)))
 }
 
+/**
+ * Checks the text as given AND with invisible characters removed: a
+ * zero-width space inside a token breaks every pattern, and any later strip
+ * (normalizers, name storage) rebuilds the live credential. Callers no longer
+ * need to remember to strip first.
+ */
 export function containsLikelySecret(value: string): boolean {
+  if (looksLikeSecret(value)) return true
+  const visible = stripInvisibleChars(value)
+  return visible !== value && looksLikeSecret(visible)
+}
+
+/** Label of the first free-text field that looks like it holds a credential. */
+export function firstCredentialField(fields: ReadonlyArray<readonly [string, string | undefined]>): string | undefined {
+  return fields.find(([, text]) => Boolean(text) && containsLikelySecret(text!))?.[0]
+}
+
+function looksLikeSecret(value: string): boolean {
   if (SECRET_ASSIGNMENT.test(value) || BEARER_SECRET.test(value) || BARE_SECRET.test(value)) {
     return true
   }

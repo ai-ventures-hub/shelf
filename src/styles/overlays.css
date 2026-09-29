@@ -403,3 +403,64 @@ dialog.diagnostic-report::backdrop { background:rgb(0 0 0 / 65%); }
 .shelf-modal:not([open]) { display: none; }
 .shelf-modal::backdrop { background: transparent; }
 .shelf-modal > :first-child { flex-shrink: 0; }
+
+/* Confirmation dialog: same sheet as the name prompt. */
+.confirm-dialog-message {
+  color:var(--muted);
+  font-size:.92rem;
+  overflow-wrap:anywhere;
+}
+
+/* Non-blocking messages in the bottom corner (manual popover = top layer). */
+.toast-stack {
+  position:fixed;
+  inset:auto 1rem 1rem auto;
+  width:min(360px,calc(100vw - 2rem));
+  margin:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  overflow:visible;
+  display:grid;
+  gap:.5rem;
+}
+
+.toast-stack:not(:popover-open) {
+  display:none;
+}
+
+.toast {
+  display:flex;
+  align-items:flex-start;
+  gap:.5rem;
+  padding:.65rem .65rem .65rem .9rem;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-raised);
+  color:var(--ink);
+  font-size:.88rem;
+  box-shadow:0 12px 32px rgb(0 0 0 / 25%);
+}
+
+.toast[data-tone=error] {
+  border-color:color-mix(in srgb,var(--danger) 55%,var(--line));
+}
+
+.toast[data-tone=warning] {
+  border-color:color-mix(in srgb,var(--warning) 50%,var(--line));
+}
+
+.toast[data-tone=success] {
+  border-color:color-mix(in srgb,var(--success) 45%,var(--line));
+}
+
+.toast-message {
+  flex:1;
+  min-width:0;
+  margin:.3rem 0 0;
+  overflow-wrap:anywhere;
+}
+
+.toast-dismiss {
+  flex-shrink:0;
+}

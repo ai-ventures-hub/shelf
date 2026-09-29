@@ -5,7 +5,7 @@
 import type { LibraryStore } from './library-store'
 import { findPortOccupants } from './ports'
 import type { ProcessRuntimeSupport } from './process-runtime-support'
-import type { LaunchOrigin, RunReceipt } from './types'
+import { adoptedRunNote, type LaunchOrigin, type RunReceipt } from './types'
 
 export interface ExternalOwner {
   ownerPid: number
@@ -46,7 +46,7 @@ export async function reconcileExternalTool(
           toolId,
           status: receipt.outcome === 'starting' ? 'starting' : 'running',
           pid: receipt.pid,
-          message: `${receipt.outcome === 'starting' ? 'Starting' : 'Process running'} · pid ${receipt.pid} (external)`,
+          message: `${receipt.outcome === 'starting' ? 'Starting' : 'Process running'} · pid ${receipt.pid} ${adoptedRunNote(receipt.startedBy)}`,
           port: receipt.port,
           origin: 'external',
           startedBy: receipt.startedBy,
@@ -80,7 +80,7 @@ export async function reconcileExternalTool(
         toolId,
         status: 'running',
         pid: owner.ownerPid,
-        message: `Running · port ${tool.port} (external)`,
+        message: `Running · port ${tool.port} ${adoptedRunNote(owner.startedBy)}`,
         port: tool.port,
         origin: 'external',
         startedBy: owner.startedBy,

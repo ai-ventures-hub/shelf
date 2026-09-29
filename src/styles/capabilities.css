@@ -224,11 +224,6 @@
   vertical-align:-2px;
 }
 
-.gap-suggestion-more {
-  color:var(--subtle);
-  font-size:.78rem;
-}
-
 .gap-actions {
   margin:1rem 0 0;
 }

@@ -21,6 +21,7 @@ const fieldsSchema = z
   })
   .strict()
 const idSchema = z.string().min(1).max(200)
+const MAX_MEMORIES = 1000
 const recordSchema = fieldsSchema
   .extend({
     toolId: idSchema,
@@ -29,7 +30,7 @@ const recordSchema = fieldsSchema
   })
   .strict()
 const fileSchema = z
-  .object({ version: z.literal(1), memories: z.array(recordSchema).max(1000) })
+  .object({ version: z.literal(1), memories: z.array(recordSchema).max(MAX_MEMORIES) })
   .strict()
 const inputSchema = z
   .object({
@@ -67,6 +68,16 @@ export class ProjectMemoryStore {
       )
     }
   }
+  /** Drop a deleted tool's notes. Unreadable files are left untouched. */
+  forget(toolId: string): void {
+    idSchema.parse(toolId)
+    withFileLockSync(this.file, () => {
+      const data = this.read()
+      const memories = data.memories.filter((memory) => memory.toolId !== toolId)
+      if (memories.length === data.memories.length) return
+      atomicWriteFileSync(this.file, JSON.stringify({ version: 1, memories }, null, 2) + '\n')
+    })
+  }
   get(toolId: string): ProjectMemory | null {
     idSchema.parse(toolId)
     return this.read().memories.find((memory) => memory.toolId === toolId) || null
@@ -86,13 +97,15 @@ export class ProjectMemoryStore {
         revision: randomUUID(),
         updatedAt: new Date().toISOString(),
       })
-      const next = fileSchema.parse({
-        version: 1,
-        memories: [
-          ...data.memories.filter((item) => item.toolId !== clean.toolId),
-          memory,
-        ],
-      })
+      const memories = [
+        ...data.memories.filter((item) => item.toolId !== clean.toolId),
+        memory,
+      ]
+      if (memories.length > MAX_MEMORIES)
+        throw new Error(
+          `Project memory holds notes for ${MAX_MEMORIES} tools, its limit. Clear notes for tools you no longer use before adding more.`,
+        )
+      const next = fileSchema.parse({ version: 1, memories })
       const serialized = JSON.stringify(next, null, 2) + '\n'
       if (Buffer.byteLength(serialized, 'utf8') > MAX_FILE_BYTES)
         throw new Error(

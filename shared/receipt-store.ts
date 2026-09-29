@@ -239,7 +239,11 @@ export class ReceiptStore {
           endedAt: now,
           durationMs: Number.isFinite(started) ? Math.max(0, ended - started) : undefined,
           outcome: 'interrupted' as const,
-          message: r.message || 'Shelf quit while this run was still active.',
+          // A live status ("Running · port 5100") contradicts the outcome
+          // once the run is closed; keep only messages that explain an end.
+          message: !r.message || r.outcome === 'running' || r.outcome === 'starting'
+            ? 'The process ended while Shelf was not watching, so its exit was not recorded.'
+            : r.message,
         }
       })
       if (dirty) this.write(this.cap(data))

@@ -1,5 +1,5 @@
 import type { SaveVerificationInput, StartVerificationInput } from '../shared/verification-contracts'
-import type { SaveProjectMemoryInput, ProjectHandoffOptions, AppUpdateState } from '../shared/contracts'
+import type { SaveProjectMemoryInput, ProjectHandoffOptions, AppUpdateState, ToolStarterAgent, ToolStarterRequest } from '../shared/contracts'
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { ShelfApi } from '../shared/desktop-api'
 import type {
@@ -106,8 +106,12 @@ const api = {
 
   getActivityBoard: () => ipcRenderer.invoke('activity:board'),
   listToolDrafts: () => ipcRenderer.invoke('drafts:list'),
-  acceptToolDraft: (id: string) => ipcRenderer.invoke('drafts:accept', id),
+  acceptToolDraft: (id: string, expectedUpdatedAt?: string) => ipcRenderer.invoke('drafts:accept', id, expectedUpdatedAt),
   rejectToolDraft: (id: string) => ipcRenderer.invoke('drafts:reject', id),
+  prepareToolStarter: () => ipcRenderer.invoke('starter:prepare'),
+  createToolFromIdea: (input: ToolStarterRequest) => ipcRenderer.invoke('starter:create', input),
+  chooseToolsFolder: () => ipcRenderer.invoke('starter:chooseFolder'),
+  openToolInAgent: (toolId: string, agent: ToolStarterAgent) => ipcRenderer.invoke('starter:openAgent', toolId, agent),
   listCollections: (): Promise<Collection[]> =>
     ipcRenderer.invoke('collections:list'),
   saveCollection: (collection: Collection): Promise<Collection> =>

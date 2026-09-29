@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url)
 const { LibraryStore } = require('../dist-electron/shared/library-store.js')
 const { ReceiptStore } = require('../dist-electron/shared/receipt-store.js')
 const { ProcessManager } = require('../dist-electron/shared/process-manager.js')
-const { maskSecrets, sanitizeToolForOutput, sanitizeOutput } = require('../dist-electron/shared/types.js')
+const { maskSecrets, sanitizeToolForOutput, sanitizeOutput, toolSecretValues } = require('../dist-electron/shared/types.js')
 const { buildErrorReport } = require('../dist-electron/shared/launch-diagnostics.js')
 const { connectCodexMcp, getCodexMcpStatus } = require('../dist-electron/shared/codex-mcp.js')
 const { ProcessRuntimeSupport } = require('../dist-electron/shared/process-runtime-support.js')
@@ -52,7 +52,18 @@ try {
   fs.writeFileSync(cp, `[mcp_servers.shelf]\ncommand="/nonexistent/audit-node"\nargs=[${JSON.stringify(serverPath)}]\nenabled=false\n`)
   const disabled = await getCodexMcpStatus({ configPath: cp, serverPath, nodeCommand: process.execPath })
   assert.equal(disabled.matches, false, 'disabled/broken config must not qualify as usable')
-  assert.deepEqual(sanitizeOutput({ toolId: 'fixture', status: 'error', message: 'credential error' }, ['fixture', 'error']), { toolId: 'fixture', status: 'error', message: 'credential ***' })
+  assert.deepEqual(sanitizeOutput({ toolId: 'fixture-token-9x', status: 'error', message: 'credential fixture-token-9x' }, ['fixture-token-9x']), { toolId: 'fixture-token-9x', status: 'error', message: 'credential ***' })
+  // Flags and ports are configuration, not credentials. Masking them as
+  // substrings once stored `127.0.0.1` as `***27.0.0.***` in every log line.
+  const configured = toolSecretValues({
+    launchCommand: 'FLEET_NO_BROWSER=1 SESSION_KEY=abcd .venv/bin/python app.py',
+    env: { PYTHONUNBUFFERED: '1', WORDPRESS_FLEET_PORT: '5100', APP_ENV: 'production', FEATURE_FLAG: 'true', LOG_LEVEL: 'error', SPINNER: 'dots', DB_PASS: 'q9z1', REDIS_PW: 'hunt2', ALARM_PIN: '4821', CACHE_TOKEN: 'abc', API_TOKEN: secret },
+  })
+  assert.deepEqual([...configured].sort(), ['abcd', 'q9z1', 'hunt2', '4821', 'abc', secret].sort(), 'flags and ports are configuration; short credential-named values still count')
+  const logLine = '127.0.0.1 - - [28/Sep/2026 21:01:37] "GET /api/sites HTTP/1.1" 200 - production localhost:5100 true none error'
+  assert.equal(maskSecrets(logLine, configured), logLine, 'ordinary env values must not corrupt output')
+  assert.equal(sanitizeOutput({ url: 'http://127.0.0.1:5100/', message: 'Running · port 5100' }, configured).url, 'http://127.0.0.1:5100/')
+  assert.equal(maskSecrets(`login q9z1 token ${secret} ok`, configured), 'login *** token *** ok', 'credential values are still replaced beside ordinary ones')
   const unavailable = new ProcessRuntimeSupport(undefined, undefined, () => [], { currentRun() { return undefined }, append() { throw new Error('disk full') }, read() { return [] } })
   unavailable.appendLog('unavailable', 'system', 'Locally retained evidence')
   assert.ok(unavailable.getLogs('unavailable').some((line) => line.text === 'Locally retained evidence'))

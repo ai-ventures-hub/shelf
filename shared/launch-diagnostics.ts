@@ -11,7 +11,7 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
-import { maskSecrets, toolSecretValues } from './types'
+import { maskCommandEnvPrefix, maskSecrets, toolSecretValues } from './types'
 
 export interface LaunchFailureClassification {
   code: LaunchErrorCode
@@ -21,10 +21,32 @@ export interface LaunchFailureClassification {
 
 const REPORT_LOG_LINES = 30
 
+/**
+ * A module specifier that names a file rather than an npm package:
+ * absolute, ./ or ../ relative, a Windows drive, or a file: URL. Bare names
+ * (express, @scope/pkg, lodash/fp, chart.js) are packages.
+ */
+function isFileSpecifier(spec: string): boolean {
+  return /^(?:\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|file:)/.test(spec)
+}
+
+/**
+ * `Cannot find module '<file>'` is a missing script, not a missing install:
+ * the entry file named by the launch command (node dev-server.mjs) when the
+ * error stands alone, or a broken import inside the app when Node names the
+ * importing file. Only a bare package name means dependencies are missing.
+ */
+function classifyMissingModule(spec: string, text: string): LaunchErrorCode {
+  if (!isFileSpecifier(spec)) return 'deps_missing'
+  // ESM says "imported from <file>"; CommonJS lists a "Require stack:" under
+  // the error. Either way app code asked for the file, not the command.
+  return /imported from|Require stack:/i.test(text) ? 'app_crashed' : 'bad_launch_command'
+}
+
 /** Ordered: first match wins. Specific causes before the generic crash. */
 const LOG_PATTERNS: {
   re: RegExp
-  code: LaunchErrorCode
+  code: LaunchErrorCode | ((m: RegExpMatchArray, text: string) => LaunchErrorCode)
   detail?: (m: RegExpMatchArray) => string
 }[] = [
   {
@@ -39,7 +61,7 @@ const LOG_PATTERNS: {
   },
   {
     re: /Cannot find module\s+'?([^'\s]+)'?/,
-    code: 'deps_missing',
+    code: (m, text) => classifyMissingModule(m[1], text),
     detail: (m) => m[1],
   },
   { re: /ERR_MODULE_NOT_FOUND/, code: 'deps_missing' },
@@ -98,7 +120,11 @@ export function classifyLaunchFailure(
     for (const pattern of LOG_PATTERNS) {
       const m = line.text.match(pattern.re)
       if (m) {
-        return { code: pattern.code, detail: pattern.detail?.(m) }
+        // The lines right after a match carry context such as Node's
+        // "Require stack:", which arrives as its own log line.
+        const context = logs.slice(i, i + 4).map((next) => next.text).join('\n')
+        const code = typeof pattern.code === 'function' ? pattern.code(m, context) : pattern.code
+        return { code, detail: pattern.detail?.(m) }
       }
     }
   }
@@ -124,7 +150,7 @@ export function buildErrorReport(
     tool.projectPath ? `Project folder: ${tool.projectPath}` : null,
     // Masked like receipt-store does at write time: this payload is pasted
     // into agents verbatim, and launch commands carry inline KEY=value env.
-    `Launch command: ${maskSecrets(tool.launchCommand)}`,
+    `Launch command: ${maskSecrets(maskCommandEnvPrefix(tool.launchCommand))}`,
     tool.port ? `Expected port: ${tool.port}` : null,
     tool.url ? `Expected URL: ${tool.url}` : null,
     `Status: ${state.status}${state.code ? ` (${state.code})` : ''}`,

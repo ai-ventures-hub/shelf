@@ -20,7 +20,7 @@ import type { ManifestFieldDiff, ToolManifest } from './contracts'
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { containsLikelySecret, normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
+import { containsLikelySecret, firstCredentialField, normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
 import { urlForPort } from './ports'
 import type { AgentAccess, Tool } from './types'
 
@@ -344,12 +344,11 @@ export function buildManifest(
       ['agent access notes', a.notes],
     ]),
   ]
-  for (const [label, text] of freeText) {
-    if (text && containsLikelySecret(text)) {
-      return {
-        ok: false,
-        reason: `The ${label} looks like it contains a credential. Move secrets into Environment variables (only their names are shared) and try again.`,
-      }
+  const credentialField = firstCredentialField(freeText)
+  if (credentialField) {
+    return {
+      ok: false,
+      reason: `The ${credentialField} looks like it contains a credential. Move secrets into Environment variables (only their names are shared) and try again.`,
     }
   }
   if (tool.launchCommand && /(^|\s)[A-Za-z_][A-Za-z0-9_]*=\S+/.test(tool.launchCommand)) {
