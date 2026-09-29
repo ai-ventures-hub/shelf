@@ -49,8 +49,22 @@ async function run(win) {
     await pause(100)
   }
   async function mode(label) { await js(`[...document.querySelectorAll('.view-toggle button')].find(b=>b.textContent==='${label}').click()`); await pause(150) }
+  // Layout is measured once it has settled. Right after a reload the cards
+  // can render a frame before health warnings or fonts arrive; a slow CI
+  // runner caught that frame (2.2.0 follow-up). A real overlap persists
+  // through every retry and still fails, with the rects that caused it.
   async function fit() {
-    const problems = await js(`(() => {
+    let problems = []
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await js(`document.fonts.ready.then(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))`)
+      problems = await measure()
+      if (!problems.length) return
+      await pause(50)
+    }
+    assert.deepEqual(problems, [])
+  }
+  async function measure() {
+    return js(`(() => {
       const problems=[];
       for(const card of document.querySelectorAll('.tool-card-compact')) {
         const r=card.getBoundingClientRect();
@@ -64,7 +78,7 @@ async function run(win) {
         const warning=card.querySelector('.health-warning-trigger');
         if(warning) {
           const w=warning.getBoundingClientRect();
-          if(title.right+6>w.left || w.right>r.right-10 || w.top<r.top+10 || w.width<32 || w.height<32) problems.push('corner warning overlaps title or card');
+          if(title.right+6>w.left || w.right>r.right-10 || w.top<r.top+10 || w.width<32 || w.height<32) problems.push('corner warning overlaps title or card '+JSON.stringify({name:card.querySelector('.tool-name').textContent.slice(0,24),title:[title.left,title.right].map(Math.round),warning:[w.left,w.right,w.top,w.width,w.height].map(Math.round),card:[r.left,r.right,r.top].map(Math.round)}));
           if(warning.innerText.trim()) problems.push('compact warning still has text');
           if(!warning.getAttribute('aria-label') || !warning.title) problems.push('unlabeled warning');
           if(document.elementFromPoint(w.x+w.width/2,w.y+w.height/2)?.closest('button') !== warning && w.y>=0 && w.bottom<=innerHeight) problems.push('warning is covered by card link');
@@ -75,7 +89,6 @@ async function run(win) {
       if(document.documentElement.scrollWidth>innerWidth) problems.push('page horizontal overflow');
       return problems;
     })()`)
-    assert.deepEqual(problems, [])
   }
   await until(`document.querySelectorAll('.tool-card-compact').length===17 && !!document.querySelector('.health-warning-trigger')`)
   await until(`document.querySelectorAll('.tool-card-compact .tool-icon svg').length===17`)
@@ -187,6 +200,8 @@ app.on('browser-window-created', (_event, win) => {
 })
 function finish(code) {
   app.once('quit', () => fs.rmSync(root, { recursive: true, force: true }))
+  // The verdict for scripts/run-electron-smoke.mjs, which bounds a hung exit.
+  console.log(`SMOKE_RESULT ${code === 0 ? 'pass' : 'fail'}`)
   app.exit(code)
 }
 require('../dist-electron/electron/main')
