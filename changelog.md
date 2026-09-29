@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2.2.1 - 2026-09-29
 
 - Update `ip-address` to 10.7.2 for two moderate advisories
   (GHSA-rpw4-54j3-4h4q, GHSA-2vr4-cq9g-pvrc). It arrives through the MCP
   SDK's HTTP rate limiter, which Shelf's stdio server never loads.
 - Run CI and releases on `actions/checkout@v7` and `actions/setup-node@v7`,
   which use Node 24 instead of the retired Node 20 runtime.
+- Renderer checks in CI and release builds wait for layout to settle, and a
+  hung Electron exit is stopped after the check's result instead of stalling
+  the build until it times out.
 
 ## 2.2.0 - 2026-09-28
 
