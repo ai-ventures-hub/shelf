@@ -21,10 +21,30 @@ export interface LaunchFailureClassification {
 
 const REPORT_LOG_LINES = 30
 
+/**
+ * A module specifier that names a file rather than an npm package:
+ * absolute, ./ or ../ relative, a Windows drive, or a file: URL. Bare names
+ * (express, @scope/pkg, lodash/fp, chart.js) are packages.
+ */
+function isFileSpecifier(spec: string): boolean {
+  return /^(?:\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|file:)/.test(spec)
+}
+
+/**
+ * `Cannot find module '<file>'` is a missing script, not a missing install:
+ * the entry file named by the launch command (node dev-server.mjs) when the
+ * error stands alone, or a broken import inside the app when Node names the
+ * importing file. Only a bare package name means dependencies are missing.
+ */
+function classifyMissingModule(spec: string, text: string): LaunchErrorCode {
+  if (!isFileSpecifier(spec)) return 'deps_missing'
+  return /imported from/i.test(text) ? 'app_crashed' : 'bad_launch_command'
+}
+
 /** Ordered: first match wins. Specific causes before the generic crash. */
 const LOG_PATTERNS: {
   re: RegExp
-  code: LaunchErrorCode
+  code: LaunchErrorCode | ((m: RegExpMatchArray, text: string) => LaunchErrorCode)
   detail?: (m: RegExpMatchArray) => string
 }[] = [
   {
@@ -39,7 +59,7 @@ const LOG_PATTERNS: {
   },
   {
     re: /Cannot find module\s+'?([^'\s]+)'?/,
-    code: 'deps_missing',
+    code: (m, text) => classifyMissingModule(m[1], text),
     detail: (m) => m[1],
   },
   { re: /ERR_MODULE_NOT_FOUND/, code: 'deps_missing' },
@@ -98,7 +118,8 @@ export function classifyLaunchFailure(
     for (const pattern of LOG_PATTERNS) {
       const m = line.text.match(pattern.re)
       if (m) {
-        return { code: pattern.code, detail: pattern.detail?.(m) }
+        const code = typeof pattern.code === 'function' ? pattern.code(m, line.text) : pattern.code
+        return { code, detail: pattern.detail?.(m) }
       }
     }
   }

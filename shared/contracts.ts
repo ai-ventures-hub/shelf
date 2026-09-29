@@ -803,6 +803,9 @@ export interface ToolDraft {
   url?: string
   envKeys: string[]
   client?: string
+  /** Agent-supplied; saved on accept exactly as the sheet shows them. */
+  description?: string
+  capabilities?: string[]
   createdAt: string
   updatedAt: string
 }

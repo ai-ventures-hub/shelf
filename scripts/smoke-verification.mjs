@@ -205,13 +205,33 @@ try {
     }
     const retrieved = await call('shelf_get_verification', { id: tool.id })
     assert.equal(retrieved.runs[0].id, failed.id)
-    const brief = await call('shelf_prepare_verification_handoff', {
-      id: tool.id,
-      runId: failed.id,
+    // Summary rows by default; full steps only for an explicit runId.
+    assert.equal(retrieved.runs[0].steps, failed.steps.length)
+    assert.equal(retrieved.runs[0].failedStep?.status, 'failed')
+    assert.ok(!('owner' in retrieved.runs[0]))
+    const detail = await call('shelf_get_verification', { id: tool.id, runId: failed.id })
+    assert.equal(detail.run.id, failed.id)
+    assert.ok(Array.isArray(detail.run.steps) && detail.run.steps[0].command)
+    assert.ok(!('owner' in detail.run))
+    // Brief is markdown in a plain text block, not a JSON-wrapped string.
+    const briefResult = await client.callTool({
+      name: 'shelf_prepare_verification_handoff',
+      arguments: { id: tool.id, runId: failed.id },
     })
-    assert.ok(
-      brief.markdown.includes('broken') && brief.markdown.includes('Fixture purpose'),
-    )
+    assert.ok(!briefResult.isError, JSON.stringify(briefResult))
+    const briefMarkdown = briefResult.content.find((item) => item.type === 'text').text
+    assert.ok(briefMarkdown.includes('broken') && briefMarkdown.includes('Fixture purpose'))
+    // Security review: lowercase inline env prefixes are masked in commands.
+    const leakyValue = 'abc123LIVEVALUE'
+    const currentRevision = runner.get(tool.id).workflow.revision
+    runner.save({
+      toolId: tool.id,
+      expectedRevision: currentRevision,
+      steps: [step('Leaky', `openai_key=${leakyValue} npm test`)],
+    })
+    const leaky = await client.callTool({ name: 'shelf_get_verification', arguments: { id: tool.id } })
+    assert.ok(!JSON.stringify(leaky).includes(leakyValue), 'inline lowercase env value leaked')
+    assert.match(JSON.parse(leaky.content[0].text).workflow.steps[0].command, /^openai_key=\*\*\* npm test$/)
     const missing = await client.callTool({
       name: 'shelf_prepare_verification_handoff',
       arguments: { id: tool.id, runId: randomUUID() },

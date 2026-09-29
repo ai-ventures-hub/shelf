@@ -114,6 +114,18 @@ export function DraftToolsPage() {
                     <dd>{draft.client}</dd>
                   </div>
                 ) : null}
+                {draft.description ? (
+                  <div>
+                    <dt>Description</dt>
+                    <dd>{draft.description}</dd>
+                  </div>
+                ) : null}
+                {draft.capabilities?.length ? (
+                  <div>
+                    <dt>Can do</dt>
+                    <dd>{draft.capabilities.join(' · ')}</dd>
+                  </div>
+                ) : null}
               </dl>
               <div className="action-row">
                 <button

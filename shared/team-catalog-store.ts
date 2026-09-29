@@ -69,6 +69,28 @@ function normalizeCatalogRecord(raw: unknown): TeamCatalog {
   }
 }
 
+/**
+ * Read-only view of subscribed catalogs for surfaces that must not write
+ * (the MCP server). Unlike the store constructor it never creates, rewrites,
+ * or backs up anything; a missing or unreadable file reads as no catalogs.
+ */
+export function readTeamCatalogs(root = resolveShelfDataRoot()): TeamCatalog[] {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(root, 'team-catalogs.json'), 'utf8'),
+    ) as Partial<TeamCatalogsFile>
+    if (!Array.isArray(parsed.catalogs)) return []
+    return parsed.catalogs.map(normalizeCatalogRecord)
+  } catch {
+    return []
+  }
+}
+
+/** Repo key a catalog entry and an installed tool's source.repo share. */
+export function catalogRepoKey(repo: string): string {
+  return repo.trim().toLowerCase().replace(/\.git$/, '').replace(/\/+$/, '')
+}
+
 /** "github.com/your-team/tools" reads better than the whole clone URL. */
 export function nameFromUrl(url: string): string {
   const trimmed = url.replace(/\.git$/i, '').replace(/\/+$/, '')
