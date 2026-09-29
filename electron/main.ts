@@ -6,6 +6,7 @@ import { prepareProjectHandoff } from '../shared/project-handoff'
 import type { SaveProjectMemoryInput, ProjectHandoffOptions } from '../shared/project-context-contracts'
 import { prepareCatalogStarter, validateCatalogStarter } from '../shared/catalog-starter'
 import { atomicWriteFileSync } from '../shared/atomic-file'
+import { BRAND_ASSET_MIME_TYPES, containedDataUrl, ICON_MIME_TYPES } from '../shared/contained-data-url'
 import {
   app,
   BrowserWindow,
@@ -21,7 +22,7 @@ import { listClientObservations } from '../shared/client-observation'
 import { buildMorningBoard } from '../shared/morning-board'
 import { acceptToolDraft, ToolDraftStore } from '../shared/tool-draft-store'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
-import { containsLikelySecret, deriveToolReadiness } from '../shared/capability-intelligence'
+import { deriveToolReadiness, firstCredentialField } from '../shared/capability-intelligence'
 import { startCollection, stopCollection } from '../shared/collection-launch'
 import { buildDesignBrief } from '../shared/design-brief'
 import { extractProjectTokens } from '../shared/design-extract'
@@ -479,6 +480,10 @@ function registerIpc(): void {
     }
     store.delete(id)
     processes.forget(id)
+    // History for a tool that no longer exists only grows; clear it. Best
+    // effort: a cleanup failure must not undo a completed delete.
+    try { verification.forgetTool(id) } catch { /* left for a later delete */ }
+    try { projectMemory.forget(id) } catch { /* unreadable memory stays untouched */ }
   })
   ipcMain.handle('tools:readiness', (_e, id: string) => {
     const tool = store.get(id)
@@ -610,48 +615,17 @@ function registerIpc(): void {
   )
   // Data-url previews for the editor. Restricted to the brand-assets root so
   // the renderer cannot read arbitrary files through this channel.
-  ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) => {
-    // realpath BOTH sides (like tools:iconDataUrl): a symlinked data root
-    // must still match, and a planted symlink must not escape.
-    const assetsRoot =
-      fs.realpathSync(path.join(designProfiles.getRoot(), 'brand-assets')) + path.sep
-    if (!fs.existsSync(assetPath)) return null
-    // realpath, not resolve: a symlink planted inside brand-assets must not
-    // read files outside it through this channel.
-    const resolved = fs.realpathSync(assetPath)
-    if (!resolved.startsWith(assetsRoot)) return null
-    const ext = path.extname(resolved).toLowerCase()
-    const mime =
-      ext === '.svg'
-        ? 'image/svg+xml'
-        : ext === '.jpg' || ext === '.jpeg'
-          ? 'image/jpeg'
-          : ext === '.webp'
-            ? 'image/webp'
-            : ext === '.gif'
-              ? 'image/gif'
-              : ext === '.ico'
-                ? 'image/x-icon'
-                : ext === '.png'
-                  ? 'image/png'
-                  : ext === '.woff2'
-                    ? 'font/woff2'
-                    : ext === '.woff'
-                      ? 'font/woff'
-                      : ext === '.ttf'
-                        ? 'font/ttf'
-                        : ext === '.otf'
-                          ? 'font/otf'
-                          : null
-    if (!mime) return null // non-previewable (pdf) — renderer shows a glyph tile
-    const buf = fs.readFileSync(resolved)
-    return `data:${mime};base64,${buf.toString('base64')}`
-  })
+  ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) =>
+    // PDFs and other non-previewable types return null; the renderer shows a glyph tile.
+    containedDataUrl(path.join(designProfiles.getRoot(), 'brand-assets'), assetPath, BRAND_ASSET_MIME_TYPES),
+  )
 
   ipcMain.handle('activity:board', () => {
     const verifications = store.list().flatMap((tool) => {
       try {
-        return verification.get(tool.id).runs.map((run) => ({
+        // Pass the record: re-reading library.json per tool cost ~1 ms each
+        // on the main thread (322 ms for 300 tools).
+        return verification.get(tool.id, tool).runs.map((run) => ({
           toolId: tool.id,
           toolName: tool.name,
           status: run.status,
@@ -678,9 +652,10 @@ function registerIpc(): void {
     })
   })
   ipcMain.handle('drafts:list', () => toolDrafts.list())
-  ipcMain.handle('drafts:accept', (_e, id: string) => {
+  ipcMain.handle('drafts:accept', (_e, id: string, expectedUpdatedAt?: string) => {
     const uiPrefs = prefs.get()
     return acceptToolDraft(id, toolDrafts, { store, processes }, {
+      expectedUpdatedAt: typeof expectedUpdatedAt === 'string' ? expectedUpdatedAt : undefined,
       toolDefaults: {
         iconLucide: uiPrefs.defaultIconLucide,
         iconColor: uiPrefs.defaultIconColor,
@@ -789,26 +764,9 @@ function registerIpc(): void {
   // Same containment stance as designProfiles:assetDataUrl: this channel
   // reads ONLY inside the icons dir (realpath on both sides — a planted
   // symlink must not escape, and a symlinked data root must still match).
-  ipcMain.handle('tools:iconDataUrl', (_e, iconPath: string) => {
-    if (!iconPath || !fs.existsSync(iconPath)) return null
-    const iconsRoot = fs.realpathSync(store.getIconsDir()) + path.sep
-    const resolved = fs.realpathSync(iconPath)
-    if (!resolved.startsWith(iconsRoot)) return null
-    const ext = path.extname(resolved).toLowerCase()
-    const mime =
-      ext === '.jpg' || ext === '.jpeg'
-        ? 'image/jpeg'
-        : ext === '.webp'
-          ? 'image/webp'
-          : ext === '.gif'
-            ? 'image/gif'
-            : ext === '.png'
-              ? 'image/png'
-              : null
-    if (!mime) return null // not a renderable icon type — never a raw file read
-    const buf = fs.readFileSync(resolved)
-    return `data:${mime};base64,${buf.toString('base64')}`
-  })
+  ipcMain.handle('tools:iconDataUrl', (_e, iconPath: string) =>
+    containedDataUrl(store.getIconsDir(), iconPath, ICON_MIME_TYPES),
+  )
 
   ipcMain.handle('catalog:prepareStarter', (_e, name: string, toolIds: string[]) => {
     if (!Array.isArray(toolIds) || toolIds.length > 500 || toolIds.some((id) => typeof id !== 'string')) throw new Error('Choose up to 500 tools.')
@@ -1100,20 +1058,18 @@ function registerIpc(): void {
       // entry is pushed to a shared repo, so a credential in a name,
       // description, or capability would live in that repo's history for
       // everyone with clone access.
-      const freeText: Array<[string, string | undefined]> = [
+      const credentialField = firstCredentialField([
         ['name', tool.name],
         ['description', tool.description],
         ...tool.capabilities.map((c): [string, string] => ['capabilities', c]),
-      ]
-      for (const [label, text] of freeText) {
-        if (text && containsLikelySecret(text)) {
-          return shareFailure(
-            new ShareError(
-              'export_refused',
-              `The ${label} looks like it contains a credential, and a catalog entry is pushed to a repository your whole team can read. Move secrets into Environment variables (those are never shared) and try again.`,
-            ),
-          )
-        }
+      ])
+      if (credentialField) {
+        return shareFailure(
+          new ShareError(
+            'export_refused',
+            `The ${credentialField} looks like it contains a credential, and a catalog entry is pushed to a repository your whole team can read. Move secrets into Environment variables (those are never shared) and try again.`,
+          ),
+        )
       }
       const entry: CatalogEntry = {
         name: tool.name,

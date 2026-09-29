@@ -128,6 +128,16 @@ export class ToolDraftStore {
   }
 }
 
+/** Same folder, through symlinks and the case-insensitive default macOS volume. */
+function samePath(a: string, b: string): boolean {
+  const canonical = (value: string) => {
+    let resolved = path.resolve(value)
+    try { resolved = fs.realpathSync.native(resolved) } catch { /* missing: compare as given */ }
+    return process.platform === 'darwin' ? resolved.toLowerCase() : resolved
+  }
+  return canonical(a) === canonical(b)
+}
+
 function isDraft(value: unknown): value is ToolDraft {
   if (!value || typeof value !== 'object') return false
   const draft = value as Partial<ToolDraft>
@@ -151,16 +161,31 @@ export async function acceptToolDraft(
   id: string,
   drafts: ToolDraftStore,
   deps: RegisterProjectDeps,
-  options: Pick<RegisterProjectOptions, 'toolDefaults'> = {},
+  options: Pick<RegisterProjectOptions, 'toolDefaults'> & {
+    /** The draft's updatedAt as shown on the review sheet. */
+    expectedUpdatedAt?: string
+  } = {},
 ): Promise<RegisterProjectResult> {
   const draft = drafts.get(id)
   if (!draft) throw new Error('That draft is no longer waiting.')
+  // An agent can re-stage the same draft id while the sheet is open.
+  if (options.expectedUpdatedAt && draft.updatedAt !== options.expectedUpdatedAt)
+    throw new Error('This draft changed after it was shown. Review it again before accepting.')
+  if (!draft.launchCommand.trim())
+    throw new Error('This draft has no launch command, so there is nothing to save as shown. Reject it, then add the folder with Add tool.')
+  const registered = deps.store.list().find((tool) => tool.projectPath && samePath(tool.projectPath, draft.projectPath))
+  if (registered) {
+    drafts.delete(id)
+    throw new Error(`This folder is already in your library as "${registered.name}". The draft was removed.`)
+  }
   const result = await registerProject(draft.projectPath, deps, {
     autoLaunch: false,
     toolDefaults: options.toolDefaults,
+    // Save exactly what the sheet showed; never fill blanks from a new scan.
+    exactOverrides: true,
     overrides: {
       name: draft.name,
-      ...(draft.launchCommand ? { launchCommand: draft.launchCommand } : {}),
+      launchCommand: draft.launchCommand,
       port: draft.port,
       url: draft.url,
     },

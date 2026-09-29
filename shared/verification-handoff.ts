@@ -1,7 +1,7 @@
 import { prepareProjectHandoff, type ProjectContextServices } from './project-handoff'
 import { VerificationStore } from './verification-store'
 import { RunLogStore } from './run-log-store'
-import { maskSecrets, toolSecretValues } from './types'
+import { maskCommandEnvPrefix, maskSecrets, toolSecretValues } from './types'
 import { verificationActive } from './verification-contracts'
 
 /** Explicitly selected verification evidence, alongside the existing memory handoff. */
@@ -39,7 +39,7 @@ export async function prepareVerificationHandoff(
     run.message || '',
     ...run.steps.map(
       (step, index) =>
-        `${index + 1}. ${step.label}: ${step.status}\n   Command: ${step.command}\n   Timeout: ${step.timeoutSeconds}s; exit code: ${step.exitCode ?? 'not recorded'}${step.message ? `\n   ${step.message}` : ''}`,
+        `${index + 1}. ${step.label}: ${step.status}\n   Command: ${maskCommandEnvPrefix(step.command)}\n   Timeout: ${step.timeoutSeconds}s; exit code: ${step.exitCode ?? 'not recorded'}${step.message ? `\n   ${step.message}` : ''}`,
     ),
     'These results apply to files present when the run executed. Shelf does not snapshot the working tree. Skipped steps were not verified.',
     failed

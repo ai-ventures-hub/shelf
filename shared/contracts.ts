@@ -754,6 +754,12 @@ export interface RegisterProjectOptions {
   setupSteps?: BootstrapStep[]
   /** Provenance recorded on the saved tool (shared tools). */
   source?: ToolSource
+  /**
+   * Use the overrides' launch command, port, and url exactly as given, never
+   * filling a blank from a fresh folder scan. Draft acceptance saves what the
+   * review sheet showed, not what the folder holds by the time of the click.
+   */
+  exactOverrides?: boolean
 }
 
 /**

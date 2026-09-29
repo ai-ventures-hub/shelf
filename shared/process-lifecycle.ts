@@ -112,19 +112,6 @@ async function terminateTargets(targets: number[]): Promise<void> {
   if (await alive()) throw new Error('The owned process group did not stop. Retry Stop or inspect the remaining processes.')
 }
 
-export function waitForExit(child: ChildProcess, ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return }
-    const done = () => {
-      clearTimeout(timer)
-      child.off('exit', done)
-      resolve()
-    }
-    const timer = setTimeout(done, ms)
-    child.once('exit', done)
-  })
-}
-
 /**
  * Poll until something accepts TCP on the port. Probes BOTH loopback stacks
  * each tick: frameworks that bind `localhost` (Vite 6 default) often listen

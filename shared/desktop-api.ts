@@ -98,7 +98,8 @@ export interface ShelfApi {
   getIconDataUrl: (iconPath: string) => Promise<string | null>
   getActivityBoard: () => Promise<MorningEvent[]>
   listToolDrafts: () => Promise<ToolDraft[]>
-  acceptToolDraft: (id: string) => Promise<RegisterProjectResult>
+  /** expectedUpdatedAt: the draft revision the sheet showed; a changed draft is refused. */
+  acceptToolDraft: (id: string, expectedUpdatedAt?: string) => Promise<RegisterProjectResult>
   rejectToolDraft: (id: string) => Promise<void>
   listCollections: () => Promise<Collection[]>
   saveCollection: (collection: Collection) => Promise<Collection>

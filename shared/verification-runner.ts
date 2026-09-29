@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { StringDecoder } from 'node:string_decoder'
 import { z } from 'zod'
 import type { ChildProcess } from 'node:child_process'
+import type { Tool } from './contracts'
 import type { LibraryStore } from './library-store'
 import { processIdentity } from './process-identity'
 import {
@@ -14,7 +15,7 @@ import {
 import { ProcessRuntimeSupport } from './process-runtime-support'
 import { RunLogStore } from './run-log-store'
 import { readProjectFacts } from './project-facts'
-import { maskSecrets, sanitizeOutput, toolSecretValues } from './types'
+import { maskCommandEnvPrefix, maskSecrets, sanitizeOutput, toolSecretValues } from './types'
 import { VerificationStore } from './verification-store'
 import {
   verificationActive,
@@ -57,8 +58,9 @@ export class VerificationRunner {
     if (!tool) throw new Error('This tool is no longer in the library.')
     return tool
   }
-  get(id: string) {
-    const tool = this.tool(id)
+  /** `known` skips re-reading library.json when the caller already holds the record. */
+  get(id: string, known?: Tool) {
+    const tool = known && known.id === id ? known : this.tool(id)
     const state = this.store.get(id)
     for (const run of state.runs) {
       if (!verificationActive(run.status) || this.active.get(id)?.run.id === run.id)
@@ -89,7 +91,7 @@ export class VerificationRunner {
     return {
       ...state,
       runs: state.runs.map((run) => ({
-        ...sanitizeOutput(run, toolSecretValues(tool)),
+        ...sanitizeOutput({ ...run, steps: run.steps.map((step) => ({ ...step, command: maskCommandEnvPrefix(step.command) })) }, toolSecretValues(tool)),
         owner: run.owner,
         child: run.child,
       })),
@@ -398,8 +400,10 @@ export class VerificationRunner {
     })
   }
   async cancel(id: string, runId: string) {
-    this.tool(id)
     z.string().uuid().parse(runId)
+    // A run this host owns can always be cancelled, even after an agent
+    // removed its tool; otherwise Quit and Restart and update stay blocked
+    // until the run ends on its own.
     const local = this.active.get(id)
     if (local && local.run.id === runId) {
       local.controller.abort()
@@ -424,6 +428,7 @@ export class VerificationRunner {
       this.active.delete(id)
       return
     }
+    this.tool(id)
     const run = this.get(id).runs.find((item) => item.id === runId)
     if (!run || !verificationActive(run.status)) return
     const ownerIdentity = processIdentity(run.owner.pid, true)
@@ -482,9 +487,15 @@ export class VerificationRunner {
     const failed = results.find((result) => result.status === 'rejected')
     if (failed?.status === 'rejected') throw failed.reason
   }
+  /** Drop stored history for a deleted tool. A run still active here keeps its record. */
+  forgetTool(id: string) {
+    if (this.active.has(id)) return
+    this.store.forget(id)
+  }
   async stopTool(id: string) {
-    for (const run of this.get(id).runs.filter((run) => verificationActive(run.status)))
-      await this.cancel(id, run.id)
+    if (this.library.get(id))
+      for (const run of this.get(id).runs.filter((run) => verificationActive(run.status)))
+        await this.cancel(id, run.id)
     const local = this.active.get(id)
     if (local) await this.cancel(id, local.run.id)
   }

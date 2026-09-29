@@ -31,14 +31,6 @@ export function resolveClaudeCodeConfigPath(home = os.homedir()): string {
   return path.join(home, '.claude.json')
 }
 
-/** True when Claude Code has run on this Mac (config or state dir present). */
-export function detectClaudeCodeInstalled(home = os.homedir()): boolean {
-  return (
-    fs.existsSync(path.join(home, '.claude.json')) ||
-    fs.existsSync(path.join(home, '.claude'))
-  )
-}
-
 export function readClaudeCodeConfig(configPath: string): ClaudeCodeConfigFile {
   if (!fs.existsSync(configPath)) return { mcpServers: {} }
   try {
@@ -229,6 +221,3 @@ export async function disconnectClaudeCodeMcp(opts: {
     'Shelf removed from Claude Code. Start a new session to apply.'
   return { status }
 }
-
-export const CLAUDE_CODE_TEST_PROMPT =
-  'List my Shelf tools and tell me which ones are running.'

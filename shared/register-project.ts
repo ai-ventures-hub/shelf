@@ -91,13 +91,14 @@ function newToolFrom(
   defaults: RegisterProjectOptions['toolDefaults'],
   overrides: RegisterOverrides = {},
   source?: ToolSource,
+  exact = false,
 ): Tool {
   const now = new Date().toISOString()
-  const launchCommand = overrides.launchCommand || suggestion.launchCommand || ''
+  const launchCommand = exact ? overrides.launchCommand || '' : overrides.launchCommand || suggestion.launchCommand || ''
   // A manifest port wins; its url is a loopback template the launch path
   // port-rewrites if the port gets healed.
-  const port = overrides.port ?? suggestion.port
-  const url = overrides.url || suggestion.url
+  const port = exact ? overrides.port : overrides.port ?? suggestion.port
+  const url = exact ? overrides.url : overrides.url || suggestion.url
   return {
     id: '',
     name: overrides.name?.trim() || suggestion.name?.trim() || path.basename(resolved),
@@ -169,8 +170,9 @@ export async function registerProject(
       : gate(suggestion)
 
   const setupNeeds = options.setupSteps ?? detectBootstrapNeeds(resolved, facts)
-  const launchCommand =
-    existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
+  const launchCommand = options.exactOverrides && !existing
+    ? overrides?.launchCommand || ''
+    : existing?.launchCommand || overrides?.launchCommand || suggestion.launchCommand || ''
   const issues: PreflightIssue[] = preflightProject(resolved, launchCommand, facts)
   if (usesDocker(launchCommand)) {
     const docker = await checkDockerDaemon()
@@ -196,7 +198,7 @@ export async function registerProject(
           ...mergeIntoExisting(existing, suggestion),
           ...(options.source ? { source: existing.source || options.source } : {}),
         }
-      : newToolFrom(suggestion, resolved, options.toolDefaults, overrides, options.source),
+      : newToolFrom(suggestion, resolved, options.toolDefaults, overrides, options.source, options.exactOverrides),
   )
   const base = {
     tool,

@@ -181,4 +181,16 @@ export class VerificationStore {
   logRoot(runId: string) {
     return path.join(this.root, 'runs', uuid.parse(runId))
   }
+  /** Remove a deleted tool's workflow, history, and run logs. */
+  forget(toolId: string) {
+    const file = this.file(toolId)
+    withFileLockSync(file, () => {
+      let runIds: string[] = []
+      try { runIds = this.get(toolId).runs.map((run) => run.id) } catch { /* unreadable: still remove the record */ }
+      for (const runId of runIds) {
+        try { fs.rmSync(this.logRoot(runId), { recursive: true, force: true }) } catch { /* best effort */ }
+      }
+      fs.rmSync(file, { force: true })
+    })
+  }
 }

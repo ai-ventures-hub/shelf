@@ -32,7 +32,7 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
-import { adoptedRunNote, toolSecretValues } from './types'
+import { adoptedRunNote, maskCommandEnvPrefix, toolSecretValues } from './types'
 export type { PortConflictPolicy, StartOptions } from './contracts'
 
 interface ManagedProcess {
@@ -268,7 +268,7 @@ export class ProcessManager {
       startedBy: origin,
     })
 
-    this.runtime.appendLog(toolId, 'system', `Launch: ${tool.launchCommand}`)
+    this.runtime.appendLog(toolId, 'system', `Launch: ${maskCommandEnvPrefix(tool.launchCommand)}`)
     if (reassignedFrom && tool.port) {
       this.runtime.appendLog(
         toolId,
@@ -302,7 +302,7 @@ export class ProcessManager {
       const receipt = this.runtime.beginReceipt({
         toolId,
         toolName: tool.name,
-        launchCommand: tool.launchCommand,
+        launchCommand: maskCommandEnvPrefix(tool.launchCommand),
         port: tool.port,
         url: tool.url,
         pid: child.pid,
@@ -527,7 +527,7 @@ export class ProcessManager {
         this.runtime.emitFailedReceipt({
           toolId,
           toolName: tool.name,
-          launchCommand: tool.launchCommand,
+          launchCommand: maskCommandEnvPrefix(tool.launchCommand),
           port: tool.port,
           url: tool.url,
           startedAt,
@@ -615,7 +615,7 @@ export class ProcessManager {
     // previously threw past terminateProcess and left a live child behind.)
     let stopCommandError: string | null = null
     if (tool?.stopCommand?.trim()) {
-      this.runtime.appendLog(toolId, 'system', `Stop command: ${tool.stopCommand}`)
+      this.runtime.appendLog(toolId, 'system', `Stop command: ${maskCommandEnvPrefix(tool.stopCommand)}`)
       try {
         await runOnce(tool.stopCommand, tool.projectPath, tool.env)
       } catch (err) {

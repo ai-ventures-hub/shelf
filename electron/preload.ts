@@ -106,7 +106,7 @@ const api = {
 
   getActivityBoard: () => ipcRenderer.invoke('activity:board'),
   listToolDrafts: () => ipcRenderer.invoke('drafts:list'),
-  acceptToolDraft: (id: string) => ipcRenderer.invoke('drafts:accept', id),
+  acceptToolDraft: (id: string, expectedUpdatedAt?: string) => ipcRenderer.invoke('drafts:accept', id, expectedUpdatedAt),
   rejectToolDraft: (id: string) => ipcRenderer.invoke('drafts:reject', id),
   listCollections: (): Promise<Collection[]> =>
     ipcRenderer.invoke('collections:list'),
