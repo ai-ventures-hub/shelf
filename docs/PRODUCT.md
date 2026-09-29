@@ -145,7 +145,7 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   sidebar updates, Compact view), the Activity page, ordered collection
   stacks, and agent registration drafts. See `docs/phase*.md`,
   `docs/project-verification.md`, and `docs/desktop-polish-2.0.md`.
-- **Next — Start a new tool** (built 2026-09-28, unreleased): Shelf creates
+- **v2.2 — Start a new tool** (released 2026-09-28, `v2.2.0`): Shelf creates
   tools, not only keeps them. Describe the idea; Shelf writes a small
   project that already runs (zero-dependency Node server on a loopback
   port no other tool claims), the chosen design profile as DESIGN.md and
