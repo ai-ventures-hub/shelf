@@ -10,7 +10,7 @@
   gap:.7rem;
   width:100%;
   padding:.55rem .75rem;
-  border:1px solid var(--line);
+  border:1px solid var(--line-strong);
   border-radius:var(--radius-control);
   background:var(--input);
   color:var(--ink);
@@ -104,7 +104,7 @@
   align-items:center;
   gap:.55rem;
   padding:.35rem .55rem;
-  border:1px solid var(--line);
+  border:1px solid var(--line-strong);
   border-radius:var(--radius-control);
   background:var(--input);
 }
@@ -197,8 +197,8 @@
 .warning-card {
   padding:1rem 1.1rem;
   border-radius:12px;
-  border:1px solid rgb(243 188 98 / 35%);
-  background:#f3bc621a;
+  border:1px solid color-mix(in srgb,var(--warning) 35%,transparent);
+  background:var(--tint-warning);
   color:var(--ink);
   font-size:.92rem;
 }

@@ -352,22 +352,22 @@
 
 .status-pill[data-tone=success] {
   color:var(--success);
-  background:#48d5971f;
+  background:var(--tint-success);
 }
 
 .status-pill[data-tone=warning] {
   color:var(--warning);
-  background:#f3bc621f;
+  background:var(--tint-warning);
 }
 
 .status-pill[data-tone=danger] {
   color:var(--danger);
-  background:#f0787d1f;
+  background:var(--tint-danger);
 }
 
 .status-pill[data-tone=neutral] {
-  color:var(--subtle);
-  background:#6f7a9124;
+  color:var(--pill-neutral);
+  background:var(--tint-neutral);
 }
 
 .tag-chip {
@@ -387,7 +387,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .detail-layout,
   .form-grid {
     grid-template-columns: 1fr;
   }

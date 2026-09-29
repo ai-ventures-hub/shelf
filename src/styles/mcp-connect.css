@@ -248,16 +248,6 @@
   font-size: 0.85em;
 }
 
-.link-button {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--brand-strong);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
 .mcp-advanced-body .code-block {
   margin: 0;
@@ -313,36 +303,6 @@
 }
 
 /* moved from app.css */
-.connect-hero-lede {
-  margin:0;
-  font-size:1.05rem;
-  font-weight:650;
-  letter-spacing:-.01em;
-  color:var(--ink);
-}
-
-.link-button {
-  margin:0;
-  padding:0;
-  border:0;
-  background:none;
-  color:var(--brand-strong);
-  font:inherit;
-  text-decoration:underline;
-  cursor:pointer;
-}
-
-.mcp-layout {
-  display:grid;
-  grid-template-columns:220px minmax(0,1fr);
-  gap:1rem;
-  align-items:start;
-}
-
-.mcp-client-nav .nav-item {
-  width:100%;
-}
-
 .code-block {
   margin:0;
   padding:.85rem 1rem;
@@ -369,22 +329,3 @@
   color:var(--muted);
 }
 
-.mcp-tool-list {
-  margin:0;
-  padding-left:1.1rem;
-  color:var(--muted);
-}
-
-.mcp-tool-list li {
-  margin:.35rem 0;
-}
-
-.mcp-tool-list code {
-  color:var(--brand-strong);
-  font-size:.86em;
-}
-
-@media(max-width:1000px) {
-  .mcp-layout {
-grid-template-columns:1fr};
-}

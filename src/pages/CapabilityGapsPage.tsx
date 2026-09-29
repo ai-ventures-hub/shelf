@@ -116,7 +116,7 @@ export function CapabilityGapsPage() {
               capabilities: gap.capabilities.join('\n'),
             })
             return (
-              <article className="panel gap-card" key={gap.id}>
+              <article className="panel" key={gap.id}>
                 <div className="panel-header gap-card-header">
                   <div>
                     <div className="capability-chips">
@@ -128,7 +128,7 @@ export function CapabilityGapsPage() {
                   </div>
                   <span className={`readiness-badge is-${gap.status}`}>{gap.status}</span>
                 </div>
-                <div className="panel-body gap-body">
+                <div className="panel-body">
                   <p className="gap-reason">{gap.reason}</p>
                   <dl className="gap-meta">
                     <div>

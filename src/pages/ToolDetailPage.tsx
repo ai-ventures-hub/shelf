@@ -499,7 +499,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
 
       </>}
 
-      {section === 'overview' && <section className="panel run-summary">
+      {section === 'overview' && <section className="panel">
         <div className="panel-header"><h2 className="panel-title">Last run</h2></div>
         <div className="panel-body stack">
           {receipts[0] ? <><strong>{receipts[0].outcome.replaceAll('_', ' ')} · {formatRelativeTime(receipts[0].startedAt)}</strong><p>{receipts[0].message || 'No additional status message.'}</p><p className="muted">Started by {launchOriginLabel(receipts[0].startedBy) || 'Shelf'}{receipts[0].durationMs === undefined ? '' : ` · ${(receipts[0].durationMs / 1000).toFixed(1)} seconds`}</p></> : <p>No run recorded yet. Launch the tool to check how it behaves.</p>}
@@ -508,7 +508,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
         </div>
       </section>}
       {isDeveloper && section === 'overview' ? (
-      <section className="panel capability-panel">
+      <section className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Capability intelligence</h2>
           {readiness ? (

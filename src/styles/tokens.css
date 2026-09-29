@@ -9,12 +9,16 @@
 
   --ink: #f6f7fb;
   --muted: #99a3b8;
-  --subtle: #6f7a91;
+  /* 4.8:1 on --panel-raised, 5.2:1 on --panel (WCAG AA body text). */
+  --subtle: #7f8aa3;
 
   --surface: #090d16;
   --panel: #111725;
   --panel-raised: #171e2f;
+  /* Decorative dividers and card edges. */
   --line: #273047;
+  /* Form-control boundaries: 3:1 against --input and --panel (WCAG 1.4.11). */
+  --line-strong: #616c88;
   --input: #0b101c;
 
   --brand: #7895ff;
@@ -25,6 +29,18 @@
   --danger: #f0787d;
   /* Favorite gold — shares the warning family hue for palette harmony. */
   --favorite: #f3bc62;
+
+  /* Low-opacity semantic surfaces for pills, notices, and danger buttons.
+     Each pairs with its semantic text color above at 4.5:1 or better. */
+  --tint-success: rgb(72 213 151 / 12%);
+  --tint-warning: rgb(243 188 98 / 12%);
+  --tint-danger: rgb(240 120 125 / 12%);
+  --tint-brand: rgb(120 149 255 / 12%);
+  --tint-neutral: rgb(127 138 163 / 14%);
+  /* Neutral ("Stopped") pill text sits on --tint-neutral. */
+  --pill-neutral: #99a3b8;
+
+  --font-mono: SFMono-Regular, ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;
 
   --sidebar-bg: rgb(9 13 22 / 86%);
   --sidebar-width: 250px;
@@ -48,21 +64,32 @@
 
   --ink: #121826;
   --muted: #4b556b;
-  --subtle: #6b7288;
+  --subtle: #646b80;
 
   --surface: #f3f5fb;
   --panel: #ffffff;
   --panel-raised: #ffffff;
   --line: #d7dce8;
+  --line-strong: #7f889e;
   --input: #ffffff;
 
-  --brand: #4f6ef2;
-  --brand-strong: #3d5ce0;
+  /* White on --brand is 5.5:1; --brand-strong is the hover and link shade. */
+  --brand: #3d5ce0;
+  --brand-strong: #2f4cc6;
 
-  --success: #1f9d63;
-  --warning: #c98512;
-  --danger: #d04850;
+  /* Darker than the dark-theme hues so text and pills read on white. */
+  --success: #157a4c;
+  --warning: #94600a;
+  --danger: #b8333b;
+  /* Star glyph only (non-text, 3:1 on white). */
   --favorite: #c98512;
+
+  --tint-success: rgb(21 122 76 / 10%);
+  --tint-warning: rgb(148 96 10 / 10%);
+  --tint-danger: rgb(184 51 59 / 10%);
+  --tint-brand: rgb(61 92 224 / 10%);
+  --tint-neutral: rgb(100 107 128 / 12%);
+  --pill-neutral: #5c6378;
 
   --sidebar-bg: rgb(255 255 255 / 92%);
   --surface-glow: rgb(79 110 242 / 12%);

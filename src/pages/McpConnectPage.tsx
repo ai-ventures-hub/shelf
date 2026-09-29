@@ -289,7 +289,7 @@ export function McpConnectPage() {
         </div>
       </header>
 
-      <section className="mcp-clients" aria-label="Supported clients">
+      <section aria-label="Supported clients">
         <h2 className="mcp-section-label">Supported clients</h2>
         <div className="mcp-client-list">
           {visibleClients.map((client) => (

@@ -409,8 +409,8 @@ export function QuickOpen({
             <p className="quick-open-empty">No matches</p>
           ) : (
             groups.map((group) => (
-              <div key={group.kind} className="quick-open-group">
-                <p className="quick-open-group-label">{group.label}</p>
+              <div key={group.kind} role="group" aria-label={group.label}>
+                <p className="quick-open-group-label" aria-hidden>{group.label}</p>
                 {(group.items as Runnable[]).map((item) => {
                   const index = indexById.get(item.id) ?? 0
                   const active = index === activeIndex

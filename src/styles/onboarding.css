@@ -110,7 +110,7 @@
 .onboarding-field input {
   min-height: 42px;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   background: var(--input);
   color: var(--ink);

@@ -182,7 +182,7 @@ export function ToolListRow({
   const extraTags = Math.max(0, tool.tags.length - visibleTags.length)
 
   return (
-    <tr className="tool-list-row" data-status={status}>
+    <tr data-status={status}>
       <td>
         <Link to={`/tools/${tool.id}`} className="tool-list-name">
           <ToolIcon
