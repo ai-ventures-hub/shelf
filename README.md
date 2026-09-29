@@ -23,6 +23,9 @@ query what you've built, launch it, and honestly record what's missing.
 
 ## What it does
 
+- **Start a tool from an idea.** Describe what you need. Shelf writes a small project that already
+  runs, with your design profile and a build brief, adds it to your library, and opens Claude Code
+  or Codex in the folder to build the rest. Your agent builds; Shelf already knows how to run it.
 - **One click, no ritual.** Point Shelf at a project folder. It scans for scripts, ports, package
   manager, and `DESIGN.md`, and suggests a launch config. Accept it and the tool lives in your library.
 - **Status that doesn't lie.** Port-backed tools never report Running until TCP readiness actually
@@ -41,6 +44,11 @@ query what you've built, launch it, and honestly record what's missing.
   values never leaving your Mac. A team is a git repo holding a `catalog.json`: point Shelf at it
   once and **Team Tools** lists everything your teammates published, one Install away. No Shelf
   server, no account — access is whatever your git host already says it is.
+- **Project memory, checks, and handoffs.** Save a project's purpose and decisions, run its
+  typecheck/lint/test/build steps after reviewing them, and hand a failure to your agent with the
+  evidence attached. Agents read all of it; running commands stays in the app.
+- **Stacks and activity.** Start a collection in member order, see what launched and what is waiting
+  on you in Activity, and accept or reject tools an agent asked to register.
 - **Quick Open** (`⌘K`), menu bar mode, and a `shelf://` URL scheme.
 
 ## Install
@@ -56,7 +64,7 @@ Requires **macOS on Apple Silicon** (M1 or later). No Intel build. No account, n
 
 ## Use
 
-1. Click **Add tool** (or press `⌘N`).
+1. Click **Add tool** (or press `⌘N`). Starting from scratch? Choose **Start a new tool instead**.
 2. Choose a project folder — Shelf suggests launch command, port, tags, and `DESIGN.md` when it can.
 3. Open the tool and click **Launch** — or use **Quick Open** (`⌘K`) to jump to a tool and `⌘↵` to
    launch/stop.
@@ -88,7 +96,7 @@ revision conflicts, and the read-only agent contract.
 
 ## MCP — giving agents your shelf
 
-**Easiest path:** open Shelf → **MCP Connections** → Connect Claude, Cursor, or Codex. Shelf writes
+**Easiest path:** open Shelf → **AI Connections** → Connect Claude, Claude Code, Cursor, or Codex. Shelf writes
 the client MCP config for you (Claude: quit and reopen; Cursor: reload MCP; Codex: restart the client or start a new session), then ask *"List my Shelf tools."*
 
 Shelf exposes a local stdio MCP server that reads and writes the **same** library as the GUI, and can
@@ -145,10 +153,19 @@ Everything Shelf knows is plain JSON in one folder you can read, back up, or del
 
 ```
 ~/Library/Application Support/Shelf/
-├── library.json           your tools
+├── library.json           your tools and collections
+├── receipts.json          what launched, when, and who started it
+├── logs/                  the last five runs' output per tool
 ├── capability-gaps.json   what agents needed and couldn't find
-└── receipts.json          what launched, when
+├── design-profiles.json   your brands (assets in brand-assets/)
+├── project-memory.json    notes you saved for each project
+├── verification/          saved checks and their results
+├── tool-drafts.json       registrations waiting for you to accept
+├── team-catalogs.json     team catalogs you follow
+└── prefs.json             your settings
 ```
+
+New tools you start in Shelf go in `~/Shelf Tools/` unless you choose another folder.
 
 **No account. No cloud sync. No telemetry.**
 
@@ -213,7 +230,7 @@ The Next.js site lives in [`site/`](site/). See [`site/README.md`](site/README.m
 | Command | Purpose |
 |---|---|
 | `npm run electron:dev` | Dev app with hot reload |
-| `npm run build` | Compile shared + Electron + MCP + Vite |
+| `npm run build` | Clean, typecheck shared, compile Electron + MCP + Vite |
 | `npm run mcp` | Build and run the MCP server on stdio |
 | `npm run typecheck` | TypeScript checks |
 | `npm run smoke` | Shell/port readiness smoke test |
@@ -235,7 +252,9 @@ The Next.js site lives in [`site/`](site/). See [`site/README.md`](site/README.m
 
 </details>
 
-CI runs `npm run typecheck` and `npm run smoke:all` on macOS for pushes and PRs to `main`.
+CI runs a dependency audit, `npm run typecheck`, `npm run build`, `npm run smoke:all`, and the
+real-renderer checks (`smoke-compact-ui.cjs`, `smoke-starter-ui.cjs`) on macOS for pushes and PRs to
+`main`. Release tags run the same gate before signing.
 
 ## Status
 

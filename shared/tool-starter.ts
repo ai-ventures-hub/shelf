@@ -252,7 +252,7 @@ export function agentsBrief(input: Omit<StarterFileInput, 'toolId'> & { toolId?:
 
 ${input.idea}
 
-You are building this tool from scratch in this folder. Shelf, the user's local tool library, created the folder${input.toolId ? ', registered the tool, and launches it' : ' and will launch the tool'}. Build the smallest version that does the job well, then stop and summarize what you built.
+You are building this tool from scratch in this folder. ${input.toolId ? "Shelf, the user's local tool library, created the folder, registered the tool, and launches it." : "It will live in Shelf, the user's local tool library, which launches it."} Build the smallest version that does the job well, then stop and summarize what you built.
 
 ## Shelf tool contract
 
@@ -508,4 +508,42 @@ function isDirectory(target: string): boolean {
 function isEmptyDirectory(target: string): boolean {
   if (!isDirectory(target)) return false
   return fs.readdirSync(target).every((entry) => entry === '.DS_Store')
+}
+
+/**
+ * The MCP `new-tool` prompt: the same recipe for an agent that starts from a
+ * chat instead of the desktop. The agent creates the folder itself and ends
+ * with shelf_register_project, so the user still accepts the draft in Shelf.
+ */
+export function buildNewToolPrompt(input: {
+  idea: string
+  name?: string
+  port: number
+  toolsRoot: string
+  profile?: DesignProfile
+}): string {
+  const name = input.name?.trim()
+  const folder = path.join(input.toolsRoot, name ? folderNameFor(name) : '<Tool Name>')
+  const steps = [
+    `Build a new local tool for the user's Shelf library.`,
+    '',
+    '## Set up',
+    '',
+    `1. Create the folder \`${folder}\`${name ? '' : ' (choose a short, title-case name)'}. It must be new or empty.`,
+    `2. Use port ${input.port}. It is free and no tool in the user's library claims it. If it is taken by the time you start, call \`shelf_find_free_port\`.`,
+    input.profile
+      ? `3. Call \`shelf_get_design_profile\` with id \`${input.profile.id}\` ("${input.profile.name}", the user's default) and save its brief as DESIGN.md. Put its color and font tokens in \`public/tokens.css\` as CSS variables.`
+      : '3. No design profile is set up. Use calm, neutral styling with light and dark modes.',
+    '4. Save the brief below as AGENTS.md in the folder, then build the tool it describes.',
+    '',
+    '---',
+    '',
+  ]
+  return steps.join('\n') + agentsBrief({
+    name: name || '<Tool Name>',
+    idea: input.idea.trim(),
+    port: input.port,
+    launchCommand: 'node server.mjs',
+    profile: input.profile,
+  })
 }

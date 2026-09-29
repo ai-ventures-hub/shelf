@@ -32,7 +32,7 @@ Free, local-first, no account required:
 - Lucide tool icons with customizable background / glyph colors
 - Run receipts / launch history (local, capped)
 - Menu bar tray, global show/hide shortcut, OS `shelf://` URL scheme
-- One-click Connect Claude Desktop, Cursor, and Codex (compact MCP Connections UI; Advanced for paths/tools)
+- One-click Connect Claude Desktop, Claude Code, Cursor, and Codex (compact MCP Connections UI; Advanced for paths/tools)
 - MCP path prefers `/Applications/Shelf.app` over Desktop when both exist
 - Run receipt filters + JSON/CSV export; Quick Open recent-run actions
 - Menu bar Running submenu (open / URL / stop) and `shelf://` deep-link docs
@@ -52,7 +52,7 @@ Free, local-first, no account required:
 3. ~~Prefer MCP path `/Applications/Shelf.app/...` over Desktop~~ (**0.3.15**)
 4. ~~Code size follow-ups~~ (**0.3.19**)
 5. Invite wave — see [`INVITE.md`](INVITE.md) (Gatekeeper, Connect, example prompts). Optional private GitHub Release notes for `v0.4.0`. Prefer small private invites over a public blast until Connect + discovery are proven with strangers.
-6. Signed/notarized macOS build + auto-update (later Community)
+6. ~~Signed/notarized macOS build + auto-update~~ — done (`release.yml` signs, notarizes, and publishes; electron-updater installs)
 
 ## Shelf Profiles (future add-on)
 
@@ -137,10 +137,32 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   credential. Agent-driven install stays unbuilt for the same reason
   `shelf_add_shared_tool` was in 1.2; a read-only `shelf_list_team_tools`
   is deferred. (Was earmarked v1.3; collections took that number first.)
+- **v1.5–2.1 — Stabilize, simplify, improve, project context** (released
+  2026-09-11 to 2026-09-23): shared per-tool leases and run logs across the
+  desktop and MCP hosts, library quarantine and import/update recovery,
+  project memory and reviewable agent handoffs, ordered verification
+  workflows, the 2.0 desktop polish (tool sections, grouped Settings,
+  sidebar updates, Compact view), the Activity page, ordered collection
+  stacks, and agent registration drafts. See `docs/phase*.md`,
+  `docs/project-verification.md`, and `docs/desktop-polish-2.0.md`.
+- **Next — Start a new tool** (built 2026-09-28, unreleased): Shelf creates
+  tools, not only keeps them. Describe the idea; Shelf writes a small
+  project that already runs (zero-dependency Node server on a loopback
+  port no other tool claims), the chosen design profile as DESIGN.md and
+  CSS variables, and an AGENTS.md build brief with the Shelf tool
+  contract, registers it, and opens Claude Code or Codex in the folder.
+  Creation is a user action in the desktop app, so the tool is saved
+  directly; agents asking to register new folders still go through
+  drafts. Capability gaps offer Start a new tool as their primary action,
+  which closes the gap → build loop.
 
 ## Later Community enhancements
 
-1. Signed macOS distribution / auto-update
+1. Merge the inbox surfaces (Activity, Waiting, Capability gaps) into one
+   "Needs you" view, and trim the Simple-mode sidebar (renderer audit,
+   2026-09-28).
+2. Split `electron/main.ts` IPC handlers by domain with one typed channel
+   map shared by preload and main (architecture audit, 2026-09-28).
 
 ## Distribution & privacy
 

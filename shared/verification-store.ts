@@ -181,16 +181,25 @@ export class VerificationStore {
   logRoot(runId: string) {
     return path.join(this.root, 'runs', uuid.parse(runId))
   }
-  /** Remove a deleted tool's workflow, history, and run logs. */
-  forget(toolId: string) {
+  /**
+   * Remove a deleted tool's workflow, history, and run logs. Returns false
+   * and keeps everything while a run is still active, so a host still
+   * running it can finish writing its record.
+   */
+  forget(toolId: string): boolean {
     const file = this.file(toolId)
-    withFileLockSync(file, () => {
+    return withFileLockSync(file, () => {
       let runIds: string[] = []
-      try { runIds = this.get(toolId).runs.map((run) => run.id) } catch { /* unreadable: still remove the record */ }
+      try {
+        const runs = this.get(toolId).runs
+        if (runs.some((run) => verificationActive(run.status))) return false
+        runIds = runs.map((run) => run.id)
+      } catch { /* unreadable: still remove the record */ }
       for (const runId of runIds) {
         try { fs.rmSync(this.logRoot(runId), { recursive: true, force: true }) } catch { /* best effort */ }
       }
       fs.rmSync(file, { force: true })
+      return true
     })
   }
 }
