@@ -36,6 +36,34 @@ export interface RegisterProjectDeps {
   processes: ProcessManager
 }
 
+/**
+ * Comparison key for "is this the same folder". Symlinks resolve through
+ * realpath.native (which on macOS also returns the on-disk case). On macOS
+ * the key is additionally case-folded: APFS is case-insensitive by default,
+ * so /Users/me/App and /users/me/APP are one folder there, and a stored path
+ * that no longer exists can only be compared lexically. A case-sensitive
+ * APFS volume holding App and app side by side would read as one folder —
+ * that fails toward updating an existing tool, never toward a new one.
+ */
+export function canonicalFolderKey(projectPath: string): string {
+  const resolved = path.resolve(projectPath.trim())
+  let real = resolved
+  try {
+    real = fs.realpathSync.native(resolved)
+  } catch {
+    // Missing folder: compare the resolved spelling.
+  }
+  return process.platform === 'darwin' ? real.toLowerCase() : real
+}
+
+/** The library tool registered for this folder, through any spelling of it. */
+export function findToolByFolder(store: LibraryStore, projectPath: string): Tool | undefined {
+  const exact = store.findByProjectPath(projectPath)
+  if (exact) return exact
+  const key = canonicalFolderKey(projectPath)
+  return store.list().find((tool) => tool.projectPath && canonicalFolderKey(tool.projectPath) === key)
+}
+
 /** The one Python hint that means "the launch command is a guess". */
 const UNCERTAIN_HINT = /confirm the launch command/i
 
@@ -121,10 +149,25 @@ function newToolFrom(
   }
 }
 
+/**
+ * Thrown only for `existingOnly` callers (agent registrations): the folder was
+ * not in the library when saving, so nothing was written. The caller stages it
+ * for the user instead of creating a tool the user never accepted.
+ */
+export class NotInLibraryError extends Error {
+  constructor(folder: string) {
+    super(`That folder is not in the Shelf library: ${folder}`)
+    this.name = 'NotInLibraryError'
+  }
+}
+
 export async function registerProject(
   projectPath: string,
   deps: RegisterProjectDeps,
-  options: RegisterProjectOptions = {},
+  options: RegisterProjectOptions & {
+    /** Update an existing library tool only; never create one (agent path). */
+    existingOnly?: boolean
+  } = {},
 ): Promise<RegisterProjectResult> {
   const autoLaunch = options.autoLaunch ?? true
   const onPortConflict = options.onPortConflict ?? 'reassign'
@@ -154,7 +197,9 @@ export async function registerProject(
 
   const facts = readProjectFacts(resolved)
   const suggestion = await inspectProject(resolved, facts)
-  const existing = deps.store.findByProjectPath(resolved)
+  // Any spelling of a registered folder (symlink, different case) updates
+  // that tool instead of creating a duplicate beside it.
+  const existing = findToolByFolder(deps.store, resolved)
   const overrides = options.overrides
   const gateResult = existing?.launchCommand
     ? {
@@ -189,6 +234,8 @@ export async function registerProject(
       created: false,
     }
   }
+
+  if (!existing && options.existingOnly) throw new NotInLibraryError(resolved)
 
   const tool = deps.store.save(
     existing
