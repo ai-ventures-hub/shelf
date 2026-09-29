@@ -253,7 +253,7 @@ The Next.js site lives in [`site/`](site/). See [`site/README.md`](site/README.m
 </details>
 
 CI runs a dependency audit, `npm run typecheck`, `npm run build`, `npm run smoke:all`, and the
-real-renderer checks (`smoke-compact-ui.cjs`, `smoke-starter-ui.cjs`) on macOS for pushes and PRs to
+real-renderer checks (`smoke-compact-ui.cjs`, `smoke-starter-ui.cjs`, `smoke-renderer-ux.cjs`) on macOS for pushes and PRs to
 `main`. Release tags run the same gate before signing.
 
 ## Status

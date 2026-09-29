@@ -219,6 +219,15 @@ export function QuickOpen({
         run: () => navigate('/tools/new'),
       },
       {
+        id: 'action:start-tool',
+        kind: 'action',
+        title: 'Start a new tool',
+        subtitle: 'Describe an idea; your coding agent builds it',
+        keywords: ['new', 'create', 'build', 'idea', 'scaffold', 'agent'],
+        boost: 18,
+        run: () => navigate('/tools/start'),
+      },
+      {
         id: 'action:new-collection',
         kind: 'action',
         title: 'New collection',

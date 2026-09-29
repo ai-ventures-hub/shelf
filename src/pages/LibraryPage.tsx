@@ -582,11 +582,14 @@ export function LibraryPage({
               <>
                 <h2>Your shelf is empty</h2>
                 <p>
-                  Drop a project folder anywhere in this window — Shelf figures
-                  out how to run it.
+                  Drop a project folder anywhere in this window and Shelf figures
+                  out how to run it. No project yet? Describe one and your agent builds it.
                 </p>
                 <div className="empty-state-actions">
                   <AddToolButton />
+                  <Link className="btn" to="/tools/start">
+                    Start a new tool
+                  </Link>
                   <Link className="btn btn-quiet" to="/mcp">
                     {isDeveloper ? 'Connect agents' : 'Connect AI apps'}
                   </Link>

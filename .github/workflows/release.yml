@@ -49,6 +49,8 @@ jobs:
         run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-compact-ui.cjs
       - name: Start a new tool renderer checks
         run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-starter-ui.cjs
+      - name: Renderer UX checks
+        run: env -u ELECTRON_RUN_AS_NODE npx electron scripts/smoke-renderer-ux.cjs
       - name: Package, sign, notarize
         run: npx electron-builder --mac --publish never
         env:
