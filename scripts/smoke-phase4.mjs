@@ -290,11 +290,27 @@ try {
     fields.knownIssues,
     'redaction does not change saved source',
   )
-  const brief = await call('shelf_prepare_handoff', {
-    id: tool.id,
-    options: { task: 'Continue the project' },
+  // Handoffs are markdown, returned as a plain text block (not JSON).
+  const briefResponse = await client.callTool({
+    name: 'shelf_prepare_handoff',
+    arguments: { id: tool.id, options: { task: 'Continue the project' } },
   })
-  assert.match(brief.markdown, /Continue the project/)
+  assert.ok(!briefResponse.isError, JSON.stringify(briefResponse))
+  assert.ok(!JSON.stringify(briefResponse).includes(secret))
+  const briefMarkdown = briefResponse.content[0].text
+  assert.match(briefMarkdown, /^# Shelf project handoff/)
+  assert.match(briefMarkdown, /Continue the project/)
+  const logsWithoutRun = await client.callTool({
+    name: 'shelf_prepare_handoff',
+    arguments: { id: tool.id, options: { includeLogs: true } },
+  })
+  assert.equal(logsWithoutRun.isError, true)
+  assert.match(logsWithoutRun.content[0].text, /Choose a run/)
+  const neverExisted = await client.callTool({
+    name: 'shelf_get_project_memory',
+    arguments: { id: 'never-existed' },
+  })
+  assert.match(neverExisted.content[0].text, /Tool not found: never-existed\. Call shelf_list_tools/)
   assert.equal((await call('shelf_get_project_memory', { id: other.id })).memory, null)
   assert.equal(
     (
