@@ -153,6 +153,17 @@ export function launchOriginLabel(
 }
 
 /**
+ * Message suffix for a run another Shelf host started (origin 'external').
+ * "(external)" read as "not Shelf's" to agents, who then told users some
+ * outside process held the port when the Shelf app itself had launched it.
+ */
+export function adoptedRunNote(startedBy?: LaunchOrigin): string {
+  if (!startedBy) return '(started by another Shelf process)'
+  if (startedBy.kind === 'gui' || startedBy.kind === 'tray') return '(started in Shelf)'
+  return `(started by ${launchOriginLabel(startedBy)})`
+}
+
+/**
  * Bare credentials carrying a recognizable vendor prefix — a pasted token
  * needs no KEY= assignment to be a leak. Case-sensitive on purpose: the
  * prefixes are exact vendor formats, and an `i` flag would let ordinary
@@ -223,10 +234,39 @@ export function foldDisplayName(name: string): string {
 const SAFE_ENV_KEYS = /^(PORT|HOST|HOSTNAME|NODE_ENV|DEBUG|CI|TZ|LANG|LC_ALL|FORCE_COLOR)$/i
 const ASSIGNMENT_VALUE = `(?:"(?:\\\\.|[^"\\\\])*"|'[^']*'|[^\\s]+)`
 
+/**
+ * Values too short or too ordinary to be a credential. Substring-replacing
+ * them turned `PYTHONUNBUFFERED=1` into `***27.0.0.***` in every stored log
+ * line, URL, and status message. A credential-named key keeps a lower floor
+ * so a short password (DB_PASS=abcd) is still replaced everywhere. KEY=value
+ * assignments are masked by pattern regardless, and agent-facing tool
+ * records mask every env value structurally (sanitizeToolForOutput), so the
+ * floor only stops free-text replacement of configuration values.
+ */
+const MIN_MASKED_VALUE_LENGTH = 6
+const MIN_MASKED_SECRET_KEY_VALUE_LENGTH = 4
+const SECRET_KEY_NAME = /TOKEN|SECRET|PASS|PWD|KEY|AUTH|CREDENTIAL|PRIVATE|SESSION|COOKIE|SIGNATURE|SALT/i
+const ORDINARY_ENV_VALUES = new Set([
+  'true', 'false', 'yes', 'no', 'on', 'off', 'none', 'null', 'undefined',
+  'enabled', 'disabled', 'production', 'development', 'staging', 'test', 'testing',
+  'localhost', '127.0.0.1', '0.0.0.0', '::1',
+  'trace', 'debug', 'info', 'warn', 'warning', 'error', 'fatal', 'verbose', 'silent',
+])
+
+/** Whether a configured value is worth replacing wherever it appears in output. */
+export function isMaskableSecretValue(value: string, key?: string): boolean {
+  const trimmed = value.trim()
+  if (ORDINARY_ENV_VALUES.has(trimmed.toLowerCase())) return false
+  const min = key === undefined || SECRET_KEY_NAME.test(key) ? MIN_MASKED_SECRET_KEY_VALUE_LENGTH : MIN_MASKED_VALUE_LENGTH
+  return trimmed.length >= min
+}
+
 /** One output boundary for logs, commands, history, URLs, and diagnostics. */
 export function maskSecrets(text: string, knownValues: readonly string[] = []): string {
   let safe = text
-  for (const value of [...new Set(knownValues)].filter(Boolean).sort((a, b) => b.length - a.length)) {
+  // Callers pass toolSecretValues(), already filtered per key; this floor
+  // only guards explicit lists.
+  for (const value of [...new Set(knownValues)].filter((value) => isMaskableSecretValue(value)).sort((a, b) => b.length - a.length)) {
     safe = safe.split(value).join('***')
   }
   return safe
@@ -248,12 +288,15 @@ export function maskCommandEnvPrefix(command: string): string {
 
 export function toolSecretValues(tool?: Pick<Tool, 'env' | 'launchCommand' | 'stopCommand'>): string[] {
   if (!tool) return []
-  const values = Object.entries(tool.env || {}).filter(([key]) => !SAFE_ENV_KEYS.test(key)).map(([, value]) => value)
+  const values = Object.entries(tool.env || {})
+    .filter(([key, value]) => !SAFE_ENV_KEYS.test(key) && isMaskableSecretValue(value, key))
+    .map(([, value]) => value)
   for (const command of [tool.launchCommand, tool.stopCommand || '']) {
     for (const match of command.matchAll(new RegExp(`\\b([A-Z][A-Z0-9_]{2,})=${ASSIGNMENT_VALUE}`, 'g'))) {
       if (SAFE_ENV_KEYS.test(match[1])) continue
-      const value = match[0].slice(match[0].indexOf('=') + 1)
-      values.push(/^["']/.test(value) ? value.slice(1, -1) : value)
+      const raw = match[0].slice(match[0].indexOf('=') + 1)
+      const value = /^["']/.test(raw) ? raw.slice(1, -1) : raw
+      if (isMaskableSecretValue(value, match[1])) values.push(value)
     }
   }
   return values.filter(Boolean)

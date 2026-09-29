@@ -32,7 +32,7 @@ import type {
   Tool,
   ToolRuntimeState,
 } from './types'
-import { toolSecretValues } from './types'
+import { adoptedRunNote, toolSecretValues } from './types'
 export type { PortConflictPolicy, StartOptions } from './contracts'
 
 interface ManagedProcess {
@@ -110,6 +110,14 @@ export class ProcessManager {
   async getStates(): Promise<ToolRuntimeState[]> {
     await this.reconcileExternals()
     return this.peekStates()
+  }
+
+  /** Tools this manager spawned that are running or starting right now. */
+  localActiveToolIds(): string[] {
+    return [...new Set([...this.processes.keys(), ...this.inFlightStarts.keys()])].filter((id) => {
+      const status = this.runtime.peekState(id).status
+      return status === 'running' || status === 'starting'
+    })
   }
 
   /** Current evidence without another OS probe, for event-driven tray refreshes. */
@@ -223,7 +231,7 @@ export class ProcessManager {
           toolId,
           status: 'running',
           pid: external.pid,
-          message: `Running · pid ${external.pid} (external)`,
+          message: `Running · pid ${external.pid} ${adoptedRunNote(external.startedBy)}`,
           port: external.port,
           origin: 'external',
           startedBy: external.startedBy,
@@ -413,7 +421,7 @@ export class ProcessManager {
               origin: 'local',
               startedBy: origin,
             })
-            if (updated.url) await this.openReadyUrl(toolId, updated.url)
+            if (updated.url && options.openUrlWhenReady !== false) await this.openReadyUrl(toolId, updated.url)
             return this.runtime.peekState(toolId)
           }
           // Classify the captured output first — a dead install or crash is
@@ -448,7 +456,7 @@ export class ProcessManager {
           origin: 'local',
           startedBy: origin,
         })
-        if (tool.url) await this.openReadyUrl(toolId, tool.url)
+        if (tool.url && options.openUrlWhenReady !== false) await this.openReadyUrl(toolId, tool.url)
       } else {
         // No configured port: still try to learn URL from framework ready logs.
         const candidate = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId) && !cancelled())
@@ -498,7 +506,7 @@ export class ProcessManager {
           startedBy: origin,
         })
         const readyUrl = sniffed?.url || tool.url
-        if (readyUrl) await this.openReadyUrl(toolId, readyUrl)
+        if (readyUrl && options.openUrlWhenReady !== false) await this.openReadyUrl(toolId, readyUrl)
       }
 
       return this.runtime.peekState(toolId)

@@ -90,7 +90,7 @@ try {
 
   const adopted = await outsider.getState(tool.id)
   assert.equal(adopted.status, 'running')
-  assert.match(adopted.message || '', /external/)
+  assert.equal(adopted.origin, 'external'); assert.match(adopted.message || '', /started (in|by)/)
 
   const stopped = await outsider.stop(tool.id)
   assert.equal(stopped.status, 'stopped')

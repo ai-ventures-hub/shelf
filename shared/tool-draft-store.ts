@@ -105,11 +105,20 @@ export class ToolDraftStore {
   }
 
   private read(): DraftFile {
+    let raw: string
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as Partial<DraftFile> | null
-      if (!parsed || !Array.isArray(parsed.drafts)) return { version: 1, drafts: [] }
+      raw = fs.readFileSync(this.filePath, 'utf8')
+    } catch {
+      return { version: 1, drafts: [] }
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<DraftFile> | null
+      if (!parsed || !Array.isArray(parsed.drafts)) throw new Error('missing drafts array')
       return { version: 1, drafts: parsed.drafts.filter(isDraft) }
     } catch {
+      // Set an unreadable file aside rather than letting the next stage()
+      // overwrite pending registrations the user has not reviewed.
+      try { fs.renameSync(this.filePath, `${this.filePath}.corrupt-${Date.now()}`) } catch { /* already moved */ }
       return { version: 1, drafts: [] }
     }
   }

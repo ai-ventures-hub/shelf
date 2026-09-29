@@ -78,7 +78,7 @@ try {
     invalidateProcessSnapshot()
     const adopted = await outsider.start(tool.id)
     assert.equal(adopted.status, 'running')
-    assert.match(adopted.message || '', /external/)
+    assert.equal(adopted.origin, 'external'); assert.match(adopted.message || '', /started (in|by)/)
     console.log('OK: adopt-on-start success —', adopted.message)
 
     // Quitting the outsider (GUI) must not stop the owner's tool.
@@ -111,7 +111,7 @@ try {
     invalidateProcessSnapshot()
     const adopted = await outsider.start(tool.id)
     assert.equal(adopted.status, 'running', `deep tree adoption failed: ${adopted.message}`)
-    assert.match(adopted.message || '', /external/)
+    assert.equal(adopted.origin, 'external'); assert.match(adopted.message || '', /started (in|by)/)
     console.log('OK: deep-tree listener adopted via ancestry')
 
     const stopped = await outsider.stop(tool.id)
@@ -134,11 +134,11 @@ try {
 
     const seen = await outsider.getState(tool.id)
     assert.equal(seen.status, 'running')
-    assert.match(seen.message || '', /external/)
-    console.log('OK: portless tool visible as Running (external) via receipt')
+    assert.equal(seen.origin, 'external'); assert.match(seen.message || '', /started (in|by)/)
+    console.log('OK: portless tool visible as Running (started by another Shelf host) via receipt')
 
     const adopted = await outsider.start(tool.id)
-    assert.match(adopted.message || '', /external/, 'portless start must adopt, not respawn')
+    assert.equal(adopted.origin, 'external', 'portless start must adopt, not respawn'); assert.match(adopted.message || '', /started (in|by)/)
     console.log('OK: portless start adopted instead of spawning a duplicate')
 
     const stopped = await outsider.stop(tool.id)
@@ -170,7 +170,7 @@ try {
     invalidateProcessSnapshot()
     const adopted = await outsider.start(tool.id)
     assert.equal(adopted.status, 'running', `mismatch adoption failed: ${adopted.message}`)
-    assert.match(adopted.message || '', /external/)
+    assert.equal(adopted.origin, 'external'); assert.match(adopted.message || '', /started (in|by)/)
     assert.equal(newestReceipt(tool.id).port, port, 'adoption must heal the receipt port')
     console.log('OK: port-mismatch fallback adopted and healed receipt')
 
@@ -203,7 +203,7 @@ try {
     invalidateProcessSnapshot()
     const adopted = await outsider.start(tool.id)
     assert.equal(adopted.status, 'running', `cross-OS adoption failed: ${adopted.message}`)
-    assert.match(adopted.message || '', /external/)
+    assert.equal(adopted.origin, 'external'); assert.match(adopted.message || '', /started (in|by)/)
     console.log('OK: tool launched by a separate OS process adopted')
 
     const stopped = await outsider.stop(tool.id)

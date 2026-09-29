@@ -227,8 +227,10 @@ export function ToolFormPage() {
           .split(',')
           .map((t) => t.trim())
           .filter(Boolean),
+        // One phrase per line (the field's hint). Commas belong to the phrase:
+        // "Collect client, production and development details" is one task.
         capabilities: capabilitiesText
-          .split(/[\n,]/)
+          .split('\n')
           .map((capability) => capability.trim())
           .filter(Boolean),
         env: textToEnv(envText),

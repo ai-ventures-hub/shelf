@@ -235,11 +235,12 @@ export class LibraryStore {
     withFileLockSync(this.filePath, () => {
       const data = this.read()
       data.tools = data.tools.filter((t) => t.id !== id)
-      data.collections = data.collections.map((c) => ({
-        ...c,
-        toolIds: c.toolIds.filter((tid) => tid !== id),
-        updatedAt: new Date().toISOString(),
-      }))
+      // Only collections that held the tool changed. Stamping every
+      // collection made unrelated ones look edited at the same instant.
+      const now = new Date().toISOString()
+      data.collections = data.collections.map((c) => c.toolIds.includes(id)
+        ? { ...c, toolIds: c.toolIds.filter((tid) => tid !== id), updatedAt: now }
+        : c)
       this.write(data)
     })
   }

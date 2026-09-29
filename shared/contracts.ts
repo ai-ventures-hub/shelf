@@ -805,6 +805,8 @@ export interface StartOptions {
   onPortConflict?: PortConflictPolicy
   /** Who initiated this launch; falls back to the manager's defaultOrigin. */
   origin?: LaunchOrigin
+  /** False skips opening the tool's URL once ready (e.g. resuming after an update). */
+  openUrlWhenReady?: boolean
 }
 
 export type CollectionToolOutcome =

@@ -58,6 +58,7 @@ import {
   type PublishResult,
 } from '../shared/team-catalog-sync'
 import { deriveLibraryHealth } from '../shared/tool-health'
+import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
 import { folderNameFor } from '../shared/tool-manifest'
 import {
   applyToolUpdate,
@@ -1146,17 +1147,37 @@ function registerIpc(): void {
     quitPreparing = true
     try {
       if (!await confirmPendingChanges('Restart and update')) return
+      // Remember what was running so the relaunched app can start it again.
+      const resumeIds = processes.localActiveToolIds()
       await verification.stopAll()
       await processes.stopAll('Shelf is updating.', { scope: 'local' })
+      saveUpdateResume(store.getRoot(), resumeIds)
       isQuitting = true
       installDownloadedUpdate()
     } catch (error) {
       isQuitting = false
       quitDiscardApproved = false
+      // The app is staying open, so don't leave its tools down.
+      void resumeToolsAfterUpdate(takeUpdateResume(store.getRoot()))
       throw error
     } finally { quitPreparing = false }
   })
   registerMcpConnectIpc(resolveMcpServerPath)
+}
+
+/** Start tools that were running before "Restart and update", one at a time. */
+async function resumeToolsAfterUpdate(toolIds: string[]): Promise<void> {
+  for (const id of toolIds) {
+    if (!store.get(id)) continue
+    try {
+      const state = await processes.start(id, { origin: { kind: 'gui' }, openUrlWhenReady: false })
+      if (state.status === 'running' || state.status === 'starting') {
+        processes.appendLog(id, 'system', 'Started again after the Shelf update.')
+      }
+    } catch (err) {
+      processes.appendLog(id, 'system', `Could not start again after the Shelf update: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 }
 
 /** Consult the renderer's active form before stopping services or invoking the updater. */
@@ -1204,6 +1225,8 @@ if (gotLock) {
     setupTray(getDesktopHost())
     const shortcutStatus = applyGlobalShortcut(getDesktopHost())
     createWindow()
+    // Tools stopped by "Restart and update" come back without a click.
+    void resumeToolsAfterUpdate(takeUpdateResume(store.getRoot()))
     // Window exists so the renderer can receive the boot conflict status.
     publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: !shortcutStatus.ok })
     void flushPendingShelfUrls(getDesktopHost())
@@ -1243,6 +1266,8 @@ if (gotLock) {
       'project-memory.json',
       'capability-gaps.json',
       'design-profiles.json',
+      // Agents stage registrations here; the Waiting count must follow.
+      'tool-drafts.json',
     ])
     const changeDebounce = new Map<string, ReturnType<typeof setTimeout>>()
     try {
@@ -1266,6 +1291,10 @@ if (gotLock) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
       else showOrCreateWindow(getDesktopHost())
     })
+  }).catch((error) => {
+    // A startup failure must be visible, not an unhandled rejection.
+    dialog.showErrorBox('Shelf could not start', error instanceof Error ? error.message : String(error))
+    app.exit(1)
   })
 
   app.on('window-all-closed', () => {

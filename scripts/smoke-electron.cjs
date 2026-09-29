@@ -3,7 +3,14 @@
  * Run: npm run smoke:electron
  */
 const { app } = require('electron')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
+
+// `npm run smoke:electron` alone must not write into the real library.
+if (!process.env.SHELF_DATA_ROOT) {
+  process.env.SHELF_DATA_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-smoke-electron-'))
+}
 
 const { LibraryStore } = require('../dist-electron/shared/library-store')
 const { ProcessManager } = require('../dist-electron/shared/process-manager')
