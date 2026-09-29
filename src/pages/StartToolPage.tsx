@@ -4,6 +4,7 @@ import { CheckCircle2, Copy, ExternalLink, FolderOpen, Play, SquareTerminal } fr
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { useLibrary } from '../hooks/useLibrary'
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
+import { errorText } from '../lib/errorText'
 import type { ToolStarterAgent, ToolStarterCreated, ToolStarterPrepared } from '../types'
 
 const AGENT_LABELS: Record<Exclude<ToolStarterAgent, 'terminal'>, string> = {
@@ -23,8 +24,11 @@ export function StartToolPage() {
   const { refresh } = useLibrary()
   const { profiles } = useDesignProfiles()
   const [prepared, setPrepared] = useState<ToolStarterPrepared | null>(null)
-  const [idea, setIdea] = useState(() => search.get('idea') || '')
-  const [name, setName] = useState(() => search.get('name') || '')
+  // What the page opened with (a capability gap prefills the idea); leaving
+  // without changing it is not an unsaved edit.
+  const [initial] = useState(() => ({ idea: search.get('idea') || '', name: search.get('name') || '' }))
+  const [idea, setIdea] = useState(initial.idea)
+  const [name, setName] = useState(initial.name)
   const [profileChoice, setProfileChoice] = useState('default')
   const [parentDir, setParentDir] = useState<string | null>(null)
   const [port, setPort] = useState('')
@@ -33,7 +37,7 @@ export function StartToolPage() {
   const [created, setCreated] = useState<ToolStarterCreated | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
-  const guard = useUnsavedChanges(!created && Boolean(idea.trim() || name.trim()), busy)
+  const guard = useUnsavedChanges(!created && (idea !== initial.idea || name !== initial.name), busy)
   const defaultProfile = profiles.find((profile) => profile.isDefault)
 
   useEffect(() => {
@@ -45,7 +49,7 @@ export function StartToolPage() {
         setPrepared(next)
         if (next.port) setPort(String(next.port))
       })
-      .catch((err) => live && setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) => live && setError(errorText(err)))
     return () => {
       live = false
     }
@@ -56,7 +60,7 @@ export function StartToolPage() {
       const folder = await window.shelf.chooseToolsFolder()
       if (folder) setParentDir(folder)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorText(err))
     }
   }
 
@@ -77,7 +81,7 @@ export function StartToolPage() {
       setCreated(result)
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorText(err))
     } finally {
       setBusy(false)
     }
@@ -88,17 +92,23 @@ export function StartToolPage() {
     setNotice(null)
     setError(null)
     try {
-      const { prompt } = await window.shelf.openToolInAgent(created.tool.id, agent)
+      // Copy while Shelf still has focus: once Cursor opens, the clipboard
+      // write is refused ("Document is not focused").
+      const copied = agent === 'cursor'
+        ? await navigator.clipboard.writeText(created.prompt).then(() => true, () => false)
+        : false
+      await window.shelf.openToolInAgent(created.tool.id, agent)
       if (agent === 'cursor') {
-        await navigator.clipboard.writeText(prompt).catch(() => undefined)
-        setNotice('Cursor is opening the project. The prompt is copied; paste it into Cursor’s agent.')
+        setNotice(copied
+          ? 'Cursor is opening the project. The prompt is copied; paste it into Cursor’s agent.'
+          : `Cursor is opening the project. Paste this into Cursor’s agent: ${created.prompt}`)
       } else if (agent === 'terminal') {
         setNotice('Terminal is opening in the project folder.')
       } else {
         setNotice(`${AGENT_LABELS[agent]} is starting in Terminal with the build brief.`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorText(err))
     }
   }
 
@@ -121,7 +131,7 @@ export function StartToolPage() {
       setRunning(true)
       setNotice(`${created.tool.name} is running. Reload the page as your agent works to see changes.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errorText(err))
     }
   }
 

@@ -30,6 +30,7 @@ import { ProcessManager } from '../shared/process-manager'
 import { inspectProject } from '../shared/project-import'
 import { ReceiptStore } from '../shared/receipt-store'
 import {
+  canonicalFolderKey,
   findToolByFolder,
   NotInLibraryError,
   registerProject,
@@ -334,6 +335,22 @@ server.registerTool(
       }
     }
 
+    // Folder changes need the same acceptance as new folders. A sibling or a
+    // move into an accepted folder stores that folder's own spelling, never a
+    // caller's symlink that could be retargeted afterwards.
+    let projectPath = existing?.projectPath
+    if (args.projectPath !== undefined && (!existing || !existing.projectPath || canonicalFolderKey(args.projectPath) !== canonicalFolderKey(existing.projectPath))) {
+      const accepted = args.projectPath.trim() ? findToolByFolder(store, args.projectPath) : undefined
+      if (!accepted?.projectPath) {
+        return errorResult(
+          existing
+            ? 'Moving a tool to a folder that is not in the library needs the user\'s review. Ask the user to change the folder in Shelf, or register the new folder with shelf_register_project.'
+            : 'That folder is not in the library. Call shelf_register_project with it; the user accepts new folders in Shelf.',
+        )
+      }
+      projectPath = accepted.projectPath
+    }
+
     const name = args.name ?? existing!.name
     // Renaming by id must not manufacture a second tool that reads the same
     // (the collection write path guards this; tools need it for the same
@@ -440,7 +457,7 @@ server.registerTool(
         setupRequired: Boolean(access.setupRequired),
       })) as AgentAccess[],
       favorite: args.favorite ?? existing?.favorite ?? false,
-      projectPath: args.projectPath ?? existing?.projectPath,
+      projectPath,
       launchCommand,
       stopCommand: incomingStopCommand ?? existing?.stopCommand,
       url,
@@ -534,7 +551,8 @@ server.registerPrompt(
           text: buildNewToolPrompt({
             idea,
             name,
-            port: await pickStarterPort(store.list()).catch(() => 4400),
+            // Pending drafts claim their ports too, so two sessions don't share one.
+            port: await pickStarterPort([...store.list(), ...drafts.list()]).catch(() => 4400),
             toolsRoot: defaultToolsRoot(),
             profile: designProfiles.getDefault(),
           }),

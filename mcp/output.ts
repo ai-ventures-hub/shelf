@@ -57,7 +57,7 @@ const REMEDY_NEXT: Record<RemedyKind, string> = {
     "The port is busy. Launch again with onPortConflict: 'reassign', or stop whatever holds the port.",
   open_docker: 'Docker is not running. Ask the user to start Docker Desktop, then launch again.',
   repick_folder:
-    "The project folder is missing. Ask the user where it moved, then fix projectPath with shelf_upsert_tool (id + projectPath).",
+    "The project folder is missing. Ask the user where it moved and to update the folder in Shelf. Moving a tool to a new folder needs their review.",
   edit_command:
     'The launch command or its entry file is wrong. Check logTail / shelf_get_logs, then fix launchCommand with shelf_upsert_tool (id + launchCommand).',
   install_runtime:
@@ -76,13 +76,15 @@ export function nextStepFor(state: ToolRuntimeState): string | undefined {
   return 'Read logTail (or shelf_get_logs) to diagnose.'
 }
 
+// Every stream gets a prefix, so a tool printing "# " or "! " cannot pass
+// its output off as Shelf's own lines or as stderr.
 const STREAM_PREFIX: Record<LogLine['stream'], string> = {
-  stdout: '',
+  stdout: '  ',
   stderr: '! ',
   system: '# ',
 }
 
-/** Lines as text: stdout plain, stderr "! ", Shelf's own lines "# ". */
+/** Lines as text: stdout "  ", stderr "! ", Shelf's own lines "# ". */
 export function formatLogLines(lines: LogLine[]): string {
   return lines
     .map((line) => {

@@ -26,6 +26,8 @@ interface LibraryContextValue {
   finishedAt: Record<string, string>
   loading: boolean
   error: string | null
+  /** The library itself could not be read (not a recovery notice). */
+  loadFailed: boolean
   refresh: () => Promise<void>
   saveTool: (tool: Tool) => Promise<Tool>
   deleteTool: (id: string) => Promise<void>
@@ -52,6 +54,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [finishedAt, setFinishedAt] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const healthTimerRef = useRef<number | null>(null)
 
   const refreshHealth = useCallback(async () => {
@@ -80,9 +83,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setCollections(nextCollections)
       setStates(Object.fromEntries(nextStates.map((s) => [s.toolId, s])))
       setError(await window.shelf.getLibraryRecovery())
+      setLoadFailed(false)
       void refreshHealth()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -208,6 +213,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       finishedAt,
       loading,
       error,
+      loadFailed,
       refresh,
       saveTool,
       deleteTool,
@@ -227,6 +233,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       finishedAt,
       loading,
       error,
+      loadFailed,
       refresh,
       saveTool,
       deleteTool,

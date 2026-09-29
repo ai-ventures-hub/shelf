@@ -60,8 +60,8 @@ import {
 } from '../shared/team-catalog-sync'
 import { deriveLibraryHealth } from '../shared/tool-health'
 import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
-import { createToolProject, defaultToolsRoot, pickStarterPort, STARTER_KICKOFF_PROMPT } from '../shared/tool-starter'
-import { resolveNodeCommand } from '../shared/node-resolve'
+import { createToolProject, defaultToolsRoot, detectAgentClis, pickStarterPort, STARTER_KICKOFF_PROMPT } from '../shared/tool-starter'
+import { loginShellHasNode, resolveNodeCommand } from '../shared/node-resolve'
 import { detectInstalledClients } from '../shared/mcp-client-detect'
 import type { ToolStarterAgent, ToolStarterRequest } from '../shared/contracts'
 import { folderNameFor } from '../shared/tool-manifest'
@@ -674,17 +674,27 @@ function registerIpc(): void {
   // Start a new tool from an idea. Creation is a user action here, so the
   // tool is saved directly; nothing is installed or launched.
   ipcMain.handle('starter:prepare', async () => {
-    const installed = new Set(detectInstalledClients().filter((client) => client.installed).map((client) => client.kind))
+    const [clis, port] = await Promise.all([
+      detectAgentClis(),
+      pickStarterPort([...store.list(), ...toolDrafts.list()]).catch(() => null),
+    ])
+    const cursor = detectInstalledClients().some((client) => client.kind === 'cursor' && client.installed)
     return {
       toolsRoot: defaultToolsRoot(),
-      port: await pickStarterPort(store.list()).catch(() => null),
-      agents: (['claude-code', 'codex', 'cursor'] as const).map((id) => ({ id, installed: installed.has(id) })),
+      port,
+      agents: [
+        { id: 'claude-code' as const, installed: clis['claude-code'] },
+        { id: 'codex' as const, installed: clis.codex },
+        { id: 'cursor' as const, installed: cursor },
+      ],
     }
   })
   ipcMain.handle('starter:create', async (_e, input: ToolStarterRequest) => {
     if (!input || typeof input !== 'object') throw new Error('Describe the tool to start.')
     const uiPrefs = prefs.get()
-    const node = await resolveNodeCommand()
+    // Prefer plain `node`, which survives Node upgrades and reads the same
+    // on a coworker's Mac; pin a path only when the launch shell lacks node.
+    const node = await loginShellHasNode() ? { ok: true, command: 'node', env: undefined } : await resolveNodeCommand()
     return createToolProject({
       name: String(input.name ?? ''),
       idea: String(input.idea ?? ''),
@@ -694,6 +704,7 @@ function registerIpc(): void {
     }, {
       store,
       designProfiles,
+      drafts: toolDrafts,
       nodeCommand: { command: node.ok ? node.command : 'node', env: node.env },
       toolDefaults: {
         iconColor: uiPrefs.defaultIconColor,
@@ -1304,9 +1315,16 @@ if (gotLock) {
       else showOrCreateWindow(getDesktopHost())
     })
   }).catch((error) => {
-    // A startup failure must be visible, not an unhandled rejection.
-    dialog.showErrorBox('Shelf could not start', error instanceof Error ? error.message : String(error))
-    app.exit(1)
+    // A startup failure must be visible, not an unhandled rejection. Exit
+    // only when it happened before the window existed; a late failure in
+    // optional setup leaves a working app open.
+    const message = error instanceof Error ? error.message : String(error)
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      dialog.showErrorBox('Shelf could not start', message)
+      app.exit(1)
+    } else {
+      console.error('[shelf] startup step failed:', error)
+    }
   })
 
   app.on('window-all-closed', () => {

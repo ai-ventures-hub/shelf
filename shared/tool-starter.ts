@@ -10,6 +10,7 @@
  * Nothing here runs a command. Creation is a user action in the desktop app,
  * so the tool is saved directly rather than staged as an agent draft.
  */
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -28,8 +29,47 @@ export const STARTER_KICKOFF_PROMPT =
   'Read AGENTS.md and build the tool it describes. Keep the start command working after every change.'
 
 /** Coding agents Shelf can start in a tool's folder, by CLI name. */
-export const STARTER_AGENT_CLIS = { 'claude-code': { bin: 'claude', label: 'Claude Code' }, codex: { bin: 'codex', label: 'Codex' } } as const
+export const STARTER_AGENT_CLIS = {
+  // The older local installer set up `claude` as a shell alias, which a
+  // script cannot see; its binary lives at ~/.claude/local/claude.
+  'claude-code': { bin: 'claude', label: 'Claude Code', homeFallbacks: ['.claude/local/claude', '.local/bin/claude'] },
+  codex: { bin: 'codex', label: 'Codex', homeFallbacks: ['.local/bin/codex'] },
+} as const
 export type StarterAgentCli = keyof typeof STARTER_AGENT_CLIS
+
+/**
+ * Which agent CLIs this Mac can actually run: on the login shell's PATH, in
+ * an nvm global bin, or at a known install path. An installed desktop app
+ * (ChatGPT, Claude) does not count; the Terminal hand-off needs the CLI.
+ */
+export async function detectAgentClis(home = os.homedir()): Promise<Record<StarterAgentCli, boolean>> {
+  const onPath = new Set<string>()
+  await new Promise<void>((resolve) => {
+    execFile('/bin/zsh', ['-lc', 'for c in claude codex; do command -v "$c" >/dev/null 2>&1 && echo "$c"; done'], { timeout: 2_500 }, (_error, stdout) => {
+      for (const line of String(stdout || '').split('\n')) if (line.trim()) onPath.add(line.trim())
+      resolve()
+    })
+  })
+  const nvmBins = (() => {
+    try {
+      const root = path.join(home, '.nvm', 'versions', 'node')
+      return fs.readdirSync(root).map((version) => path.join(root, version, 'bin'))
+    } catch {
+      return []
+    }
+  })()
+  const found = (agent: StarterAgentCli) => {
+    const { bin, homeFallbacks } = STARTER_AGENT_CLIS[agent]
+    const candidates = [
+      ...homeFallbacks.map((relative) => path.join(home, relative)),
+      ...['/opt/homebrew/bin', '/usr/local/bin', ...nvmBins].map((dir) => path.join(dir, bin)),
+    ]
+    return onPath.has(bin) || candidates.some((candidate) => {
+      try { fs.accessSync(candidate, fs.constants.X_OK); return true } catch { return false }
+    })
+  }
+  return { 'claude-code': found('claude-code'), codex: found('codex') }
+}
 
 /**
  * A one-shot Terminal script that opens the agent in `folder` with the
@@ -38,14 +78,19 @@ export type StarterAgentCli = keyof typeof STARTER_AGENT_CLIS
  * permission. The script deletes itself and leaves a shell in the folder.
  */
 export function agentLauncherScript(folder: string, agent: StarterAgentCli): string {
-  const { bin, label } = STARTER_AGENT_CLIS[agent]
+  const { bin, label, homeFallbacks } = STARTER_AGENT_CLIS[agent]
   const prompt = shellQuote(STARTER_KICKOFF_PROMPT)
+  const candidates = [bin, ...homeFallbacks.map((relative) => `"$HOME/${relative}"`)].join(' ')
   return `#!/bin/zsh
 # Written by Shelf to start ${label} in a new tool's folder. Safe to delete.
 rm -f -- "$0"; rmdir -- "\${0:h}" 2>/dev/null
 cd ${shellQuote(folder)} || exit 1
-if command -v ${bin} >/dev/null 2>&1; then
-  ${bin} ${prompt}
+agent=""
+for candidate in ${candidates}; do
+  if command -v "$candidate" >/dev/null 2>&1; then agent="$candidate"; break; fi
+done
+if [ -n "$agent" ]; then
+  "$agent" ${prompt}
 else
   echo "${label} is not installed, or its command is not on your PATH."
   echo "Install it, then run this from this folder:"
@@ -82,6 +127,8 @@ export interface ToolStarterDeps {
   /** Absolute node binary, or 'node' when a login shell already finds it. */
   nodeCommand: { command: string; env?: Record<string, string> }
   toolDefaults?: Partial<Pick<Tool, 'iconLucide' | 'iconColor' | 'iconBackground'>>
+  /** Pending agent drafts: their ports are claimed too. */
+  drafts?: { list(): ReadonlyArray<{ port?: number }> }
   now?: () => Date
 }
 
@@ -151,7 +198,7 @@ export async function createToolProject(
   const already = deps.store.findByProjectPath(folder)
   if (already) throw new Error(`"${already.name}" already uses that folder.`)
 
-  const port = input.port ?? (await pickStarterPort(deps.store.list()))
+  const port = input.port ?? (await pickStarterPort([...deps.store.list(), ...(deps.drafts?.list() ?? [])]))
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Use a port between 1024 and 65535.')
   if (input.port !== undefined && !(await isPortFree(port))) throw new Error(`Port ${port} is in use. Choose another.`)
 
@@ -464,14 +511,29 @@ const NEUTRAL_TOKENS_CSS = `/* No design profile was chosen: calm neutral defaul
 }
 `
 
-/** A safe CSS custom-property name and value, or nothing. */
+/**
+ * Token values that are plainly design values: colors, lengths, numbers,
+ * font-family lists, and keywords. Everything else is skipped, not escaped:
+ * a profile can be agent-written, and CSS has too many ways to reach the
+ * network (url, image-set, @import) or break out of a declaration.
+ */
+const SAFE_COLOR = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\([0-9a-z.,%\s/+-]{1,80}\))$/i
+const SAFE_LENGTH = /^-?(?:\d+|\d*\.\d+)(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|pt|ms|s|deg|fr)?$/i
+const SAFE_KEYWORD = /^[a-z][a-z-]{0,40}$/i
+const SAFE_FONT_LIST = /^(?:\s*(?:"[a-z0-9 _-]{1,60}"|'[a-z0-9 _-]{1,60}'|[a-z][a-z0-9 _-]{0,60})\s*)(?:,(?:\s*(?:"[a-z0-9 _-]{1,60}"|'[a-z0-9 _-]{1,60}'|[a-z][a-z0-9 _-]{0,60})\s*))*$/i
+
+function safeCssValue(raw: unknown): string | null {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null
+  const value = String(raw).trim()
+  if (!value || value.length > 200) return null
+  return [SAFE_COLOR, SAFE_LENGTH, SAFE_KEYWORD, SAFE_FONT_LIST].some((pattern) => pattern.test(value)) ? value : null
+}
+
+/** A safe CSS custom-property declaration, or nothing. */
 function cssDeclaration(token: FlatToken): string | null {
   const name = token.path.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-  const value = String(token.value).trim()
-  if (!name || !value || value.length > 200) return null
-  // Values only: no way out of the declaration, the rule, or the file.
-  if (/[;{}<>\\\n\r]|\/\*|url\s*\(|expression\s*\(|@import/i.test(value)) return null
-  return `  --${name}: ${value};`
+  const value = safeCssValue(token.value)
+  return name && value ? `  --${name}: ${value};` : null
 }
 
 function declarations(tokens: FlatToken[]): string {
@@ -485,7 +547,9 @@ export function tokensCss(profile?: DesignProfile): string {
   const light = declarations(flattenTokens(profile.modes?.light || {}))
   const dark = declarations(flattenTokens(profile.modes?.dark || {}))
   return [
-    `/* From the "${profile.name.replace(/\*\//g, '')}" design profile in Shelf. */`,
+    // No profile text in the file: a name is free text, and a comment is
+    // one crafted "*/" away from a live rule. DESIGN.md names the profile.
+    '/* From your Shelf design profile. DESIGN.md has the details. */',
     `:root {\n${base}\n}`,
     light ? `@media (prefers-color-scheme: light) {\n  :root {\n${light.replace(/^/gm, '  ')}\n  }\n}` : '',
     dark ? `@media (prefers-color-scheme: dark) {\n  :root {\n${dark.replace(/^/gm, '  ')}\n  }\n}` : '',

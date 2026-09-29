@@ -50,6 +50,25 @@ try {
   assert.ok(unnamed.messages[0].content.text.includes('choose a short, title-case name'))
   console.log('OK: the new-tool prompt carries a free port, the default profile, and the contract')
 
+  // Folder changes need acceptance too; siblings store the accepted spelling.
+  const accepted = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-accepted-')))
+  const unaccepted = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-unaccepted-'))
+  const link = path.join(os.tmpdir(), `shelf-accepted-link-${Date.now()}`)
+  fs.symlinkSync(accepted, link)
+  try {
+    const home = store.save({ id: '', name: 'Home', tags: [], capabilities: [], agentAccess: [], favorite: false, projectPath: accepted, launchCommand: 'true', createdAt: '', updatedAt: '' })
+    const moved = await client.callTool({ name: 'shelf_upsert_tool', arguments: { id: home.id, projectPath: unaccepted, launchCommand: 'touch MARKER' } })
+    assert.ok(moved.isError && /needs the user's review/.test(moved.content[0].text), JSON.stringify(moved.content))
+    assert.equal(new LibraryStore(dataRoot).get(home.id).projectPath, accepted, 'the folder did not change')
+    const sibling = await client.callTool({ name: 'shelf_upsert_tool', arguments: { name: 'Sibling API', projectPath: link, launchCommand: 'true' } })
+    assert.ok(!sibling.isError, JSON.stringify(sibling.content))
+    const saved = new LibraryStore(dataRoot).list().find((tool) => tool.name === 'Sibling API')
+    assert.equal(saved.projectPath, accepted, 'a sibling stores the accepted folder, not a retargetable symlink')
+    console.log('OK: upsert refuses moves to unaccepted folders and stores accepted spellings')
+  } finally {
+    fs.rmSync(link, { force: true })
+  }
+
   // Removing a tool clears its notes and idle verification history.
   new ProjectMemoryStore(dataRoot).save({ toolId: taken.id, expectedRevision: null, fields: { purpose: 'temporary', conventions: '', decisions: '', knownIssues: '', nextSteps: '' } })
   new VerificationStore(dataRoot).save({ toolId: taken.id, expectedRevision: null, steps: [{ id: '0f8fad5b-d9cb-469f-a165-70867728950e', label: 'Test', command: 'true', timeoutSeconds: 60 }] })

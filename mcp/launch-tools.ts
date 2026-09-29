@@ -249,7 +249,7 @@ export function registerLaunchTools({ server, store, processes }: LaunchHost): v
     'shelf_get_logs',
     {
       description:
-        'Output of a tool\'s current run, or an earlier one by runId (a receipt id; the last 5 are kept), as text: stderr lines start "! ", Shelf\'s own "# ". Secrets are masked.',
+        'Output of a tool\'s current run, or an earlier one by runId (a receipt id; the last 5 are kept), as text: stdout lines start with two spaces, stderr "! ", Shelf\'s own "# ". Secrets are masked.',
       inputSchema: {
         id: z.string().describe('Tool id'),
         runId: z.string().max(100).optional().describe('Receipt/run id; omit for the current run'),

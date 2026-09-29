@@ -126,7 +126,12 @@ export function useToolLogs(
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') reloadRef.current()
     }, 3000)
-    return () => window.clearInterval(timer)
+    return () => {
+      window.clearInterval(timer)
+      // Polling ends when the other host's run stops; read once more so its
+      // last lines (often the crash) are shown. A no-op after unmount.
+      reloadRef.current()
+    }
   }, [toolId, enabled, pollExternal])
 
   const reload = useCallback(() => reloadRef.current(), [])

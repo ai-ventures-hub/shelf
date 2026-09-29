@@ -62,6 +62,19 @@ try {
   assert.equal(saved.tool?.port, undefined, 'the port the sheet did not show is not saved')
   console.log('OK: accept saves the shown command and no scanned port')
 
+  // 2b. Nothing the sheet does not show is saved: no agent URL (the app opens
+  // a tool's URL when it is ready), and nothing scanned at click time.
+  const quiet = project('quiet')
+  const shownQuiet = drafts.stage({ projectPath: quiet, suggestion: { ...base, projectPath: quiet, name: 'Quiet', launchCommand: 'node server.mjs', port: 4471, url: 'https://evil.example/login' }, envKeys: [] })
+  fs.writeFileSync(path.join(quiet, 'package.json'), JSON.stringify({ name: 'late', description: 'Scanned after the sheet was shown', scripts: { start: 'node server.mjs' }, dependencies: { '@modelcontextprotocol/sdk': '1' } }))
+  fs.writeFileSync(path.join(quiet, 'mcp-server.js'), '// late entry')
+  const quietTool = (await acceptToolDraft(shownQuiet.id, drafts, deps, { expectedUpdatedAt: shownQuiet.updatedAt })).tool
+  assert.equal(quietTool.url, 'http://127.0.0.1:4471/', 'the URL is derived from the shown port')
+  assert.equal(quietTool.description, undefined)
+  assert.deepEqual(quietTool.tags, [])
+  assert.deepEqual(quietTool.agentAccess, [])
+  console.log('OK: accept saves no hidden URL and no fields scanned at click time')
+
   // 3. The folder became a tool some other way (symlink and case variants included).
   const twin = project('twin')
   const alias = path.join(os.tmpdir(), `shelf-twin-link-${Date.now()}`)

@@ -238,14 +238,14 @@ const ASSIGNMENT_VALUE = `(?:"(?:\\\\.|[^"\\\\])*"|'[^']*'|[^\\s]+)`
  * Values too short or too ordinary to be a credential. Substring-replacing
  * them turned `PYTHONUNBUFFERED=1` into `***27.0.0.***` in every stored log
  * line, URL, and status message. A credential-named key keeps a lower floor
- * so a short password (DB_PASS=abcd) is still replaced everywhere. KEY=value
+ * so a short password (DB_PASS=abc, ALARM_PIN=4821) is still replaced everywhere. KEY=value
  * assignments are masked by pattern regardless, and agent-facing tool
  * records mask every env value structurally (sanitizeToolForOutput), so the
  * floor only stops free-text replacement of configuration values.
  */
 const MIN_MASKED_VALUE_LENGTH = 6
-const MIN_MASKED_SECRET_KEY_VALUE_LENGTH = 4
-const SECRET_KEY_NAME = /TOKEN|SECRET|PASS|PWD|KEY|AUTH|CREDENTIAL|PRIVATE|SESSION|COOKIE|SIGNATURE|SALT/i
+const MIN_MASKED_SECRET_KEY_VALUE_LENGTH = 3
+const SECRET_KEY_NAME = /TOKEN|SECRET|PASS|PWD|KEY|AUTH|CREDENTIAL|PRIVATE|SESSION|COOKIE|SIGNATURE|SALT|(?:^|_)(?:PW|PIN|OTP)(?:_|$)/i
 const ORDINARY_ENV_VALUES = new Set([
   'true', 'false', 'yes', 'no', 'on', 'off', 'none', 'null', 'undefined',
   'enabled', 'disabled', 'production', 'development', 'staging', 'test', 'testing',

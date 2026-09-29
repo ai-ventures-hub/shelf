@@ -12,7 +12,7 @@ import {
 import { buildGapBrief } from '../shared/gap-brief'
 import type { LibraryStore } from '../shared/library-store'
 import type { ProcessManager } from '../shared/process-manager'
-import { catalogRepoKey, readTeamCatalogs } from '../shared/team-catalog-store'
+import { catalogRepoKey, nameFromUrl, readTeamCatalogs } from '../shared/team-catalog-store'
 import type { AgentAccessKind, CapabilityGap, CapabilityGapStatus, Tool } from '../shared/types'
 import {
   LOCAL_WRITE,
@@ -43,7 +43,10 @@ function uninstalledTeamEntries(store: LibraryStore) {
     catalog.entries.forEach((entry, index) => {
       if (installed.has(catalogRepoKey(entry.repo))) return
       const id = `team:${catalog.id}:${index}`
-      entries.set(id, { catalog: catalog.name, description: entry.description })
+      // A catalog without its own name is named after its repo path, which
+      // may be private; agents get a generic label instead.
+      const catalogName = catalog.name === nameFromUrl(catalog.url) ? 'a team catalog' : catalog.name
+      entries.set(id, { catalog: catalogName, description: entry.description })
       tools.push({
         id,
         name: entry.name,

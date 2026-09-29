@@ -26,8 +26,8 @@ function candidateNodePaths(): string[] {
       const dirs = fs
         .readdirSync(nvmVersions)
         .filter((d) => d.startsWith('v'))
-        .sort()
-        .reverse()
+        // Numeric, newest first: a string sort ranks v9 above v22.
+        .sort(compareVersionsDescending)
       for (const dir of dirs.slice(0, 5)) {
         out.push(path.join(nvmVersions, dir, 'bin', 'node'))
       }
@@ -38,7 +38,7 @@ function candidateNodePaths(): string[] {
   try {
     const fnm = path.join(home, '.local', 'share', 'fnm', 'node-versions')
     if (fs.existsSync(fnm)) {
-      const dirs = fs.readdirSync(fnm).sort().reverse()
+      const dirs = fs.readdirSync(fnm).sort(compareVersionsDescending)
       for (const dir of dirs.slice(0, 5)) {
         out.push(path.join(fnm, dir, 'installation', 'bin', 'node'))
       }
@@ -47,6 +47,28 @@ function candidateNodePaths(): string[] {
     // ignore
   }
   return out
+}
+
+function compareVersionsDescending(a: string, b: string): number {
+  const parts = (value: string) => value.replace(/^v/, '').split('.').map((part) => Number.parseInt(part, 10) || 0)
+  const [x, y] = [parts(a), parts(b)]
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
+  }
+  return 0
+}
+
+/**
+ * Whether the login shell Shelf launches tools with finds `node` on its own.
+ * Then a tool's command can say `node` and keep working across Node upgrades.
+ */
+export async function loginShellHasNode(): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('/bin/zsh', ['-lc', 'command -v node'], { timeout: 2_500, env: process.env })
+    return Boolean(stdout.trim())
+  } catch {
+    return false
+  }
 }
 
 export interface ResolvedNodeCommand {

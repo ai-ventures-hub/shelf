@@ -198,7 +198,9 @@ function ToolCardView({
                 className="btn btn-quiet btn-sm btn-icon control-stop"
                 title={pending === 'stop' ? 'Stopping…' : 'Stop'}
                 aria-label={`Stop ${tool.name}`}
-                disabled={status === 'stopping' || pending === 'stop' || pending === 'launch'}
+                // Stop stays available while a launch waits for its port: the
+                // backend cancels a start in progress.
+                disabled={status === 'stopping' || pending === 'stop'}
                 onClick={() => onStop?.(tool)}
               >
                 <Square size={13} aria-hidden />
@@ -340,7 +342,7 @@ export function ToolListRow({
       <td className="tool-list-actions">
         <div className="tool-list-actions-row">
           {canStop ? (
-            <button type="button" className="btn btn-quiet btn-sm" aria-label={`Stop ${tool.name}`} disabled={status === 'stopping' || pending !== null} onClick={() => onStop?.(tool)}>
+            <button type="button" className="btn btn-quiet btn-sm" aria-label={`Stop ${tool.name}`} disabled={status === 'stopping' || pending === 'stop'} onClick={() => onStop?.(tool)}>
               {pending === 'stop' ? 'Stopping…' : 'Stop'}
             </button>
           ) : (

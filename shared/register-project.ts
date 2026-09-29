@@ -47,13 +47,14 @@ export interface RegisterProjectDeps {
  */
 export function canonicalFolderKey(projectPath: string): string {
   const resolved = path.resolve(projectPath.trim())
-  let real = resolved
   try {
-    real = fs.realpathSync.native(resolved)
+    // The native realpath returns the on-disk case, so an existing folder
+    // compares exactly: right on case-insensitive and case-sensitive volumes.
+    return fs.realpathSync.native(resolved)
   } catch {
-    // Missing folder: compare the resolved spelling.
+    // Missing folder: best effort on the default case-insensitive volume.
+    return process.platform === 'darwin' ? resolved.toLowerCase() : resolved
   }
-  return process.platform === 'darwin' ? real.toLowerCase() : real
 }
 
 /** The library tool registered for this folder, through any spelling of it. */
@@ -127,23 +128,25 @@ function newToolFrom(
   // port-rewrites if the port gets healed.
   const port = exact ? overrides.port : overrides.port ?? suggestion.port
   const url = exact ? overrides.url : overrides.url || suggestion.url
+  // Exact mode (draft acceptance) saves only what the review sheet showed:
+  // nothing below may come from a scan of the folder at click time.
   return {
     id: '',
-    name: overrides.name?.trim() || suggestion.name?.trim() || path.basename(resolved),
-    description: overrides.description || suggestion.description,
+    name: overrides.name?.trim() || (exact ? '' : suggestion.name?.trim()) || path.basename(resolved),
+    description: exact ? overrides.description : overrides.description || suggestion.description,
     iconLucide: defaults?.iconLucide,
     iconColor: defaults?.iconColor,
     iconBackground: defaults?.iconBackground,
-    tags: overrides.tags?.length ? overrides.tags : suggestion.tags,
+    tags: overrides.tags?.length ? overrides.tags : exact ? [] : suggestion.tags,
     capabilities: overrides.capabilities || [],
-    agentAccess: overrides.agentAccess?.length ? overrides.agentAccess : suggestion.agentAccess,
+    agentAccess: overrides.agentAccess?.length ? overrides.agentAccess : exact ? [] : suggestion.agentAccess,
     favorite: false,
     projectPath: resolved,
     launchCommand,
     url,
     port,
     env: overrides.env,
-    notes: overrides.notes || suggestion.notesHint,
+    notes: exact ? overrides.notes : overrides.notes || suggestion.notesHint,
     source,
     createdAt: now,
     updatedAt: now,

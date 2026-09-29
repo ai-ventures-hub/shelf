@@ -38,7 +38,9 @@ function isFileSpecifier(spec: string): boolean {
  */
 function classifyMissingModule(spec: string, text: string): LaunchErrorCode {
   if (!isFileSpecifier(spec)) return 'deps_missing'
-  return /imported from/i.test(text) ? 'app_crashed' : 'bad_launch_command'
+  // ESM says "imported from <file>"; CommonJS lists a "Require stack:" under
+  // the error. Either way app code asked for the file, not the command.
+  return /imported from|Require stack:/i.test(text) ? 'app_crashed' : 'bad_launch_command'
 }
 
 /** Ordered: first match wins. Specific causes before the generic crash. */
@@ -118,7 +120,10 @@ export function classifyLaunchFailure(
     for (const pattern of LOG_PATTERNS) {
       const m = line.text.match(pattern.re)
       if (m) {
-        const code = typeof pattern.code === 'function' ? pattern.code(m, line.text) : pattern.code
+        // The lines right after a match carry context such as Node's
+        // "Require stack:", which arrives as its own log line.
+        const context = logs.slice(i, i + 4).map((next) => next.text).join('\n')
+        const code = typeof pattern.code === 'function' ? pattern.code(m, context) : pattern.code
         return { code, detail: pattern.detail?.(m) }
       }
     }

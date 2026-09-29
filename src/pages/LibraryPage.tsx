@@ -45,6 +45,7 @@ export function LibraryPage({
     finishedAt,
     loading,
     error,
+    loadFailed: libraryReadFailed,
     refresh,
     startTool,
     stopTool,
@@ -294,7 +295,8 @@ export function LibraryPage({
   const emptyBecauseFilters =
     tools.length > 0 && filtered.length === 0
   // The library could not be read: show the error alone, never the welcome.
-  const loadFailed = !loading && Boolean(error) && tools.length === 0
+  // A recovery notice is not a failed read; an empty library still welcomes.
+  const loadFailed = !loading && libraryReadFailed && tools.length === 0
   // True zero-library welcome — hide search/filter chrome until there is something to find.
   const isFirstRun = !loading && !loadFailed && tools.length === 0 && mode === 'all'
 

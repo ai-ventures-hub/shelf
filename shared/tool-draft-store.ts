@@ -262,14 +262,9 @@ export class ToolDraftStore {
   }
 }
 
-/** Same folder, through symlinks and the case-insensitive default macOS volume. */
+/** Same folder, through symlinks and any spelling the volume treats as equal. */
 function samePath(a: string, b: string): boolean {
-  const canonical = (value: string) => {
-    let resolved = path.resolve(value)
-    try { resolved = fs.realpathSync.native(resolved) } catch { /* missing: compare as given */ }
-    return process.platform === 'darwin' ? resolved.toLowerCase() : resolved
-  }
-  return canonical(a) === canonical(b)
+  return canonicalFolderKey(a) === canonicalFolderKey(b)
 }
 
 function isDraft(value: unknown): value is ToolDraft {
@@ -321,7 +316,10 @@ export async function acceptToolDraft(
       name: draft.name,
       launchCommand: draft.launchCommand,
       port: draft.port,
-      url: draft.url,
+      // The sheet shows the port, not a URL: derive a loopback URL from it
+      // rather than save an agent-supplied address the user never saw (the
+      // app opens a tool's URL once it is ready).
+      url: draft.port ? `http://127.0.0.1:${draft.port}/` : undefined,
       // Shown on the sheet as well; a hand-edited file can hold any shape.
       ...(typeof draft.description === 'string' && draft.description ? { description: draft.description } : {}),
       ...(Array.isArray(draft.capabilities)

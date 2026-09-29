@@ -41,7 +41,7 @@ export function takeUpdateResume(root: string, now = Date.now()): string[] {
   } catch {
     return []
   }
-  fs.rmSync(target, { force: true })
+  try { fs.rmSync(target, { force: true }) } catch { return [] /* never resume a list we cannot consume */ }
   try {
     const data = JSON.parse(raw) as Partial<ResumeFile>
     const savedAt = Date.parse(String(data.savedAt))

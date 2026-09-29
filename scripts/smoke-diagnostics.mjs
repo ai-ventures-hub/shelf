@@ -23,6 +23,8 @@ const cases = [
   // not missing dependencies — install_deps would never fix it.
   [[line("Error: Cannot find module '/Users/me/app/dev-server.mjs'")], 'bad_launch_command'],
   [[line("Error: Cannot find module './scripts/dev-server.mjs'")], 'bad_launch_command'],
+  // CommonJS app code requiring a missing file lists a require stack.
+  [[line("Error: Cannot find module './lib/x'"), line('Require stack:'), line('- /Users/me/app/server.js')], 'app_crashed'],
   [
     [line("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/me/app/lib/util.js' imported from /Users/me/app/index.js")],
     'app_crashed',

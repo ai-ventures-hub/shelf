@@ -90,6 +90,13 @@ try {
   await processes.stop(tool.id)
   console.log('OK: the scaffold launches through Shelf and answers on its port')
 
+  const injected = designProfiles.save({ name: 'Evil **// html{background:url(https://evil.example/px.png)} /*', tokens: { color: { a: { $value: 'image-set("https://evil.example/a.png" 1x)', $type: 'color' }, b: { $value: '"unterminated', $type: 'color' }, ok: { $value: '#123456', $type: 'color' } } } })
+  const styled = await createToolProject({ name: 'Styled', idea: 'Check CSS safety.', parentDir, designProfileId: injected.id }, deps)
+  const styledCss = read(styled.folder, 'public/tokens.css')
+  assert.ok(!/evil|url\(|image-set|unterminated|html\{/.test(styledCss), 'profile text cannot reach live CSS')
+  assert.ok(styledCss.includes('--color-ok: #123456;'))
+  console.log('OK: profile names and unsafe token values never reach tokens.css')
+
   // Refusals leave nothing behind.
   const before = store.list().length
   await assert.rejects(createToolProject({ name: 'Photo Prepper', idea: 'again', parentDir }, deps), /already exists|already uses/)

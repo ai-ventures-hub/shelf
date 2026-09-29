@@ -57,9 +57,9 @@ try {
   // substrings once stored `127.0.0.1` as `***27.0.0.***` in every log line.
   const configured = toolSecretValues({
     launchCommand: 'FLEET_NO_BROWSER=1 SESSION_KEY=abcd .venv/bin/python app.py',
-    env: { PYTHONUNBUFFERED: '1', WORDPRESS_FLEET_PORT: '5100', APP_ENV: 'production', FEATURE_FLAG: 'true', LOG_LEVEL: 'error', DB_PASS: 'q9z1', API_TOKEN: secret },
+    env: { PYTHONUNBUFFERED: '1', WORDPRESS_FLEET_PORT: '5100', APP_ENV: 'production', FEATURE_FLAG: 'true', LOG_LEVEL: 'error', SPINNER: 'dots', DB_PASS: 'q9z1', REDIS_PW: 'hunt2', ALARM_PIN: '4821', CACHE_TOKEN: 'abc', API_TOKEN: secret },
   })
-  assert.deepEqual([...configured].sort(), ['abcd', 'q9z1', secret].sort(), 'flags and ports are configuration; short credential-named values still count')
+  assert.deepEqual([...configured].sort(), ['abcd', 'q9z1', 'hunt2', '4821', 'abc', secret].sort(), 'flags and ports are configuration; short credential-named values still count')
   const logLine = '127.0.0.1 - - [28/Sep/2026 21:01:37] "GET /api/sites HTTP/1.1" 200 - production localhost:5100 true none error'
   assert.equal(maskSecrets(logLine, configured), logLine, 'ordinary env values must not corrupt output')
   assert.equal(sanitizeOutput({ url: 'http://127.0.0.1:5100/', message: 'Running · port 5100' }, configured).url, 'http://127.0.0.1:5100/')
