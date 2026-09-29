@@ -71,7 +71,7 @@ export function SuggestionListRow({
   suggestion: GapResolveSuggestion
 }) {
   return (
-    <tr className="tool-list-row">
+    <tr>
       <td>
         <Link to="/gaps" className="tool-list-name">
           <span className="tool-icon tool-icon-sm suggestion-tile" aria-hidden>

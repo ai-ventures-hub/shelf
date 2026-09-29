@@ -6,6 +6,8 @@ export interface UseReceiptsOpts {
   limit?: number
   outcomes?: ReceiptOutcome[]
   query?: string
+  /** False skips every read until the list is actually shown. */
+  enabled?: boolean
 }
 
 export function useReceipts(opts: UseReceiptsOpts = {}) {
@@ -14,6 +16,7 @@ export function useReceipts(opts: UseReceiptsOpts = {}) {
   const [error, setError] = useState<string | null>(null)
   const generation = useRef(0)
   const outcomesKey = opts.outcomes?.slice().sort().join(',') || ''
+  const enabled = opts.enabled ?? true
   const refresh = useCallback(async () => {
     if (!window.shelf) {
       setLoading(false)
@@ -40,6 +43,10 @@ export function useReceipts(opts: UseReceiptsOpts = {}) {
   }, [opts.toolId, opts.limit, outcomesKey, opts.query])
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
     setReceipts([])
     void refresh()
     // Requery after receipt events: filter membership and chronological order can change.
@@ -55,7 +62,7 @@ export function useReceipts(opts: UseReceiptsOpts = {}) {
       offReceipt()
       offFile()
     }
-  }, [refresh])
+  }, [refresh, enabled])
   const clear = useCallback(async () => {
     await window.shelf.clearReceipts({ toolId: opts.toolId })
     await refresh()

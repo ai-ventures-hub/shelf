@@ -1,4 +1,6 @@
 import { Modal } from './Modal'
+import { notify } from './feedback/Toasts'
+import { errorText } from '../lib/errorText'
 import {
   useEffect,
   useMemo,
@@ -21,9 +23,13 @@ import type { ToolStatus } from '../types'
 type Runnable = QuickOpenCandidate & {
   /** Primary: navigate / run action. */
   run: () => void | Promise<void>
+  /** Toast text when the primary action fails. */
+  failure?: string
   /** Secondary (⌘↵): launch or stop a tool when applicable. */
   runSecondary?: () => void | Promise<void>
   secondaryHint?: string
+  /** Toast text when the secondary action fails, e.g. "Could not launch X." */
+  secondaryFailure?: string
   status?: ToolStatus
 }
 
@@ -45,9 +51,9 @@ export function QuickOpen({
   const { isDeveloper } = useUiMode()
   const { tools, collections, states, startTool, stopTool } = useLibrary()
   const { profiles: designProfiles } = useDesignProfiles()
-  // Recent receipts for relaunch / jump-to-tool from the palette.
-  const { receipts } = useReceipts({ limit: 8 })
   const [open, setOpen] = useState(false)
+  // Recent receipts for relaunch / jump-to-tool, read only while open.
+  const { receipts } = useReceipts({ limit: 8, enabled: open })
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -119,6 +125,7 @@ export function QuickOpen({
         boost,
         status,
         secondaryHint: canToggle ? '⌘↵ Stop' : '⌘↵ Launch',
+        secondaryFailure: `Could not ${canToggle ? 'stop' : 'launch'} ${tool.name}.`,
         run: () => navigate(`/tools/${tool.id}`),
         runSecondary: async () => {
           if (canToggle) await stopTool(tool.id)
@@ -126,6 +133,21 @@ export function QuickOpen({
         },
       }
     })
+
+    // Running tools with a URL can be opened straight from the palette.
+    const openItems: Runnable[] = tools
+      .filter((tool) => tool.url && states[tool.id]?.status === 'running')
+      .map((tool) => ({
+        id: `open:${tool.id}`,
+        kind: 'action',
+        title: `Open ${tool.name} in browser`,
+        subtitle: tool.url,
+        keywords: [tool.name, 'open', 'browser', 'url', 'web', 'localhost'],
+        // Above navigation actions: a live tool is usually why you are here.
+        boost: 24,
+        failure: `Could not open ${tool.name} in the browser.`,
+        run: () => window.shelf.openUrl(tool.url!),
+      }))
 
     const collectionItems: Runnable[] = collections.map((c) => ({
       id: `collection:${c.id}`,
@@ -167,6 +189,7 @@ export function QuickOpen({
         boost: 18,
         status,
         secondaryHint: canToggle ? '⌘↵ Stop' : '⌘↵ Launch',
+        secondaryFailure: `Could not ${canToggle ? 'stop' : 'launch'} ${receipt.toolName}.`,
         run: () => navigate(`/tools/${receipt.toolId}`),
         runSecondary: async () => {
           if (canToggle) await stopTool(receipt.toolId)
@@ -294,7 +317,7 @@ export function QuickOpen({
       },
     ]
 
-    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...actions]
+    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...openItems, ...actions]
   }, [
     tools,
     collections,
@@ -330,16 +353,26 @@ export function QuickOpen({
     el?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex, open])
 
+  // The palette closes before the action finishes, so failures are reported
+  // in a toast instead of vanishing.
   async function runPrimary(item: Runnable | undefined) {
     if (!item) return
     setOpen(false)
-    await item.run()
+    try {
+      await item.run()
+    } catch (err) {
+      notify(`${item.failure || `Could not open ${item.title}.`} ${errorText(err)}`, { tone: 'error' })
+    }
   }
 
   async function runSecondary(item: Runnable | undefined) {
     if (!item?.runSecondary) return
     setOpen(false)
-    await item.runSecondary()
+    try {
+      await item.runSecondary()
+    } catch (err) {
+      notify(`${item.secondaryFailure || 'That action did not finish.'} ${errorText(err)}`, { tone: 'error' })
+    }
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -409,8 +442,8 @@ export function QuickOpen({
             <p className="quick-open-empty">No matches</p>
           ) : (
             groups.map((group) => (
-              <div key={group.kind} className="quick-open-group">
-                <p className="quick-open-group-label">{group.label}</p>
+              <div key={group.kind} role="group" aria-label={group.label}>
+                <p className="quick-open-group-label" aria-hidden>{group.label}</p>
                 {(group.items as Runnable[]).map((item) => {
                   const index = indexById.get(item.id) ?? 0
                   const active = index === activeIndex

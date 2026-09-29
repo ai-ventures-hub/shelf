@@ -198,21 +198,6 @@
   margin:0 auto;
 }
 
-/* Status toast while a dropped folder registers/installs/launches. */
-.drop-progress {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  z-index: 60;
-  padding: 0.55rem 0.9rem;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.85rem;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
-}
-
 /* Full-window drop target highlight while dragging files over the app. */
 .drop-overlay {
   position: fixed;

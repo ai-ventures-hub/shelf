@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { useCapabilityGaps } from '../hooks/useCapabilityGaps'
 import { useLibrary } from '../hooks/useLibrary'
 import type { CapabilityGapStatus } from '../types'
@@ -38,6 +39,7 @@ export function CapabilityGapsPage() {
     status: filter === 'all' ? undefined : filter,
   })
   const { tools } = useLibrary()
+  const confirm = useConfirm()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -121,7 +123,7 @@ export function CapabilityGapsPage() {
                 .join('\n\n'),
             })
             return (
-              <article className="panel gap-card" key={gap.id}>
+              <article className="panel" key={gap.id}>
                 <div className="panel-header gap-card-header">
                   <div>
                     <div className="capability-chips">
@@ -133,7 +135,7 @@ export function CapabilityGapsPage() {
                   </div>
                   <span className={`readiness-badge is-${gap.status}`}>{gap.status}</span>
                 </div>
-                <div className="panel-body gap-body">
+                <div className="panel-body">
                   <p className="gap-reason">{gap.reason}</p>
                   <dl className="gap-meta">
                     <div>
@@ -251,9 +253,15 @@ export function CapabilityGapsPage() {
                       className="btn btn-quiet btn-sm is-danger"
                       disabled={busyId === gap.id}
                       onClick={() => {
-                        if (window.confirm('Delete this capability gap?')) {
-                          void run(gap.id, () => remove(gap.id))
-                        }
+                        void confirm({
+                          title: 'Delete this capability gap?',
+                          message: 'An agent can record it again if it hits the same need.',
+                          confirmLabel: 'Delete gap',
+                          cancelLabel: 'Keep gap',
+                          danger: true,
+                        }).then((confirmed) => {
+                          if (confirmed) void run(gap.id, () => remove(gap.id))
+                        })
                       }}
                     >
                       Delete

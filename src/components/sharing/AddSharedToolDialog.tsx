@@ -17,6 +17,7 @@ import { Modal } from '../Modal'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../hooks/useLibrary'
+import { notify } from '../feedback/Toasts'
 import { friendlyLaunchError } from '../../lib/launchErrorCopy'
 import type { ConfirmShareResult, ShareFailure, StagedShareView } from '../../types'
 
@@ -195,7 +196,7 @@ export function AddSharedToolDialog({
     const docker = result.issues.find((i) => i.code === 'docker_not_running')
     if (docker && result.tool) {
       // Same wording as the drag-drop register flow.
-      window.alert(`${docker.message} Start it, then launch the tool from its page.`)
+      notify(`${docker.message} Start it, then launch the tool from its page.`, { tone: 'warning' })
     }
     setPhase({ kind: 'done', result })
     const tool = result.tool

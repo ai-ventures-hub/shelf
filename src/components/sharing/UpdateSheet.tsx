@@ -7,6 +7,7 @@ import { Modal } from '../Modal'
  */
 import { useEffect, useRef, useState } from 'react'
 import { useLibrary } from '../../hooks/useLibrary'
+import { useConfirm } from '../feedback/ConfirmDialog'
 import type { ApplyUpdateResult, Tool, UpdateCheck } from '../../types'
 
 type Phase =
@@ -18,6 +19,7 @@ type Phase =
 
 export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean; onClose: () => void }) {
   const { refresh } = useLibrary()
+  const confirm = useConfirm()
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
   const [runSetup, setRunSetup] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -188,15 +190,17 @@ export function UpdateSheet({ tool, open, onClose }: { tool: Tool; open: boolean
               <button
                 type="button"
                 className="btn btn-danger"
-                onClick={() => {
-                  if (
-                    phase.check.state === 'diverged' &&
-                    window.confirm(
-                      `Replace your copy of “${tool.name}” with the shared version? Your local changes in this folder will be discarded. This cannot be undone.`,
-                    )
-                  ) {
-                    void apply('take_theirs', phase.check.target, phase.check.newBootstrap)
-                  }
+                onClick={async () => {
+                  if (phase.check.state !== 'diverged') return
+                  const { target, newBootstrap } = phase.check
+                  const confirmed = await confirm({
+                    title: `Replace your copy of “${tool.name}”?`,
+                    message: 'Your local changes in this folder are discarded for the shared version. This cannot be undone.',
+                    confirmLabel: 'Replace my copy',
+                    cancelLabel: 'Keep mine',
+                    danger: true,
+                  })
+                  if (confirmed) void apply('take_theirs', target, newBootstrap)
                 }}
               >
                 Take theirs

@@ -22,6 +22,8 @@ interface LibraryContextValue {
   collections: Collection[]
   states: Record<string, ToolRuntimeState>
   health: Record<string, ToolHealth>
+  /** When this window saw a run end on its own (exit without Stop), by tool id. */
+  finishedAt: Record<string, string>
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -47,6 +49,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [states, setStates] = useState<Record<string, ToolRuntimeState>>({})
   const [health, setHealth] = useState<Record<string, ToolHealth>>({})
+  const [finishedAt, setFinishedAt] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const healthTimerRef = useRef<number | null>(null)
@@ -100,6 +103,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
     const offRuntime = window.shelf.onRuntimeUpdate((state) => {
       setStates((prev) => ({ ...prev, [state.toolId]: state }))
+      // Runtime state has no end time; remember when a script finished so
+      // its card can say "Finished · 2m ago".
+      if (state.status === 'stopped' && state.exitCode !== undefined) {
+        setFinishedAt((prev) =>
+          prev[state.toolId] ? prev : { ...prev, [state.toolId]: new Date().toISOString() },
+        )
+      } else if (state.status === 'starting' || state.status === 'running') {
+        setFinishedAt((prev) => {
+          if (!(state.toolId in prev)) return prev
+          const next = { ...prev }
+          delete next[state.toolId]
+          return next
+        })
+      }
       // Start/stop changes what counts as a port conflict — refresh the
       // launchability glyphs, debounced across bursts of updates.
       if (healthTimerRef.current !== null) window.clearTimeout(healthTimerRef.current)
@@ -188,6 +205,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       collections,
       states,
       health,
+      finishedAt,
       loading,
       error,
       refresh,
@@ -206,6 +224,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       collections,
       states,
       health,
+      finishedAt,
       loading,
       error,
       refresh,

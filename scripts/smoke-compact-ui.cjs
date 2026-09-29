@@ -160,6 +160,13 @@ async function run(win) {
   suggestions = [{ gapId: 'fixture-gap', toolId: 'compact-0', toolName: 'AI Movie Studio', matched: ['Render a preview'], total: 1 }]
   await js(`location.hash='#/'`)
   win.webContents.reload()
+  // Suggestion cards link to the developer-only Capability gaps page, so
+  // Simple mode (this fixture's saved mode) must not show them.
+  await until(`document.querySelectorAll('.tool-card-compact').length===17 && !!document.querySelector('.health-warning-trigger')`)
+  await pause(300)
+  assert.equal(await js(`document.querySelectorAll('[data-suggestion]').length`), 0)
+  await js(`window.shelf.updatePrefs({uiMode:'developer'})`)
+  win.webContents.reload()
   await until(`!!document.querySelector('.tool-card-compact[data-suggestion]') && !!document.querySelector('.health-warning-trigger')`)
   assert.equal(await js(`document.querySelectorAll('.health-warning-trigger').length`), 1)
   await fit()

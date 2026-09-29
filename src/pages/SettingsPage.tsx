@@ -4,6 +4,9 @@ import { AppUpdatePanel } from '../components/AppUpdatePanel'
 import { GLOBAL_SHORTCUT_PRESETS } from '../../shared/global-shortcut'
 import { useEffect, useState } from 'react'
 import { ColorField } from '../components/ColorField'
+import { useConfirm } from '../components/feedback/ConfirmDialog'
+import { notify } from '../components/feedback/Toasts'
+import { errorText } from '../lib/errorText'
 import { LucideIconPicker } from '../components/LucideIconPicker'
 import { useLibrary } from '../hooks/useLibrary'
 import { usePrefs } from '../hooks/usePrefs'
@@ -34,6 +37,7 @@ export function SettingsPage() {
   const { prefs, updatePrefs, resolvedTheme, shortcutStatus, error: prefsError, refresh: refreshPrefs } = usePrefs()
   const { mode, isDeveloper, setMode } = useUiMode()
   const { tools, collections } = useLibrary()
+  const confirm = useConfirm()
   const [search] = useSearchParams()
   const section = settingsSection(search.get('section'), isDeveloper)
   // Draft so typing does not re-register the hotkey on every keystroke.
@@ -399,10 +403,8 @@ export function SettingsPage() {
                 className="btn btn-quiet"
                 onClick={() => {
                   void window.shelf.exportReceipts({ format: 'json' }).then((result) => {
-                    if (result.saved && result.path) {
-                      window.alert(`Saved receipts to ${result.path}`)
-                    }
-                  })
+                    if (result.saved && result.path) notify(`Saved receipts to ${result.path}`, { tone: 'success' })
+                  }).catch((err: unknown) => notify(`Could not export receipts. ${errorText(err)}`, { tone: 'error' }))
                 }}
               >
                 Export JSON
@@ -412,10 +414,8 @@ export function SettingsPage() {
                 className="btn btn-quiet"
                 onClick={() => {
                   void window.shelf.exportReceipts({ format: 'csv' }).then((result) => {
-                    if (result.saved && result.path) {
-                      window.alert(`Saved receipts to ${result.path}`)
-                    }
-                  })
+                    if (result.saved && result.path) notify(`Saved receipts to ${result.path}`, { tone: 'success' })
+                  }).catch((err: unknown) => notify(`Could not export receipts. ${errorText(err)}`, { tone: 'error' }))
                 }}
               >
                 Export CSV
@@ -423,11 +423,21 @@ export function SettingsPage() {
               <button
                 type="button"
                 className="btn btn-quiet"
-                onClick={() => {
-                  if (!window.confirm('Clear all run receipts on this Mac?')) return
-                  void window.shelf.clearReceipts().then(() => {
-                    window.alert('Run history cleared.')
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Clear all run receipts on this Mac?',
+                    message: 'Finished runs are removed from every tool’s history. Runs in progress are kept.',
+                    confirmLabel: 'Clear all receipts',
+                    cancelLabel: 'Keep receipts',
+                    danger: true,
                   })
+                  if (!confirmed) return
+                  try {
+                    await window.shelf.clearReceipts()
+                    notify('Run history cleared.', { tone: 'success' })
+                  } catch (err) {
+                    notify(`Could not clear run history. ${errorText(err)}`, { tone: 'error' })
+                  }
                 }}
               >
                 Clear all receipts
