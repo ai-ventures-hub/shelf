@@ -272,13 +272,9 @@ function createWindow(): void {
     },
   })
 
-  if (isDev) {
-    void mainWindow.loadURL('http://127.0.0.1:5173')
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
-  } else {
-    // Packaged: …/app.asar/dist-electron/electron → ../../dist
-    void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
-  }
+  loadRenderer(mainWindow)
+  if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
+  watchRendererHealth(mainWindow)
   if (saved?.fullScreen) mainWindow.setFullScreen(true)
   else if (saved?.maximized) mainWindow.maximize()
   mainWindow.webContents.on('did-finish-load', flushRendererMessages)
@@ -348,6 +344,85 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     if (boundsPersistTimer) clearTimeout(boundsPersistTimer)
     mainWindow = null
+  })
+}
+
+function loadRenderer(win: BrowserWindow): void {
+  if (isDev) {
+    void win.loadURL('http://127.0.0.1:5173')
+  } else {
+    // Packaged: …/app.asar/dist-electron/electron → ../../dist
+    void win.loadFile(path.join(__dirname, '../../dist/index.html'))
+  }
+}
+
+/**
+ * A crashed or hung renderer otherwise leaves a blank or frozen window with no
+ * way back short of quitting. Crashes reload on their own; a repeat crash
+ * within a minute asks first so a crash loop can't spin. Hangs offer a reload
+ * and the prompt withdraws itself if the page recovers.
+ */
+function watchRendererHealth(win: BrowserWindow): void {
+  const recentCrashes: number[] = []
+  let hangPrompt: AbortController | null = null
+  /** Set when the user chose Reload on a hang; that crash is ours, not a loop. */
+  let crashRequested = false
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || win.isDestroyed() || isQuitting) return
+    console.error('[shelf] renderer gone:', details.reason, details.exitCode)
+    hangPrompt?.abort()
+    if (crashRequested) {
+      crashRequested = false
+      loadRenderer(win)
+      return
+    }
+    const now = Date.now()
+    while (recentCrashes.length && now - recentCrashes[0] > 60_000) recentCrashes.shift()
+    recentCrashes.push(now)
+    if (recentCrashes.length === 1) {
+      loadRenderer(win)
+      return
+    }
+    void dialog.showMessageBox(win, {
+      type: 'error',
+      message: 'Shelf’s window stopped working.',
+      detail: 'Your tools are still running. Reload the window to continue, or quit Shelf.',
+      buttons: ['Reload Window', 'Quit Shelf'],
+      defaultId: 0,
+      cancelId: 0,
+    }).then(({ response }) => {
+      if (win.isDestroyed()) return
+      if (response === 1) app.quit()
+      else loadRenderer(win)
+    })
+  })
+
+  // A paused debugger looks exactly like a hang; don't nag during development.
+  if (isDev) return
+  win.on('unresponsive', () => {
+    if (hangPrompt || win.isDestroyed()) return
+    const prompt = new AbortController()
+    hangPrompt = prompt
+    void dialog.showMessageBox(win, {
+      type: 'warning',
+      message: 'Shelf’s window isn’t responding.',
+      detail: 'You can wait for it, or reload the window. Your tools keep running either way.',
+      buttons: ['Wait', 'Reload Window'],
+      defaultId: 0,
+      cancelId: 0,
+      signal: prompt.signal,
+    }).then(({ response }) => {
+      if (hangPrompt === prompt) hangPrompt = null
+      if (prompt.signal.aborted || response !== 1 || win.isDestroyed()) return
+      // Reload alone would wait on the hung page; crash it, then load fresh.
+      crashRequested = true
+      win.webContents.forcefullyCrashRenderer()
+    })
+  })
+  win.on('responsive', () => {
+    hangPrompt?.abort()
+    hangPrompt = null
   })
 }
 
