@@ -197,6 +197,29 @@ app.on('open-url', (event, url) => {
   void handleShelfUrl(getDesktopHost(), url)
 })
 
+// Folders dropped on the Dock icon or opened with Shelf. Like open-url, this
+// can arrive before ready (it may be what launched the app), so queue it.
+const pendingOpenFolders: string[] = []
+app.on('open-file', (event, target) => {
+  event.preventDefault()
+  if (!prefs || !store) {
+    pendingOpenFolders.push(target)
+    return
+  }
+  openProjectFolder(target)
+})
+
+/** Hand a folder to the Add Tool review; anything that isn't a folder is ignored. */
+function openProjectFolder(target: string): void {
+  try {
+    if (!fs.statSync(target).isDirectory()) return
+  } catch {
+    return
+  }
+  showOrCreateWindow(getDesktopHost())
+  sendToRenderer('app:add-folder', target)
+}
+
 app.on('second-instance', (_event, argv) => {
   const url = argv.find((arg) => arg.startsWith('shelf://'))
   if (url && prefs && store) {
@@ -1379,6 +1402,7 @@ if (gotLock) {
     // Window exists so the renderer can receive the boot conflict status.
     publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: !shortcutStatus.ok })
     void flushPendingShelfUrls(getDesktopHost())
+    for (const folder of pendingOpenFolders.splice(0)) openProjectFolder(folder)
     // Retry a first-launch survey that was captured offline (silent, best-effort).
     flushPendingOnboarding(prefs)
     // Keep the OS login item in sync with the pref (covers prefs.json edits).

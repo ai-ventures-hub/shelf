@@ -248,6 +248,8 @@ export interface ShelfApi {
   onQuickOpen: (cb: () => void) => () => void
   /** Menu ⌘[ / ⌘], swipes, and mouse back/forward buttons. */
   onHistory: (cb: (direction: 'back' | 'forward') => void) => () => void
+  /** A folder dropped on the Dock icon or opened with Shelf, to review as a new tool. */
+  onAddFolder: (cb: (projectPath: string) => void) => () => void
   onShortcutStatus: (cb: (status: ShortcutStatus) => void) => () => void
   onUpdateReady: (cb: (info: { version: string }) => void) => () => void
   installUpdate: () => Promise<void>

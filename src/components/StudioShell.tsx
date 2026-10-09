@@ -208,9 +208,12 @@ export function StudioShell({ children }: { children: ReactNode }) {
     if (!window.shelf) return
     const offNav = window.shelf.onNavigate((route) => navigate(route))
     const offHistory = window.shelf.onHistory((direction) => navigate(direction === 'back' ? -1 : 1))
+    // Same review and setup consent as a folder dropped on the window.
+    const offFolder = window.shelf.onAddFolder((projectPath) => navigate('/tools/new', { state: { projectPath } }))
     return () => {
       offNav()
       offHistory()
+      offFolder()
     }
   }, [navigate])
 
