@@ -246,6 +246,8 @@ export interface ShelfApi {
   onNavigate: (cb: (path: string) => void) => () => void
   onFocusSearch: (cb: () => void) => () => void
   onQuickOpen: (cb: () => void) => () => void
+  /** Menu ⌘[ / ⌘], swipes, and mouse back/forward buttons. */
+  onHistory: (cb: (direction: 'back' | 'forward') => void) => () => void
   onShortcutStatus: (cb: (status: ShortcutStatus) => void) => () => void
   onUpdateReady: (cb: (info: { version: string }) => void) => () => void
   installUpdate: () => Promise<void>

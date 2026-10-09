@@ -275,6 +275,18 @@ function createWindow(): void {
   loadRenderer(mainWindow)
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
   watchRendererHealth(mainWindow)
+
+  // Trackpad swipes (when "Swipe between pages" allows three fingers) and,
+  // on other platforms, mouse side buttons. macOS delivers mouse buttons to
+  // the page instead; the renderer handles those.
+  mainWindow.on('swipe', (_event, direction) => {
+    if (direction === 'left') sendToRenderer('app:history', 'back')
+    else if (direction === 'right') sendToRenderer('app:history', 'forward')
+  })
+  mainWindow.on('app-command', (_event, command) => {
+    if (command === 'browser-backward') sendToRenderer('app:history', 'back')
+    else if (command === 'browser-forward') sendToRenderer('app:history', 'forward')
+  })
   if (saved?.fullScreen) mainWindow.setFullScreen(true)
   else if (saved?.maximized) mainWindow.maximize()
   mainWindow.webContents.on('did-finish-load', flushRendererMessages)
@@ -506,6 +518,21 @@ function buildMenu(): void {
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Back',
+          accelerator: 'CmdOrCtrl+[',
+          click: () => sendToRenderer('app:history', 'back'),
+        },
+        {
+          label: 'Forward',
+          accelerator: 'CmdOrCtrl+]',
+          click: () => sendToRenderer('app:history', 'forward'),
+        },
       ],
     },
     {

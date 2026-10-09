@@ -207,7 +207,22 @@ export function StudioShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!window.shelf) return
     const offNav = window.shelf.onNavigate((route) => navigate(route))
-    return () => offNav()
+    const offHistory = window.shelf.onHistory((direction) => navigate(direction === 'back' ? -1 : 1))
+    return () => {
+      offNav()
+      offHistory()
+    }
+  }, [navigate])
+
+  // Mouse side buttons (3 = back, 4 = forward) reach the page on macOS.
+  useEffect(() => {
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+      navigate(event.button === 3 ? -1 : 1)
+    }
+    window.addEventListener('mouseup', onMouseUp)
+    return () => window.removeEventListener('mouseup', onMouseUp)
   }, [navigate])
 
   useEffect(() => {
