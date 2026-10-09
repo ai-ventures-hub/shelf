@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal'
 import { VerificationResults } from '../components/VerificationResults'
 import { useLibrary } from '../hooks/useLibrary'
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
+import { visibleInterval } from '../lib/refreshTriggers'
 import {
   verificationActive,
   type VerificationState,
@@ -89,11 +90,11 @@ function VerificationEditor({ id }: { id: string }) {
       off()
     }
   }, [id, refresh])
-  // Events refresh step transitions; polling also catches recovery and a missed event.
+  // Events refresh step transitions; polling also catches recovery and a missed
+  // event, and pauses while the window is hidden.
   useEffect(() => {
     if (!active) return
-    const timer = window.setInterval(() => void refresh(), 1000)
-    return () => clearInterval(timer)
+    return visibleInterval(() => void refresh(), 1000)
   }, [active?.id, refresh])
   async function perform(action: () => Promise<void>) {
     if (busy) return

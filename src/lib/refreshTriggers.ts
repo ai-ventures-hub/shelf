@@ -35,3 +35,32 @@ export function subscribeDataRefresh(
     if (focus) window.removeEventListener('focus', trigger)
   }
 }
+
+/**
+ * setInterval that runs only while the window is visible. Hidden or
+ * minimized windows make no calls; on becoming visible it catches up with
+ * one immediate tick, then resumes the interval. Returns a stop function.
+ */
+export function visibleInterval(tick: () => void, ms: number): () => void {
+  let timer: number | undefined
+  const start = () => {
+    if (timer === undefined) timer = window.setInterval(tick, ms)
+  }
+  const pause = () => {
+    if (timer !== undefined) window.clearInterval(timer)
+    timer = undefined
+  }
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') return pause()
+    if (timer === undefined) {
+      tick()
+      start()
+    }
+  }
+  if (document.visibilityState !== 'hidden') start()
+  document.addEventListener('visibilitychange', onVisibility)
+  return () => {
+    pause()
+    document.removeEventListener('visibilitychange', onVisibility)
+  }
+}

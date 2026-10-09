@@ -141,7 +141,9 @@ let quitPreparing = false
 const stagedShares = new Map<string, StagedShare>()
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
-let externalReconcileTimer: ReturnType<typeof setInterval> | null = null
+let externalReconcileTimer: ReturnType<typeof setTimeout> | null = null
+/** Runs a reconcile now and reschedules; set once the app is ready. */
+let reconcileExternalsNow: (() => void) | null = null
 let dataRootWatcher: fs.FSWatcher | null = null
 
 /** Register/unregister the packaged app as a macOS login item. Dev runs
@@ -363,6 +365,10 @@ function createWindow(): void {
   }
   mainWindow.on('resize', scheduleBoundsPersist)
   mainWindow.on('move', scheduleBoundsPersist)
+  // Catch up at once when the window comes back instead of waiting out the
+  // slower hidden-window reconcile.
+  mainWindow.on('show', () => reconcileExternalsNow?.())
+  mainWindow.on('restore', () => reconcileExternalsNow?.())
   mainWindow.on('maximize', scheduleBoundsPersist)
   mainWindow.on('unmaximize', scheduleBoundsPersist)
   mainWindow.on('enter-full-screen', scheduleBoundsPersist)
@@ -1414,10 +1420,20 @@ if (gotLock) {
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))
     if (bootUrl) void handleShelfUrl(getDesktopHost(), bootUrl)
 
-    // Detect tools launched via MCP (separate ProcessManager) without requiring a relaunch.
+    // Detect tools launched via MCP (separate ProcessManager) without requiring
+    // a relaunch. Port probes run every 5s while the window is on screen; with
+    // it hidden only the menu bar and Dock badge need them, so every 30s.
     let reconcileInFlight = false
-    externalReconcileTimer = setInterval(() => {
-      if (reconcileInFlight) return
+    const scheduleReconcile = () => {
+      if (externalReconcileTimer) clearTimeout(externalReconcileTimer)
+      const visible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized())
+      externalReconcileTimer = setTimeout(reconcile, visible ? 5_000 : 30_000)
+      externalReconcileTimer.unref?.()
+    }
+    const reconcile = () => {
+      if (externalReconcileTimer) clearTimeout(externalReconcileTimer)
+      externalReconcileTimer = null
+      if (reconcileInFlight || isQuitting) return
       reconcileInFlight = true
       void processes
         .getStates()
@@ -1427,9 +1443,11 @@ if (gotLock) {
         })
         .finally(() => {
           reconcileInFlight = false
+          if (!isQuitting) scheduleReconcile()
         })
-    }, 5_000)
-    externalReconcileTimer.unref?.()
+    }
+    reconcileExternalsNow = reconcile
+    scheduleReconcile()
 
     // External writers (the MCP server in an agent session) update the shared
     // JSON stores directly; watch the data root so the GUI reflects new tools
@@ -1488,8 +1506,9 @@ if (gotLock) {
   })
 
   app.on('will-quit', () => {
+    reconcileExternalsNow = null
     if (externalReconcileTimer) {
-      clearInterval(externalReconcileTimer)
+      clearTimeout(externalReconcileTimer)
       externalReconcileTimer = null
     }
     if (dataRootWatcher) {
