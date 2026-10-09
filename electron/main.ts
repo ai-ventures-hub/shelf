@@ -95,8 +95,10 @@ import {
   flushPendingShelfUrls,
   getShortcutStatus,
   handleShelfUrl,
+  noteToolState,
   prefsPatchAffectsDesktop,
   publishShortcutStatus,
+  refreshDockBadge,
   refreshTray,
   registerShelfProtocolClient,
   setupTray,
@@ -116,6 +118,7 @@ import type {
   DesignAssetKind,
   OnboardingSubmissionInput,
   Tool,
+  ToolRuntimeState,
   UiPrefs,
 } from './types'
 
@@ -1358,7 +1361,10 @@ if (gotLock) {
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
         if (channel === 'process:update') {
-          refreshTray(getDesktopHost(), processes.peekStates())
+          noteToolState(getDesktopHost(), payload as ToolRuntimeState)
+          const states = processes.peekStates()
+          refreshTray(getDesktopHost(), states)
+          refreshDockBadge(states)
         }
       },
     })
@@ -1391,7 +1397,10 @@ if (gotLock) {
       reconcileInFlight = true
       void processes
         .getStates()
-        .then((states) => refreshTray(getDesktopHost(), states))
+        .then((states) => {
+          refreshTray(getDesktopHost(), states)
+          refreshDockBadge(states)
+        })
         .finally(() => {
           reconcileInFlight = false
         })
