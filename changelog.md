@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3.0 - 2026-10-09
+
+- Shelf reopens on a display that is still connected. A window left on an
+  unplugged monitor comes back centered, oversized bounds shrink to fit, and
+  zoomed or full-screen windows reopen that way.
+- A crashed window reloads on its own instead of going blank. A hung window
+  offers Wait or Reload Window. Your tools keep running either way.
+- Go back and forward with ⌘[ and ⌘] (new Go menu), three-finger swipes, or
+  the mouse's side buttons.
+- A tool that crashes posts a notification; click it to open the tool. The
+  Dock icon shows how many tools are running.
+- Drop a project folder on the Dock icon, or use Open With, to add it as a
+  tool through the usual review.
+- Verification screens stop polling while the window is hidden, and the
+  background port check slows from every 5 seconds to every 30.
+- Update the MCP SDK to 1.32.1 and patch other npm audit advisories in the
+  app and the website.
+
 ## 2.2.1 - 2026-09-29
 
 - Update `ip-address` to 10.7.2 for two moderate advisories
