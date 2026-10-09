@@ -240,6 +240,9 @@ export interface UiPrefs {
     height: number
     x?: number
     y?: number
+    /** Zoomed (green button) when last closed; bounds above are the normal size. */
+    maximized?: boolean
+    fullScreen?: boolean
   }
   /** App version at which first-launch onboarding was completed or skipped. */
   onboardingCompletedVersion?: string

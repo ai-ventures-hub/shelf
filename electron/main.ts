@@ -15,6 +15,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  screen,
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -85,6 +86,7 @@ import {
   type StagedShare,
 } from '../shared/tool-share'
 import { inspectToolEnvironment } from '../shared/tool-environment'
+import { placeWindow } from '../shared/window-placement'
 import { getAppUpdateState, checkAppUpdates, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import {
   applyGlobalShortcut,
@@ -248,12 +250,14 @@ function getDesktopHost(): DesktopIntegrationHost {
 }
 
 function createWindow(): void {
-  const bounds = prefs.get().windowBounds
+  const saved = prefs.get().windowBounds
+  // Primary first: a position that fits no display falls back to centering there.
+  const primary = screen.getPrimaryDisplay()
+  const workAreas = [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id)]
+    .map((d) => d.workArea)
+  const bounds = placeWindow(saved, workAreas, { width: 1280, height: 860 }, { width: 900, height: 600 })
   mainWindow = new BrowserWindow({
-    width: bounds?.width || 1280,
-    height: bounds?.height || 860,
-    x: bounds?.x,
-    y: bounds?.y,
+    ...bounds,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#090d16',
@@ -275,6 +279,8 @@ function createWindow(): void {
     // Packaged: …/app.asar/dist-electron/electron → ../../dist
     void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
+  if (saved?.fullScreen) mainWindow.setFullScreen(true)
+  else if (saved?.maximized) mainWindow.maximize()
   mainWindow.webContents.on('did-finish-load', flushRendererMessages)
   mainWindow.webContents.on('will-prevent-unload', (event) => {
     if (quitDiscardApproved) { event.preventDefault(); return }
@@ -294,9 +300,17 @@ function createWindow(): void {
   let boundsPersistTimer: ReturnType<typeof setTimeout> | null = null
   const writeBounds = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
-    const b = mainWindow.getBounds()
+    // Normal bounds, so a zoomed or full-screen window un-zooms to its own size.
+    const b = mainWindow.getNormalBounds()
     prefs.update({
-      windowBounds: { width: b.width, height: b.height, x: b.x, y: b.y },
+      windowBounds: {
+        width: b.width,
+        height: b.height,
+        x: b.x,
+        y: b.y,
+        maximized: mainWindow.isMaximized(),
+        fullScreen: mainWindow.isFullScreen(),
+      },
     })
   }
   const scheduleBoundsPersist = () => {
@@ -315,6 +329,10 @@ function createWindow(): void {
   }
   mainWindow.on('resize', scheduleBoundsPersist)
   mainWindow.on('move', scheduleBoundsPersist)
+  mainWindow.on('maximize', scheduleBoundsPersist)
+  mainWindow.on('unmaximize', scheduleBoundsPersist)
+  mainWindow.on('enter-full-screen', scheduleBoundsPersist)
+  mainWindow.on('leave-full-screen', scheduleBoundsPersist)
 
   // Close to menu bar when enabled (Quit still exits via tray / ⌘Q).
   mainWindow.on('close', (event) => {
