@@ -21,9 +21,10 @@ import {
 } from '../shared/global-shortcut'
 import type { PrefsStore } from '../shared/prefs-store'
 import { parseShelfUrl } from '../shared/shelf-url'
+import { dockBadgeText, toolFailureNotice } from '../shared/desktop-status'
 import type { LibraryStore } from './library-store'
 import type { ProcessManager } from './process-manager'
-import type { ToolRuntimeState, UiPrefs } from './types'
+import type { ToolRuntimeState, ToolStatus, UiPrefs } from './types'
 import { launchOriginLabel } from './types'
 
 export {
@@ -57,6 +58,10 @@ let lastShortcutStatus: ShortcutStatus = {
   accelerator: DEFAULT_GLOBAL_SHORTCUT,
 }
 const pendingUrls: string[] = []
+/** Last status seen per tool, to tell a crash from a requested stop. */
+const lastToolStatus = new Map<string, ToolStatus>()
+/** Shown notifications stay referenced so their click handlers survive GC. */
+const liveNotifications = new Set<Notification>()
 
 /** Prefer black+alpha Template assets; fall back to resized Dock icon. */
 function resolveTrayIcon(): Electron.NativeImage {
@@ -374,6 +379,35 @@ export function destroyTray(): void {
     tray.destroy()
     tray = null
   }
+}
+
+/** Notify when a tool dies on its own, so a crash isn't silent. */
+export function noteToolState(host: DesktopIntegrationHost, state: ToolRuntimeState): void {
+  const previous = lastToolStatus.get(state.toolId)
+  lastToolStatus.set(state.toolId, state.status)
+  const tool = host.store.get(state.toolId)
+  if (!tool || !Notification.isSupported()) return
+  const win = host.getMainWindow()
+  const focused = Boolean(win && !win.isDestroyed() && win.isVisible() && win.isFocused())
+  const notice = toolFailureNotice(previous, state, tool.name, focused)
+  if (!notice) return
+  const notification = new Notification(notice)
+  const release = () => liveNotifications.delete(notification)
+  notification.on('click', () => {
+    release()
+    showOrCreateWindow(host)
+    host.navigate(`/tools/${state.toolId}`)
+  })
+  notification.on('close', release)
+  liveNotifications.add(notification)
+  // macOS doesn't always report dismissals; don't hold old ones forever.
+  if (liveNotifications.size > 20) liveNotifications.delete(liveNotifications.values().next().value!)
+  notification.show()
+}
+
+/** Running-tool count on the Dock icon (macOS only). */
+export function refreshDockBadge(states: ToolRuntimeState[]): void {
+  app.dock?.setBadge(dockBadgeText(states))
 }
 
 export function getShortcutStatus(): ShortcutStatus {

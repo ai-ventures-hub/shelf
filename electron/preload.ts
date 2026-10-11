@@ -367,6 +367,16 @@ const api = {
     ipcRenderer.on('app:quick-open', listener)
     return () => ipcRenderer.removeListener('app:quick-open', listener)
   },
+  onHistory: (cb: (direction: 'back' | 'forward') => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, direction: 'back' | 'forward') => cb(direction)
+    ipcRenderer.on('app:history', listener)
+    return () => ipcRenderer.removeListener('app:history', listener)
+  },
+  onAddFolder: (cb: (projectPath: string) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, projectPath: string) => cb(projectPath)
+    ipcRenderer.on('app:add-folder', listener)
+    return () => ipcRenderer.removeListener('app:add-folder', listener)
+  },
   /** Global hotkey registration result (conflict / success). */
   onShortcutStatus: (cb: (status: ShortcutStatus) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, status: ShortcutStatus) => cb(status)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal } from './Modal'
 import { LogPanel } from './LogPanel'
 import type { LogLine } from '../types'
+import { visibleInterval } from '../lib/refreshTriggers'
 import {
   verificationActive,
   type VerificationRun,
@@ -71,10 +72,11 @@ export function VerificationResults({
     setLoading(true)
     if (run && step) void load()
     else setLoading(false)
-    const timer = active ? window.setInterval(() => void load(), 1000) : undefined
+    // Live output while the run is active; nothing while the window is hidden.
+    const stop = active ? visibleInterval(() => void load(), 1000) : undefined
     return () => {
       disposed = true
-      if (timer) clearInterval(timer)
+      stop?.()
     }
   }, [toolId, run?.id, step?.id, step?.status, active])
   return (

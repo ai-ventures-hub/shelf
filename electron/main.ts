@@ -15,6 +15,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  screen,
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -85,6 +86,7 @@ import {
   type StagedShare,
 } from '../shared/tool-share'
 import { inspectToolEnvironment } from '../shared/tool-environment'
+import { placeWindow } from '../shared/window-placement'
 import { getAppUpdateState, checkAppUpdates, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import {
   applyGlobalShortcut,
@@ -93,8 +95,10 @@ import {
   flushPendingShelfUrls,
   getShortcutStatus,
   handleShelfUrl,
+  noteToolState,
   prefsPatchAffectsDesktop,
   publishShortcutStatus,
+  refreshDockBadge,
   refreshTray,
   registerShelfProtocolClient,
   setupTray,
@@ -114,6 +118,7 @@ import type {
   DesignAssetKind,
   OnboardingSubmissionInput,
   Tool,
+  ToolRuntimeState,
   UiPrefs,
 } from './types'
 
@@ -136,7 +141,9 @@ let quitPreparing = false
 const stagedShares = new Map<string, StagedShare>()
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
-let externalReconcileTimer: ReturnType<typeof setInterval> | null = null
+let externalReconcileTimer: ReturnType<typeof setTimeout> | null = null
+/** Runs a reconcile now and reschedules; set once the app is ready. */
+let reconcileExternalsNow: (() => void) | null = null
 let dataRootWatcher: fs.FSWatcher | null = null
 
 /** Register/unregister the packaged app as a macOS login item. Dev runs
@@ -191,6 +198,29 @@ app.on('open-url', (event, url) => {
   }
   void handleShelfUrl(getDesktopHost(), url)
 })
+
+// Folders dropped on the Dock icon or opened with Shelf. Like open-url, this
+// can arrive before ready (it may be what launched the app), so queue it.
+const pendingOpenFolders: string[] = []
+app.on('open-file', (event, target) => {
+  event.preventDefault()
+  if (!prefs || !store) {
+    pendingOpenFolders.push(target)
+    return
+  }
+  openProjectFolder(target)
+})
+
+/** Hand a folder to the Add Tool review; anything that isn't a folder is ignored. */
+function openProjectFolder(target: string): void {
+  try {
+    if (!fs.statSync(target).isDirectory()) return
+  } catch {
+    return
+  }
+  showOrCreateWindow(getDesktopHost())
+  sendToRenderer('app:add-folder', target)
+}
 
 app.on('second-instance', (_event, argv) => {
   const url = argv.find((arg) => arg.startsWith('shelf://'))
@@ -248,12 +278,14 @@ function getDesktopHost(): DesktopIntegrationHost {
 }
 
 function createWindow(): void {
-  const bounds = prefs.get().windowBounds
+  const saved = prefs.get().windowBounds
+  // Primary first: a position that fits no display falls back to centering there.
+  const primary = screen.getPrimaryDisplay()
+  const workAreas = [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id)]
+    .map((d) => d.workArea)
+  const bounds = placeWindow(saved, workAreas, { width: 1280, height: 860 }, { width: 900, height: 600 })
   mainWindow = new BrowserWindow({
-    width: bounds?.width || 1280,
-    height: bounds?.height || 860,
-    x: bounds?.x,
-    y: bounds?.y,
+    ...bounds,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#090d16',
@@ -268,13 +300,23 @@ function createWindow(): void {
     },
   })
 
-  if (isDev) {
-    void mainWindow.loadURL('http://127.0.0.1:5173')
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
-  } else {
-    // Packaged: …/app.asar/dist-electron/electron → ../../dist
-    void mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
-  }
+  loadRenderer(mainWindow)
+  if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
+  watchRendererHealth(mainWindow)
+
+  // Trackpad swipes (when "Swipe between pages" allows three fingers) and,
+  // on other platforms, mouse side buttons. macOS delivers mouse buttons to
+  // the page instead; the renderer handles those.
+  mainWindow.on('swipe', (_event, direction) => {
+    if (direction === 'left') sendToRenderer('app:history', 'back')
+    else if (direction === 'right') sendToRenderer('app:history', 'forward')
+  })
+  mainWindow.on('app-command', (_event, command) => {
+    if (command === 'browser-backward') sendToRenderer('app:history', 'back')
+    else if (command === 'browser-forward') sendToRenderer('app:history', 'forward')
+  })
+  if (saved?.fullScreen) mainWindow.setFullScreen(true)
+  else if (saved?.maximized) mainWindow.maximize()
   mainWindow.webContents.on('did-finish-load', flushRendererMessages)
   mainWindow.webContents.on('will-prevent-unload', (event) => {
     if (quitDiscardApproved) { event.preventDefault(); return }
@@ -294,9 +336,17 @@ function createWindow(): void {
   let boundsPersistTimer: ReturnType<typeof setTimeout> | null = null
   const writeBounds = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
-    const b = mainWindow.getBounds()
+    // Normal bounds, so a zoomed or full-screen window un-zooms to its own size.
+    const b = mainWindow.getNormalBounds()
     prefs.update({
-      windowBounds: { width: b.width, height: b.height, x: b.x, y: b.y },
+      windowBounds: {
+        width: b.width,
+        height: b.height,
+        x: b.x,
+        y: b.y,
+        maximized: mainWindow.isMaximized(),
+        fullScreen: mainWindow.isFullScreen(),
+      },
     })
   }
   const scheduleBoundsPersist = () => {
@@ -315,6 +365,14 @@ function createWindow(): void {
   }
   mainWindow.on('resize', scheduleBoundsPersist)
   mainWindow.on('move', scheduleBoundsPersist)
+  // Catch up at once when the window comes back instead of waiting out the
+  // slower hidden-window reconcile.
+  mainWindow.on('show', () => reconcileExternalsNow?.())
+  mainWindow.on('restore', () => reconcileExternalsNow?.())
+  mainWindow.on('maximize', scheduleBoundsPersist)
+  mainWindow.on('unmaximize', scheduleBoundsPersist)
+  mainWindow.on('enter-full-screen', scheduleBoundsPersist)
+  mainWindow.on('leave-full-screen', scheduleBoundsPersist)
 
   // Close to menu bar when enabled (Quit still exits via tray / ⌘Q).
   mainWindow.on('close', (event) => {
@@ -330,6 +388,85 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     if (boundsPersistTimer) clearTimeout(boundsPersistTimer)
     mainWindow = null
+  })
+}
+
+function loadRenderer(win: BrowserWindow): void {
+  if (isDev) {
+    void win.loadURL('http://127.0.0.1:5173')
+  } else {
+    // Packaged: …/app.asar/dist-electron/electron → ../../dist
+    void win.loadFile(path.join(__dirname, '../../dist/index.html'))
+  }
+}
+
+/**
+ * A crashed or hung renderer otherwise leaves a blank or frozen window with no
+ * way back short of quitting. Crashes reload on their own; a repeat crash
+ * within a minute asks first so a crash loop can't spin. Hangs offer a reload
+ * and the prompt withdraws itself if the page recovers.
+ */
+function watchRendererHealth(win: BrowserWindow): void {
+  const recentCrashes: number[] = []
+  let hangPrompt: AbortController | null = null
+  /** Set when the user chose Reload on a hang; that crash is ours, not a loop. */
+  let crashRequested = false
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || win.isDestroyed() || isQuitting) return
+    console.error('[shelf] renderer gone:', details.reason, details.exitCode)
+    hangPrompt?.abort()
+    if (crashRequested) {
+      crashRequested = false
+      loadRenderer(win)
+      return
+    }
+    const now = Date.now()
+    while (recentCrashes.length && now - recentCrashes[0] > 60_000) recentCrashes.shift()
+    recentCrashes.push(now)
+    if (recentCrashes.length === 1) {
+      loadRenderer(win)
+      return
+    }
+    void dialog.showMessageBox(win, {
+      type: 'error',
+      message: 'Shelf’s window stopped working.',
+      detail: 'Your tools are still running. Reload the window to continue, or quit Shelf.',
+      buttons: ['Reload Window', 'Quit Shelf'],
+      defaultId: 0,
+      cancelId: 0,
+    }).then(({ response }) => {
+      if (win.isDestroyed()) return
+      if (response === 1) app.quit()
+      else loadRenderer(win)
+    })
+  })
+
+  // A paused debugger looks exactly like a hang; don't nag during development.
+  if (isDev) return
+  win.on('unresponsive', () => {
+    if (hangPrompt || win.isDestroyed()) return
+    const prompt = new AbortController()
+    hangPrompt = prompt
+    void dialog.showMessageBox(win, {
+      type: 'warning',
+      message: 'Shelf’s window isn’t responding.',
+      detail: 'You can wait for it, or reload the window. Your tools keep running either way.',
+      buttons: ['Wait', 'Reload Window'],
+      defaultId: 0,
+      cancelId: 0,
+      signal: prompt.signal,
+    }).then(({ response }) => {
+      if (hangPrompt === prompt) hangPrompt = null
+      if (prompt.signal.aborted || response !== 1 || win.isDestroyed()) return
+      // Reload alone would wait on the hung page; crash it, then load fresh.
+      crashRequested = true
+      win.webContents.forcefullyCrashRenderer()
+    })
+  })
+  win.on('responsive', () => {
+    hangPrompt?.abort()
+    hangPrompt = null
   })
 }
 
@@ -413,6 +550,21 @@ function buildMenu(): void {
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Back',
+          accelerator: 'CmdOrCtrl+[',
+          click: () => sendToRenderer('app:history', 'back'),
+        },
+        {
+          label: 'Forward',
+          accelerator: 'CmdOrCtrl+]',
+          click: () => sendToRenderer('app:history', 'forward'),
+        },
       ],
     },
     {
@@ -1238,7 +1390,10 @@ if (gotLock) {
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
         if (channel === 'process:update') {
-          refreshTray(getDesktopHost(), processes.peekStates())
+          noteToolState(getDesktopHost(), payload as ToolRuntimeState)
+          const states = processes.peekStates()
+          refreshTray(getDesktopHost(), states)
+          refreshDockBadge(states)
         }
       },
     })
@@ -1253,6 +1408,7 @@ if (gotLock) {
     // Window exists so the renderer can receive the boot conflict status.
     publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: !shortcutStatus.ok })
     void flushPendingShelfUrls(getDesktopHost())
+    for (const folder of pendingOpenFolders.splice(0)) openProjectFolder(folder)
     // Retry a first-launch survey that was captured offline (silent, best-effort).
     flushPendingOnboarding(prefs)
     // Keep the OS login item in sync with the pref (covers prefs.json edits).
@@ -1264,19 +1420,34 @@ if (gotLock) {
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))
     if (bootUrl) void handleShelfUrl(getDesktopHost(), bootUrl)
 
-    // Detect tools launched via MCP (separate ProcessManager) without requiring a relaunch.
+    // Detect tools launched via MCP (separate ProcessManager) without requiring
+    // a relaunch. Port probes run every 5s while the window is on screen; with
+    // it hidden only the menu bar and Dock badge need them, so every 30s.
     let reconcileInFlight = false
-    externalReconcileTimer = setInterval(() => {
-      if (reconcileInFlight) return
+    const scheduleReconcile = () => {
+      if (externalReconcileTimer) clearTimeout(externalReconcileTimer)
+      const visible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized())
+      externalReconcileTimer = setTimeout(reconcile, visible ? 5_000 : 30_000)
+      externalReconcileTimer.unref?.()
+    }
+    const reconcile = () => {
+      if (externalReconcileTimer) clearTimeout(externalReconcileTimer)
+      externalReconcileTimer = null
+      if (reconcileInFlight || isQuitting) return
       reconcileInFlight = true
       void processes
         .getStates()
-        .then((states) => refreshTray(getDesktopHost(), states))
+        .then((states) => {
+          refreshTray(getDesktopHost(), states)
+          refreshDockBadge(states)
+        })
         .finally(() => {
           reconcileInFlight = false
+          if (!isQuitting) scheduleReconcile()
         })
-    }, 5_000)
-    externalReconcileTimer.unref?.()
+    }
+    reconcileExternalsNow = reconcile
+    scheduleReconcile()
 
     // External writers (the MCP server in an agent session) update the shared
     // JSON stores directly; watch the data root so the GUI reflects new tools
@@ -1335,8 +1506,9 @@ if (gotLock) {
   })
 
   app.on('will-quit', () => {
+    reconcileExternalsNow = null
     if (externalReconcileTimer) {
-      clearInterval(externalReconcileTimer)
+      clearTimeout(externalReconcileTimer)
       externalReconcileTimer = null
     }
     if (dataRootWatcher) {
