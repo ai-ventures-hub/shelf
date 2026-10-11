@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.3.0 - 2026-10-09
+## 2.3.0 - 2026-10-11
 
 - Shelf reopens on a display that is still connected. A window left on an
   unplugged monitor comes back centered, oversized bounds shrink to fit, and
