@@ -156,6 +156,14 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   drafts. Capability gaps offer Start a new tool as their primary action,
   which closes the gap → build loop.
 
+## Proposed: v2.4 — Companion
+
+Remote control and preview from a phone over the user's own network
+(Tailscale or LAN), with no Shelf-operated relay or account. Status,
+start/stop/restart, log tail, collections, and opt-in per-tool preview
+through a port-for-port proxy. Drafted 2026-10-28, not approved or
+built. See [`COMPANION.md`](COMPANION.md).
+
 ## Later Community enhancements
 
 1. Merge the inbox surfaces (Activity, Waiting, Capability gaps) into one
