@@ -169,8 +169,11 @@ built. See [`COMPANION.md`](COMPANION.md).
 1. Merge the inbox surfaces (Activity, Waiting, Capability gaps) into one
    "Needs you" view, and trim the Simple-mode sidebar (renderer audit,
    2026-09-28).
-2. Split `electron/main.ts` IPC handlers by domain with one typed channel
-   map shared by preload and main (architecture audit, 2026-09-28).
+2. ~~Split `electron/main.ts` IPC handlers by domain with one typed channel
+   map shared by preload and main (architecture audit, 2026-09-28).~~ Done
+   2026-10-28 (2.3.1): `electron/ipc/*` modules, `shared/ipc-channels.ts`,
+   typed `handle()` / `invoke()` on both sides. Prerequisite for the
+   Companion server in [`COMPANION.md`](COMPANION.md).
 
 ## Distribution & privacy
 

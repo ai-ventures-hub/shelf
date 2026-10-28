@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.1 - unreleased
+
+- Internal: the desktop IPC handlers moved out of `electron/main.ts` into
+  one module per domain under `electron/ipc/`, registered through a typed
+  wrapper over a single channel map (`shared/ipc-channels.ts`) that the
+  preload bridge consumes too. A handler, preload call, or channel name that
+  drifts from the renderer contract now fails `npm run typecheck`. No
+  behavior changes.
+
 ## 2.3.0 - 2026-10-11
 
 - Shelf reopens on a display that is still connected. A window left on an

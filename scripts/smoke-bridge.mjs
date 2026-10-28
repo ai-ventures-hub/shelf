@@ -23,8 +23,9 @@ const apiBody = preload.slice(
 const preloadKeys = new Set(
   [...apiBody.matchAll(/^  (\w+):/gm)].map((m) => m[1]),
 )
+// The preload calls the typed `invoke(...)` helper (shared/ipc-channels.ts).
 const invokedChannels = new Set(
-  [...preload.matchAll(/ipcRenderer\.invoke\(\s*'([^']+)'/g)].map((m) => m[1]),
+  [...preload.matchAll(/\binvoke\(\s*'([^']+)'/g)].map((m) => m[1]),
 )
 
 // --- renderer contract: ShelfApi interface keys ---
@@ -37,13 +38,36 @@ const contractKeys = new Set(
   [...shelfApiBody.matchAll(/^  (\w+):/gm)].map((m) => m[1]),
 )
 
-// --- main: registered handlers (main.ts + mcp-connect-ipc.ts) ---
+// --- main: registered handlers (electron/ipc/*.ts, through the typed handle()) ---
+const ipcDir = path.join(root, 'electron/ipc')
 const handledChannels = new Set()
-for (const file of ['electron/main.ts', 'electron/mcp-connect-ipc.ts']) {
-  for (const m of read(file).matchAll(/ipcMain\.handle\(\s*\n?\s*'([^']+)'/g)) {
+for (const name of fs.readdirSync(ipcDir)) {
+  if (!name.endsWith('.ts')) continue
+  for (const m of read(`electron/ipc/${name}`).matchAll(/\bhandle\(\s*\n?\s*'([^']+)'/g)) {
     handledChannels.add(m[1])
   }
 }
+// main.ts itself registers nothing; every handler lives in a domain module.
+assert.equal(
+  (read('electron/main.ts').match(/ipcMain\.handle\(/g) || []).length,
+  0,
+  'electron/main.ts must not register IPC handlers directly (use electron/ipc/)',
+)
+
+// --- channel map: every registered channel is declared exactly once ---
+const channelMap = read('shared/ipc-channels.ts')
+const invokeMapBody = channelMap.slice(
+  channelMap.indexOf('export interface IpcInvokeMap {'),
+  channelMap.indexOf('export type IpcInvokeChannel'),
+)
+const mappedChannels = [...invokeMapBody.matchAll(/^  '([^']+)':/gm)].map((m) => m[1])
+const duplicateMapped = mappedChannels.filter((c, i) => mappedChannels.indexOf(c) !== i)
+assert.deepEqual(duplicateMapped, [], `Channels declared twice in IpcInvokeMap: ${duplicateMapped.join(', ')}`)
+const mappedSet = new Set(mappedChannels)
+const unmappedHandlers = [...handledChannels].filter((c) => !mappedSet.has(c))
+assert.deepEqual(unmappedHandlers, [], `Handlers registered for channels missing from IpcInvokeMap: ${unmappedHandlers.join(', ')}`)
+const unhandledMapped = [...mappedSet].filter((c) => !handledChannels.has(c))
+assert.deepEqual(unhandledMapped, [], `IpcInvokeMap declares channels no module handles: ${unhandledMapped.join(', ')}`)
 
 const missingInPreload = [...contractKeys].filter((k) => !preloadKeys.has(k))
 assert.deepEqual(
@@ -67,5 +91,5 @@ assert.deepEqual(
 )
 
 console.log(
-  `OK: bridge parity — ${contractKeys.size} api methods, ${invokedChannels.size} channels, all handled`,
+  `OK: bridge parity — ${contractKeys.size} api methods, ${invokedChannels.size} channels invoked, ${handledChannels.size} handled, all mapped`,
 )

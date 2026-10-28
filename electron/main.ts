@@ -1,102 +1,33 @@
 import { VerificationRunner } from '../shared/verification-runner'
-import { prepareVerificationHandoff } from '../shared/verification-handoff'
-import type { SaveVerificationInput, StartVerificationInput } from '../shared/verification-contracts'
 import { ProjectMemoryStore } from '../shared/project-memory-store'
-import { prepareProjectHandoff } from '../shared/project-handoff'
-import type { SaveProjectMemoryInput, ProjectHandoffOptions } from '../shared/project-context-contracts'
-import { prepareCatalogStarter, validateCatalogStarter } from '../shared/catalog-starter'
-import { atomicWriteFileSync } from '../shared/atomic-file'
-import { BRAND_ASSET_MIME_TYPES, containedDataUrl, ICON_MIME_TYPES } from '../shared/contained-data-url'
 import {
   app,
   BrowserWindow,
-  clipboard,
   dialog,
   globalShortcut,
-  ipcMain,
   Menu,
   screen,
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { listClientObservations } from '../shared/client-observation'
-import { buildMorningBoard } from '../shared/morning-board'
-import { acceptToolDraft, ToolDraftStore } from '../shared/tool-draft-store'
+import { ToolDraftStore } from '../shared/tool-draft-store'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
-import { deriveToolReadiness, firstCredentialField } from '../shared/capability-intelligence'
-import { startCollection, stopCollection } from '../shared/collection-launch'
-import { buildDesignBrief } from '../shared/design-brief'
-import { extractProjectTokens } from '../shared/design-extract'
-import { resolveDesignMd } from '../shared/design-md'
-import {
-  DesignProfileStore,
-  type SaveDesignProfileInput,
-} from '../shared/design-profile-store'
-import { resolveProfileForGap } from '../shared/design-resolve'
-import { buildGapBrief } from '../shared/gap-brief'
-import { suggestGapResolutions } from '../shared/gap-suggest'
-import { finishImport, importMarker, pendingImportIds, readImport } from '../shared/import-journal'
-import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
-import { adoptCollection } from '../shared/library-store'
+import { DesignProfileStore } from '../shared/design-profile-store'
 import { resolveMcpServerPath as resolvePreferredMcpServerPath } from '../shared/mcp-server-path'
 import { PrefsStore } from '../shared/prefs-store'
-import { inspectProject } from '../shared/project-import'
-import {
-  receiptsToCsv,
-  receiptsToJson,
-  type ReceiptFilterOpts,
-} from '../shared/receipt-export'
 import { ReceiptStore } from '../shared/receipt-store'
-import {
-  registerProject,
-  type RegisterProjectOptions,
-} from '../shared/register-project'
-import type { CatalogEntry } from '../shared/team-catalog'
-import { TeamCatalogStore, type TeamCatalog } from '../shared/team-catalog-store'
-import {
-  addCatalog,
-  publishToCatalog,
-  syncCatalog,
-  type PublishResult,
-} from '../shared/team-catalog-sync'
-import { deriveLibraryHealth } from '../shared/tool-health'
+import { TeamCatalogStore } from '../shared/team-catalog-store'
 import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
-import { createToolProject, defaultToolsRoot, detectAgentClis, pickStarterPort, STARTER_KICKOFF_PROMPT } from '../shared/tool-starter'
-import { loginShellHasNode, resolveNodeCommand } from '../shared/node-resolve'
-import { detectInstalledClients } from '../shared/mcp-client-detect'
-import type { ToolStarterAgent, ToolStarterRequest } from '../shared/contracts'
-import { folderNameFor } from '../shared/tool-manifest'
-import {
-  applyToolUpdate,
-  checkToolUpdates,
-  cleanStagingRoot,
-  confirmStagedShare,
-  detectGitRemote,
-  discardStagedShare,
-  exportToolManifest,
-  prepareToolBundle,
-  ShareError,
-  stageSharedTool,
-  uniqueDestination,
-  validateDestination,
-  type ApplyUpdateInput,
-  type ConfirmShareInput,
-  type ShareFailure,
-  type ShareSource,
-  type StagedShare,
-} from '../shared/tool-share'
-import { inspectToolEnvironment } from '../shared/tool-environment'
+import { cleanStagingRoot } from '../shared/tool-share'
 import { placeWindow } from '../shared/window-placement'
-import { getAppUpdateState, checkAppUpdates, initAutoUpdate, installDownloadedUpdate } from './auto-update'
+import { getAppUpdateState, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import {
   applyGlobalShortcut,
   destroyTray,
   enqueueShelfUrl,
   flushPendingShelfUrls,
-  getShortcutStatus,
   handleShelfUrl,
   noteToolState,
-  prefsPatchAffectsDesktop,
   publishShortcutStatus,
   refreshDockBadge,
   refreshTray,
@@ -106,21 +37,12 @@ import {
   toggleWindow,
   type DesktopIntegrationHost,
 } from './desktop-integration'
+import { registerIpc, type IpcContext } from './ipc'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
-import { registerMcpConnectIpc } from './mcp-connect-ipc'
-import { flushPendingOnboarding, submitOnboarding } from './onboarding-relay'
-import { ProcessManager, type StartOptions } from './process-manager'
+import { flushPendingOnboarding } from './onboarding-relay'
+import { ProcessManager } from './process-manager'
 import * as system from './system-bridge'
-import type {
-  AgentAccessKind,
-  CapabilityGapStatus,
-  Collection,
-  DesignAssetKind,
-  OnboardingSubmissionInput,
-  Tool,
-  ToolRuntimeState,
-  UiPrefs,
-} from './types'
+import type { ToolRuntimeState } from './types'
 
 const isDev = process.env.SHELF_DEV === '1'
 let mainWindow: BrowserWindow | null = null
@@ -137,8 +59,6 @@ let toolDrafts: ToolDraftStore
 let isQuitting = false
 let quitDiscardApproved = false
 let quitPreparing = false
-/** Staged (fetched, not yet approved) shared-tool adds, by stageId. */
-const stagedShares = new Map<string, StagedShare>()
 const pendingRendererMessages: Array<{ channel: string; args: unknown[] }> = []
 /** Periodically adopt MCP/orphaned listeners so Stop works without relaunch. */
 let externalReconcileTimer: ReturnType<typeof setTimeout> | null = null
@@ -587,757 +507,49 @@ function resolveMcpServerPath(): string {
   })
 }
 
-function registerIpc(): void {
-  ipcMain.handle('verification:activity', () => verification.activity())
-  ipcMain.handle('verification:get', (_e, id: string) => verification.get(id))
-  ipcMain.handle('verification:save', (_e, input: SaveVerificationInput) => verification.save(input))
-  ipcMain.handle('verification:suggest', (_e, id: string) => verification.suggest(id))
-  ipcMain.handle('verification:start', (_e, input: StartVerificationInput) => {
-    if (isQuitting || quitPreparing) throw new Error('Shelf is preparing to quit or update. Try again after it finishes.')
-    return verification.start(input)
-  })
-  ipcMain.handle('verification:cancel', (_e, id: string, runId: string) => verification.cancel(id, runId))
-  ipcMain.handle('verification:logs', (_e, id: string, runId: string, stepId: string) => verification.logs(id, runId, stepId))
-  ipcMain.handle('verification:handoff', (_e, id: string, runId: string) =>
-    prepareVerificationHandoff({ library: store, memory: projectMemory, receipts, design: designProfiles }, id, runId))
-  ipcMain.handle('context:getMemory', (_e, id: string) => {
-    if (!store.get(id)) throw new Error('This tool is no longer in the library.')
-    return projectMemory.get(id)
-  })
-  ipcMain.handle('context:saveMemory', (_e, input: SaveProjectMemoryInput) => {
-    if (!store.get(input?.toolId)) throw new Error('This tool is no longer in the library.')
-    return projectMemory.save(input)
-  })
-  ipcMain.handle('context:handoff', (_e, id: string, options: ProjectHandoffOptions) =>
-    prepareProjectHandoff({ library: store, memory: projectMemory, receipts, design: designProfiles }, id, options))
+/** Everything the IPC domain modules (electron/ipc/*) may reach. */
+function buildIpcContext(): IpcContext {
+  return {
+    store,
+    processes,
+    prefs,
+    verification,
+    projectMemory,
+    receipts,
+    capabilityGaps,
+    designProfiles,
+    teamCatalogs,
+    toolDrafts,
+    getMainWindow: () => mainWindow,
+    getDesktopHost,
+    resolveMcpServerPath,
+    applyLaunchAtLogin,
+    isShuttingDown: () => isQuitting || quitPreparing,
+    installUpdate,
+  }
+}
 
-  ipcMain.handle('tools:list', () => store.list())
-  ipcMain.handle('tools:recovery', () => store.recoveryNotice())
-  ipcMain.handle('tools:save', (_e, tool: Tool) => store.save(tool))
-  ipcMain.handle('tools:delete', async (_e, id: string) => {
-    // Stop must complete AND succeed before the record goes: deleting first
-    // would orphan a child that a failed stop left running, with nothing in
-    // the library to represent it.
-    const tool = store.get(id)
-    const state = await processes.stop(id)
-    await verification.stopTool(id)
-    // Two error codes cannot orphan anything and must not block deletion:
-    // stop_command_failed (stop script errored while nothing was observably
-    // running) and stop_refused_not_owner (an UNRELATED process holds the
-    // tool's port — Shelf rightly left it alone, and it isn't ours).
-    if (
-      state.status === 'error' &&
-      state.code !== 'stop_command_failed' &&
-      state.code !== 'stop_refused_not_owner'
-    ) {
-      throw new Error(
-        `Could not stop “${tool?.name || id}”: ${state.message} The tool was not removed.`,
-      )
-    }
-    store.delete(id)
-    processes.forget(id)
-    // History for a tool that no longer exists only grows; clear it. Best
-    // effort: a cleanup failure must not undo a completed delete.
-    try { verification.forgetTool(id) } catch { /* left for a later delete */ }
-    try { projectMemory.forget(id) } catch { /* unreadable memory stays untouched */ }
-  })
-  ipcMain.handle('tools:readiness', (_e, id: string) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error(`Tool not found: ${id}`)
-    return deriveToolReadiness(tool)
-  })
-
-  ipcMain.handle(
-    'capabilityGaps:list',
-    (_e, opts?: { status?: CapabilityGapStatus; limit?: number }) =>
-      capabilityGaps.list(opts || {}),
-  )
-  ipcMain.handle(
-    'capabilityGaps:record',
-    (
-      _e,
-      input: {
-        task: string
-        capabilities: string[]
-        reason: string
-        relatedToolIds?: string[]
-        suggestedAccess?: AgentAccessKind
-      },
-    ) => {
-      const knownIds = new Set(store.list().map((tool) => tool.id))
-      return capabilityGaps.record({
-        ...input,
-        relatedToolIds: (input.relatedToolIds || []).filter((id) => knownIds.has(id)),
-      })
-    },
-  )
-  ipcMain.handle(
-    'capabilityGaps:updateStatus',
-    (_e, id: string, status: CapabilityGapStatus) =>
-      capabilityGaps.updateStatus(id, status),
-  )
-  ipcMain.handle(
-    'capabilityGaps:update',
-    (_e, id: string, patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] }) => {
-      const knownIds = new Set(store.list().map((tool) => tool.id))
-      const validToolIds = (patch.relatedToolIds || []).filter((toolId) =>
-        knownIds.has(toolId),
-      )
-      // Resolve-with-tool must record WHICH tool resolved the gap; if the
-      // tool vanished since the suggestion rendered, fail instead of
-      // resolving with no provenance.
-      if (patch.relatedToolIds?.length && validToolIds.length === 0) {
-        throw new Error('That tool no longer exists in the library.')
-      }
-      return capabilityGaps.update(id, { ...patch, relatedToolIds: validToolIds })
-    },
-  )
-  ipcMain.handle('capabilityGaps:delete', (_e, id: string) => {
-    capabilityGaps.delete(id)
-  })
-  // Paste-ready build brief ("Copy brief for your AI tool").
-  ipcMain.handle('capabilityGaps:brief', (_e, id: string) => {
-    const gap = capabilityGaps.get(id)
-    if (!gap) throw new Error(`Capability gap not found: ${id}`)
-    const related = gap.relatedToolIds
-      .map((toolId) => store.get(toolId))
-      .filter((tool): tool is Tool => Boolean(tool))
-    const brand = resolveProfileForGap(gap, store.listCollections(), designProfiles.list())
-    return buildGapBrief(gap, related, brand.profile ? { profile: brand.profile } : undefined)
-  })
-  // Suggest-only resolve matching; the user confirms in the GUI. Uncapped
-  // read — list()'s 200 cap would silently starve older gaps.
-  ipcMain.handle('capabilityGaps:suggestions', () =>
-    suggestGapResolutions(capabilityGaps.listAll(), store.list()),
-  )
-  ipcMain.handle(
-    'capabilityGaps:dismissSuggestion',
-    (_e, id: string, toolId: string) =>
-      capabilityGaps.dismissSuggestion(id, toolId),
-  )
-
-  // Design Engine (v1.0): list + editor mutations. Agents stay read-only over
-  // MCP; the GUI is the only write surface.
-  ipcMain.handle('designProfiles:list', () => designProfiles.list())
-  // Any GUI save transfers ownership to the user: agents may then no longer
-  // overwrite the profile via shelf_upsert_design_profile.
-  ipcMain.handle('designProfiles:save', (_e, input: SaveDesignProfileInput) =>
-    designProfiles.save({ ...input, origin: 'user' }),
-  )
-  ipcMain.handle('designProfiles:delete', (_e, id: string) => {
-    designProfiles.delete(id)
-  })
-  ipcMain.handle('designProfiles:setDefault', (_e, id: string) =>
-    designProfiles.setDefault(id),
-  )
-  ipcMain.handle(
-    'designProfiles:pickAsset',
-    async (_e, profileId: string, kind: DesignAssetKind) => {
-      const result = await dialog.showOpenDialog(mainWindow!, {
-        properties: ['openFile'],
-        filters: [
-          {
-            name: 'Brand assets',
-            extensions: [
-              'svg', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'ico',
-              'pdf', 'woff2', 'woff', 'ttf', 'otf',
-            ],
-          },
-        ],
-      })
-      if (result.canceled || !result.filePaths[0]) return null
-      return designProfiles.importAsset(profileId, result.filePaths[0], kind)
-    },
-  )
-  ipcMain.handle(
-    'designProfiles:importAsset',
-    (_e, profileId: string, sourcePath: string, kind: DesignAssetKind) =>
-      designProfiles.importAsset(profileId, sourcePath, kind),
-  )
-  ipcMain.handle(
-    'designProfiles:removeAsset',
-    (_e, profileId: string, assetPath: string) => {
-      designProfiles.removeAsset(profileId, assetPath)
-    },
-  )
-  ipcMain.handle('designProfiles:brief', (_e, id: string) => {
-    const profile = designProfiles.get(id)
-    return profile ? buildDesignBrief(profile) : null
-  })
-  // Phase 3 assist: deterministic parse of the project's CSS custom
-  // properties / Tailwind literals. Read-only — applying is a GUI save.
-  ipcMain.handle('designProfiles:extractTokens', (_e, projectPath: string) =>
-    extractProjectTokens(projectPath),
-  )
-  // Data-url previews for the editor. Restricted to the brand-assets root so
-  // the renderer cannot read arbitrary files through this channel.
-  ipcMain.handle('designProfiles:assetDataUrl', (_e, assetPath: string) =>
-    // PDFs and other non-previewable types return null; the renderer shows a glyph tile.
-    containedDataUrl(path.join(designProfiles.getRoot(), 'brand-assets'), assetPath, BRAND_ASSET_MIME_TYPES),
-  )
-
-  ipcMain.handle('activity:board', () => {
-    const verifications = store.list().flatMap((tool) => {
-      try {
-        // Pass the record: re-reading library.json per tool cost ~1 ms each
-        // on the main thread (322 ms for 300 tools).
-        return verification.get(tool.id, tool).runs.map((run) => ({
-          toolId: tool.id,
-          toolName: tool.name,
-          status: run.status,
-          at: run.endedAt || run.startedAt,
-          message: run.message,
-        }))
-      } catch {
-        // A damaged workflow is opened on its own page. It does not blank the board.
-        return []
-      }
-    })
-    return buildMorningBoard({
-      receipts: receipts.list({ limit: 80 }),
-      gaps: capabilityGaps.list({ limit: 40 }),
-      profiles: designProfiles.list(),
-      verifications,
-      clients: listClientObservations(),
-      drafts: toolDrafts.list().map((draft) => ({
-        id: draft.id,
-        name: draft.name,
-        at: draft.updatedAt,
-        client: draft.client,
-      })),
-    })
-  })
-  ipcMain.handle('drafts:list', () => toolDrafts.list())
-  ipcMain.handle('drafts:accept', (_e, id: string, expectedUpdatedAt?: string) => {
-    const uiPrefs = prefs.get()
-    return acceptToolDraft(id, toolDrafts, { store, processes }, {
-      expectedUpdatedAt: typeof expectedUpdatedAt === 'string' ? expectedUpdatedAt : undefined,
-      toolDefaults: {
-        iconLucide: uiPrefs.defaultIconLucide,
-        iconColor: uiPrefs.defaultIconColor,
-        iconBackground: uiPrefs.defaultIconBackground,
-      },
-    })
-  })
-  ipcMain.handle('drafts:reject', (_e, id: string) => {
-    toolDrafts.delete(id)
-  })
-
-  // Start a new tool from an idea. Creation is a user action here, so the
-  // tool is saved directly; nothing is installed or launched.
-  ipcMain.handle('starter:prepare', async () => {
-    const [clis, port] = await Promise.all([
-      detectAgentClis(),
-      pickStarterPort([...store.list(), ...toolDrafts.list()]).catch(() => null),
-    ])
-    const cursor = detectInstalledClients().some((client) => client.kind === 'cursor' && client.installed)
-    return {
-      toolsRoot: defaultToolsRoot(),
-      port,
-      agents: [
-        { id: 'claude-code' as const, installed: clis['claude-code'] },
-        { id: 'codex' as const, installed: clis.codex },
-        { id: 'cursor' as const, installed: cursor },
-      ],
-    }
-  })
-  ipcMain.handle('starter:create', async (_e, input: ToolStarterRequest) => {
-    if (!input || typeof input !== 'object') throw new Error('Describe the tool to start.')
-    const uiPrefs = prefs.get()
-    // Prefer plain `node`, which survives Node upgrades and reads the same
-    // on a coworker's Mac; pin a path only when the launch shell lacks node.
-    const node = await loginShellHasNode() ? { ok: true, command: 'node', env: undefined } : await resolveNodeCommand()
-    return createToolProject({
-      name: String(input.name ?? ''),
-      idea: String(input.idea ?? ''),
-      parentDir: typeof input.parentDir === 'string' ? input.parentDir : undefined,
-      port: typeof input.port === 'number' ? input.port : undefined,
-      designProfileId: input.designProfileId === null ? null : typeof input.designProfileId === 'string' ? input.designProfileId : undefined,
-    }, {
-      store,
-      designProfiles,
-      drafts: toolDrafts,
-      nodeCommand: { command: node.ok ? node.command : 'node', env: node.env },
-      toolDefaults: {
-        iconColor: uiPrefs.defaultIconColor,
-        iconBackground: uiPrefs.defaultIconBackground,
-      },
-    })
-  })
-  ipcMain.handle('starter:chooseFolder', async () => {
-    const root = defaultToolsRoot()
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Choose where new tools go',
-      buttonLabel: 'Use this folder',
-      defaultPath: fs.existsSync(root) ? root : app.getPath('home'),
-      properties: ['openDirectory', 'createDirectory'],
-    })
-    return result.canceled ? null : result.filePaths[0] || null
-  })
-  ipcMain.handle('starter:openAgent', async (_e, toolId: string, agent: ToolStarterAgent) => {
-    const folder = store.get(toolId)?.projectPath
-    if (!folder || !fs.existsSync(folder)) throw new Error('This tool has no project folder on this Mac.')
-    // The kickoff prompt points at AGENTS.md, so only offer it where one exists.
-    if (!fs.existsSync(path.join(folder, 'AGENTS.md'))) throw new Error('This project has no AGENTS.md build brief.')
-    if (agent === 'claude-code' || agent === 'codex') await system.openAgentInTerminal(folder, agent)
-    else if (agent === 'cursor') await system.openEditor(folder)
-    else if (agent === 'terminal') await system.openTerminal(folder)
-    else throw new Error('Choose Claude Code, Codex, Cursor, or Terminal.')
-    return { prompt: STARTER_KICKOFF_PROMPT }
-  })
-
-  ipcMain.handle('collections:list', () => store.listCollections())
-  // Any GUI save adopts the collection: an agent draft becomes user-owned
-  // and shelf_upsert_collection can no longer touch it.
-  ipcMain.handle('collections:save', (_e, collection: Collection) =>
-    store.saveCollection(adoptCollection(collection)),
-  )
-  ipcMain.handle('collections:delete', (_e, id: string) => {
-    store.deleteCollection(id)
-  })
-  ipcMain.handle('collections:start', (_e, id: string, options?: StartOptions) =>
-    startCollection(id, { store, processes }, options),
-  )
-  ipcMain.handle('collections:stop', (_e, id: string) =>
-    stopCollection(id, { store, processes }),
-  )
-
-  ipcMain.handle('prefs:get', () => prefs.get())
-  ipcMain.handle('prefs:update', (_e, patch: Partial<UiPrefs>) => {
-    const next = prefs.update(patch)
-    let shortcutStatus = getShortcutStatus()
-    if (prefsPatchAffectsDesktop(patch)) {
-      refreshTray(getDesktopHost())
-      shortcutStatus = applyGlobalShortcut(getDesktopHost())
-      // Settings listens for live status; avoid a second OS notification on every tweak.
-      publishShortcutStatus(getDesktopHost(), shortcutStatus, { notify: false })
-    }
-    if ('launchAtLogin' in patch) applyLaunchAtLogin(next.launchAtLogin)
-    return { prefs: next, shortcutStatus }
-  })
-  ipcMain.handle('desktop:shortcutStatus', () => getShortcutStatus())
-
-  ipcMain.handle('onboarding:submit', (_e, input: OnboardingSubmissionInput) =>
-    submitOnboarding(prefs, input),
-  )
-
-  ipcMain.handle(
-    'designMd:get',
-    (_e, opts: { id?: string; projectPath?: string }) => {
-      const tool = opts.id ? store.get(opts.id) : undefined
-      const projectPath = opts.projectPath || tool?.projectPath
-      return resolveDesignMd(projectPath, tool?.id || opts.id)
-    },
-  )
-
-  ipcMain.handle('tools:pickFolder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openDirectory', 'createDirectory'],
-    })
-    return result.canceled ? null : result.filePaths[0] || null
-  })
-
-  // Smart import: suggest launch/port/tags from a chosen project folder.
-  ipcMain.handle('tools:inspectProject', (_e, projectPath: string) =>
-    inspectProject(projectPath),
-  )
-
-  // One-shot register: inspect → save → (consented) setup → launch.
-  // Consent flow is two calls: first without runSetup (may return
-  // needs_setup), then again with runSetup: true after the user agrees.
-  ipcMain.handle(
-    'tools:registerProject',
-    (_e, projectPath: string, options?: RegisterProjectOptions) => {
-      const uiPrefs = prefs.get()
-      return registerProject(
-        projectPath,
-        { store, processes },
-        {
-          ...options,
-          toolDefaults: {
-            iconLucide: uiPrefs.defaultIconLucide,
-            iconColor: uiPrefs.defaultIconColor,
-            iconBackground: uiPrefs.defaultIconBackground,
-          },
-        },
-      )
-    },
-  )
-
-  ipcMain.handle('tools:pickIcon', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openFile'],
-      filters: [
-        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'icns'] },
-      ],
-    })
-    if (result.canceled || !result.filePaths[0]) return null
-
-    const src = result.filePaths[0]
-    const ext = path.extname(src) || '.png'
-    const dest = path.join(store.getIconsDir(), `${Date.now()}${ext}`)
-    fs.copyFileSync(src, dest)
-    return dest
-  })
-
-  // Same containment stance as designProfiles:assetDataUrl: this channel
-  // reads ONLY inside the icons dir (realpath on both sides — a planted
-  // symlink must not escape, and a symlinked data root must still match).
-  ipcMain.handle('tools:iconDataUrl', (_e, iconPath: string) =>
-    containedDataUrl(store.getIconsDir(), iconPath, ICON_MIME_TYPES),
-  )
-
-  ipcMain.handle('catalog:prepareStarter', (_e, name: string, toolIds: string[]) => {
-    if (!Array.isArray(toolIds) || toolIds.length > 500 || toolIds.some((id) => typeof id !== 'string')) throw new Error('Choose up to 500 tools.')
-    const selected = [...new Set(toolIds)].map((id) => {
-      const tool = store.get(id)
-      if (!tool) throw new Error('A selected tool was removed. Review your selection.')
-      return tool
-    })
-    return prepareCatalogStarter(name, selected)
-  })
-  ipcMain.handle('catalog:exportStarter', async (_e, content: string) => {
-    const validated = validateCatalogStarter(content)
-    const result = await dialog.showSaveDialog({ title: 'Save team catalog', defaultPath: 'catalog.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
-    if (result.canceled || !result.filePath) return { saved: false }
-    atomicWriteFileSync(result.filePath, validated)
-    return { saved: true, path: result.filePath }
-  })
-  ipcMain.handle('tools:environment', (_e, id: string) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error('Tool not found.')
-    return inspectToolEnvironment(tool)
-  })
-  ipcMain.handle('app:updateState', () => getAppUpdateState())
-  ipcMain.handle('app:checkUpdates', () => checkAppUpdates())
-  ipcMain.handle('process:states', () => processes.getStates())
-  // Launchability glyphs for library cards — one lsof call for all tools.
-  ipcMain.handle('tools:health', async () =>
-    deriveLibraryHealth(store.list(), processes.peekStates()),
-  )
-  ipcMain.handle('process:start', (_e, id: string, options?: StartOptions) =>
-    processes.start(id, options),
-  )
-  ipcMain.handle('process:stop', (_e, id: string) => processes.stop(id))
-  ipcMain.handle('process:restart', (_e, id: string) => processes.restart(id))
-  ipcMain.handle('process:logs', (_e, id: string, runId?: string) => processes.getLogs(id, runId))
-  // Paste-ready failure report for "Copy report for your AI tool".
-  ipcMain.handle('process:errorReport', async (_e, id: string, runId?: string) => {
-    const tool = store.get(id)
-    if (!tool) return null
-    if (runId) {
-      const receipt = receipts.get(runId)
-      if (!receipt || receipt.toolId !== id) throw new Error('This run is no longer available for the selected tool.')
-      return buildReceiptReport(tool, receipt, processes.getLogs(id, runId))
-    }
-    const state = await processes.getState(id)
-    return buildErrorReport(tool, state, processes.getLogs(id))
-  })
-
-  ipcMain.handle('receipts:list', (_e, opts?: ReceiptFilterOpts) =>
-    receipts.list(opts || {}),
-  )
-  ipcMain.handle('receipts:clear', (_e, opts?: { toolId?: string }) =>
-    receipts.clear(opts || {}),
-  )
-  ipcMain.handle(
-    'receipts:export',
-    async (
-      _e,
-      opts?: ReceiptFilterOpts & { format?: 'json' | 'csv' },
-    ): Promise<{ saved: boolean; path?: string }> => {
-      const format = opts?.format === 'csv' ? 'csv' : 'json'
-      const list = receipts.list({
-        toolId: opts?.toolId,
-        outcomes: opts?.outcomes,
-        query: opts?.query,
-        limit: 400,
-      })
-      const content = format === 'csv' ? receiptsToCsv(list) : receiptsToJson(list)
-      const stamp = new Date().toISOString().slice(0, 10)
-      const saveOpts: Electron.SaveDialogOptions = {
-        title: 'Export run receipts',
-        defaultPath: `shelf-receipts-${stamp}.${format}`,
-        filters:
-          format === 'csv'
-            ? [{ name: 'CSV', extensions: ['csv'] }]
-            : [{ name: 'JSON', extensions: ['json'] }],
-      }
-      // Parent window is optional — export still works if the UI is hidden to tray.
-      const result = mainWindow
-        ? await dialog.showSaveDialog(mainWindow, saveOpts)
-        : await dialog.showSaveDialog(saveOpts)
-      if (result.canceled || !result.filePath) return { saved: false }
-      fs.writeFileSync(result.filePath, content, 'utf8')
-      return { saved: true, path: result.filePath }
-    },
-  )
-
-  // ---- Tool Sharing (1.2) ------------------------------------------------
-  // Send: write shelf.json (env values structurally stripped) + share link.
-  ipcMain.handle('share:exportManifest', async (_e, id: string) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error(`Tool not found: ${id}`)
-    const result = await exportToolManifest(tool, { appVersion: app.getVersion() })
-    if (result.link) clipboard.writeText(result.link)
-    return {
-      manifestPath: result.manifestPath,
-      remote: result.remote,
-      link: result.link,
-      linkNote: result.linkNote,
-      copied: Boolean(result.link),
-      envKeys: Object.keys(result.manifest.env),
-    }
-  })
-  ipcMain.handle('share:exportBundle', async (_e, id: string) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error(`Tool not found: ${id}`)
-    const prepared = await prepareToolBundle(tool, { appVersion: app.getVersion() })
-    const reviewOptions: Electron.MessageBoxOptions = {
-      type: 'question', title: 'Review files to share',
-      message: `Share ${prepared.files.length} files from ${tool.name}?`,
-      detail: 'Only these files will be exported. Check for private data in source files. Git projects include tracked source plus shelf.json.\n\n' +
-        prepared.files.map((file) => `${file.name} (${file.bytes} bytes)`).join('\n'),
-      buttons: ['Cancel', 'Choose export location'], defaultId: 0, cancelId: 0,
-    }
-    const review = mainWindow ? await dialog.showMessageBox(mainWindow, reviewOptions) : await dialog.showMessageBox(reviewOptions)
-    if (review.response !== 1) return { saved: false }
-    const saveOpts: Electron.SaveDialogOptions = {
-      title: 'Export tool bundle',
-      defaultPath: `${folderNameFor(tool.name)}.zip`,
-      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
-    }
-    const result = mainWindow
-      ? await dialog.showSaveDialog(mainWindow, saveOpts)
-      : await dialog.showSaveDialog(saveOpts)
-    if (result.canceled || !result.filePath) return { saved: false }
-    fs.writeFileSync(result.filePath, prepared.zip, { mode: 0o600 })
-    return { saved: true, path: result.filePath, bytes: prepared.zip.length }
-  })
-  // Receive: stage (clone/unzip into scratch; runs nothing, persists nothing).
-  // ShareError carries code + remedy; IPC would flatten a thrown error to
-  // its message, so these handlers return discriminated results instead.
-  const shareFailure = (err: unknown): ShareFailure => ({
-    ok: false,
-    code: err instanceof ShareError ? err.code : 'unknown',
-    message: err instanceof Error ? err.message : String(err),
-    remedy: err instanceof ShareError ? err.remedy : undefined,
-    remedyCommand: err instanceof ShareError ? err.remedyCommand : undefined,
-  })
-  ipcMain.handle('share:stage', async (_e, source: ShareSource) => {
-    try {
-      const stage = await stageSharedTool(source, {
-        isTaken: (candidate) => Boolean(store.findByProjectPath(candidate)),
-      })
-      stagedShares.set(stage.stageId, stage)
-      // The renderer gets the description only — stagePath stays in main.
-      const { stagePath: _stagePath, ...description } = stage
-      return { ok: true, stage: description }
-    } catch (err) {
-      return shareFailure(err)
-    }
-  })
-  ipcMain.handle('share:pickBundle', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Add from bundle',
-      properties: ['openFile'],
-      filters: [{ name: 'Shelf tool bundle', extensions: ['zip'] }],
-    })
-    return result.canceled ? null : result.filePaths[0] || null
-  })
-  // The user picks a PARENT folder; the sanitized manifest name is appended.
-  ipcMain.handle('share:pickDestination', async (_e, stageId: string) => {
-    const stage = stagedShares.get(stageId)
-    if (!stage) {
-      return shareFailure(new ShareError('stage_missing', 'The fetched files are gone. Fetch again.'))
-    }
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Choose where to put this tool',
-      properties: ['openDirectory', 'createDirectory'],
-    })
-    if (result.canceled || !result.filePaths[0]) return { ok: true, destination: null }
-    // Re-derive the folder name under the new parent (the proposed one may
-    // already carry a "-2" suffix from the default parent).
-    const candidate = uniqueDestination(
-      result.filePaths[0],
-      folderNameFor(stage.manifest.name || path.basename(stage.destination)),
-      (p) => Boolean(store.findByProjectPath(p)),
-    )
-    const valid = validateDestination(candidate, stage)
-    if (!valid.ok) return shareFailure(new ShareError('destination_invalid', valid.reason))
-    return { ok: true, destination: valid.destination }
-  })
-  // The approval. Everything executable happens after this call, never before.
-  ipcMain.handle(
-    'share:confirm',
-    async (_e, stageId: string, input: ConfirmShareInput) => {
-      const stage = stagedShares.get(stageId)
-      if (!stage) {
-        return shareFailure(new ShareError('stage_missing', 'The fetched files are gone. Fetch again.'))
-      }
-      const uiPrefs = prefs.get()
-      try {
-        const result = await confirmStagedShare(stage, input, {
-          store,
-          processes,
-          toolDefaults: {
-            iconLucide: uiPrefs.defaultIconLucide,
-            iconColor: uiPrefs.defaultIconColor,
-            iconBackground: uiPrefs.defaultIconBackground,
-          },
-        })
-        stagedShares.delete(stageId)
-        return { ok: true, result }
-      } catch (err) {
-        // Destination problems keep the stage alive so the user can fix the
-        // folder; partial moves remain recoverable from the import journal.
-        if (!(err instanceof ShareError && (err.code === 'destination_invalid' || err.code === 'import_incomplete'))) {
-          stagedShares.delete(stageId)
-        }
-        return shareFailure(err)
-      }
-    },
-  )
-  ipcMain.handle('share:pendingImports', () => pendingImportIds(store.getRoot()).flatMap((id) => {
-    const pending = readImport(store.getRoot(), id)
-    if (!pending) return []
-    if (store.findByProjectPath(pending.destination)) {
-      finishImport(store.getRoot(), id)
-      fs.rmSync(importMarker(pending.destination, id), { force: true })
-      return []
-    }
-    return [{ id, name: pending.stage.manifest.name || 'Shared tool', destination: pending.destination }]
-  }))
-  ipcMain.handle('share:resumeImport', (_e, id: string) => {
-    const pending = readImport(store.getRoot(), id)
-    if (!pending) throw new Error('This import no longer needs recovery.')
-    stagedShares.set(id, pending.stage)
-    const { stagePath: _stagePath, ...view } = pending.stage
-    return { ...view, destination: pending.destination }
-  })
-  ipcMain.handle('share:discard', (_e, stageId: string) => {
-    const stage = stagedShares.get(stageId)
-    if (!stage) return
-    stagedShares.delete(stageId)
-    discardStagedShare(stage)
-  })
-  // Updates: check is read-only (fetch + summary); apply is user-confirmed.
-  ipcMain.handle('share:checkUpdates', (_e, id: string) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error(`Tool not found: ${id}`)
-    return checkToolUpdates(tool, store.getRoot())
-  })
-  ipcMain.handle('share:applyUpdate', (_e, id: string, input: ApplyUpdateInput) => {
-    const tool = store.get(id)
-    if (!tool) throw new Error(`Tool not found: ${id}`)
-    return applyToolUpdate(tool, input, { store, processes })
-  })
-
-  // ---- Team Tools catalog (1.4) -----------------------------------------
-  // A catalog is a git repo holding catalog.json. Shelf reads that one file
-  // and nothing else out of it; installing an entry goes through the SAME
-  // stage → consent sheet → confirm path a shelf:// link uses, so the sheet
-  // stays the only thing that can authorize execution.
-  ipcMain.handle('catalog:list', (): TeamCatalog[] => teamCatalogs.list())
-  ipcMain.handle('catalog:add', async (_e, url: string) => {
-    try {
-      const result = await addCatalog(url, teamCatalogs)
-      return { ok: true, catalog: result.catalog, warnings: result.warnings, empty: result.empty }
-    } catch (err) {
-      return shareFailure(err)
-    }
-  })
-  ipcMain.handle('catalog:refresh', async (_e, id: string) => {
-    try {
-      const result = await syncCatalog(id, teamCatalogs)
-      return { ok: true, catalog: result.catalog, warnings: result.warnings, empty: result.empty }
-    } catch (err) {
-      return shareFailure(err)
-    }
-  })
-  ipcMain.handle('catalog:remove', (_e, id: string) => teamCatalogs.remove(id))
-  // Publish: the tool's own git remote is the entry's repo. A tool with no
-  // remote has nothing a coworker could clone, so it is refused here rather
-  // than written as an entry nobody can install.
-  ipcMain.handle('catalog:publish', async (_e, catalogId: string, toolId: string) => {
-    try {
-      const tool = store.get(toolId)
-      if (!tool) throw new Error(`Tool not found: ${toolId}`)
-      const remote = tool.projectPath ? await detectGitRemote(tool.projectPath) : null
-      if (!remote) {
-        return shareFailure(
-          new ShareError(
-            'catalog_invalid',
-            `${tool.name} has no git remote, so there's nothing for a teammate to install from.`,
-            'Push the project to a remote first, then share it with your team. Or send a bundle from the ⋯ menu.',
-          ),
-        )
-      }
-      // Same refusal buildManifest applies to these exact fields: a catalog
-      // entry is pushed to a shared repo, so a credential in a name,
-      // description, or capability would live in that repo's history for
-      // everyone with clone access.
-      const credentialField = firstCredentialField([
-        ['name', tool.name],
-        ['description', tool.description],
-        ...tool.capabilities.map((c): [string, string] => ['capabilities', c]),
-      ])
-      if (credentialField) {
-        return shareFailure(
-          new ShareError(
-            'export_refused',
-            `The ${credentialField} looks like it contains a credential, and a catalog entry is pushed to a repository your whole team can read. Move secrets into Environment variables (those are never shared) and try again.`,
-          ),
-        )
-      }
-      const entry: CatalogEntry = {
-        name: tool.name,
-        description: tool.description || undefined,
-        capabilities: tool.capabilities.slice(0, 40),
-        repo: remote,
-      }
-      const result: PublishResult = await publishToCatalog(catalogId, entry, teamCatalogs)
-      return { ok: true, result, catalog: teamCatalogs.get(catalogId) }
-    } catch (err) {
-      return shareFailure(err)
-    }
-  })
-
-  ipcMain.handle('system:openUrl', (_e, url: string) => system.openUrl(url))
-  ipcMain.handle('system:openPath', (_e, target: string) => system.openPath(target))
-  ipcMain.handle('system:openEditor', (_e, projectPath: string) =>
-    system.openEditor(projectPath),
-  )
-  ipcMain.handle('system:openTerminal', (_e, projectPath: string) =>
-    system.openTerminal(projectPath),
-  )
-  ipcMain.handle('system:mcpServerPath', () => resolveMcpServerPath())
-  ipcMain.handle('system:registerShelfProtocol', () => {
-    registerShelfProtocolClient()
-    return true
-  })
-  ipcMain.handle('app:installUpdate', async () => {
-    if (isQuitting || quitPreparing) return
-    if (getAppUpdateState().status !== 'ready') throw new Error('No downloaded update is ready.')
-    quitPreparing = true
-    try {
-      if (!await confirmPendingChanges('Restart and update')) return
-      // Remember what was running so the relaunched app can start it again.
-      const resumeIds = processes.localActiveToolIds()
-      await verification.stopAll()
-      await processes.stopAll('Shelf is updating.', { scope: 'local' })
-      saveUpdateResume(store.getRoot(), resumeIds)
-      isQuitting = true
-      installDownloadedUpdate()
-    } catch (error) {
-      isQuitting = false
-      quitDiscardApproved = false
-      // The app is staying open, so don't leave its tools down.
-      void resumeToolsAfterUpdate(takeUpdateResume(store.getRoot()))
-      throw error
-    } finally { quitPreparing = false }
-  })
-  registerMcpConnectIpc(resolveMcpServerPath)
+/** Stop tools, quit, install the downloaded update, and relaunch (app:installUpdate). */
+async function installUpdate(): Promise<void> {
+  if (isQuitting || quitPreparing) return
+  if (getAppUpdateState().status !== 'ready') throw new Error('No downloaded update is ready.')
+  quitPreparing = true
+  try {
+    if (!await confirmPendingChanges('Restart and update')) return
+    // Remember what was running so the relaunched app can start it again.
+    const resumeIds = processes.localActiveToolIds()
+    await verification.stopAll()
+    await processes.stopAll('Shelf is updating.', { scope: 'local' })
+    saveUpdateResume(store.getRoot(), resumeIds)
+    isQuitting = true
+    installDownloadedUpdate()
+  } catch (error) {
+    isQuitting = false
+    quitDiscardApproved = false
+    // The app is staying open, so don't leave its tools down.
+    void resumeToolsAfterUpdate(takeUpdateResume(store.getRoot()))
+    throw error
+  } finally { quitPreparing = false }
 }
 
 /** Start tools that were running before "Restart and update", one at a time. */
@@ -1397,7 +609,7 @@ if (gotLock) {
         }
       },
     })
-    registerIpc()
+    registerIpc(buildIpcContext())
     buildMenu()
     registerShelfProtocolClient()
     setupTray(getDesktopHost())

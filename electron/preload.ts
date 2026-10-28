@@ -1,397 +1,192 @@
-import type { SaveVerificationInput, StartVerificationInput } from '../shared/verification-contracts'
-import type { SaveProjectMemoryInput, ProjectHandoffOptions, AppUpdateState, ToolStarterAgent, ToolStarterRequest } from '../shared/contracts'
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { ShelfApi } from '../shared/desktop-api'
 import type {
-  AgentAccessKind,
-  ApplyUpdateInput,
-  ApplyUpdateResult,
-  CapabilityGap,
-  CapabilityGapStatus,
-  CatalogPublishResult,
-  CatalogSyncView,
-  ClaudeCodeConnectResult,
-  ClaudeCodeMcpStatus,
-  ClaudeConnectResult,
-  ClaudeDesktopStatus,
-  CodexConnectResult,
-  CodexMcpStatus,
-  Collection,
-  CollectionActionResult,
-  ConfirmShareInput,
-  ConfirmShareResult,
-  CursorConnectResult,
-  CursorMcpStatus,
-  DesignAsset,
-  DesignAssetKind,
-  DesignMdResult,
-  DesignProfile,
-  ExtractedTokens,
-  GapResolveSuggestion,
-  LogLine,
-  McpClientDetection,
-  OnboardingSubmissionInput,
-  ProjectImportSuggestion,
-  ReceiptOutcome,
-  RegisterProjectOptions,
-  RegisterProjectResult,
-  RunReceipt,
-  SaveDesignProfileInput,
-  ShareFailure,
-  ShareSource,
-  ShortcutStatus,
-  StagedShare,
-  StartOptions,
-  TeamCatalog,
-  Tool,
-  ToolHealth,
-  ToolReadiness,
-  ToolRuntimeState,
-  UiPrefs,
-  UpdateCheck,
-} from './types'
+  IpcArgs,
+  IpcEventChannel,
+  IpcEventMap,
+  IpcInvokeChannel,
+  IpcResult,
+} from '../shared/ipc-channels'
 
 /**
  * Narrow, typed bridge for the renderer.
  * No Node APIs are exposed directly — all file/process work goes through IPC.
+ *
+ * Both helpers are typed from shared/ipc-channels.ts, the same map main's
+ * handlers register against, so a channel name, argument list, or result
+ * that disagrees with the renderer contract fails `npm run typecheck`.
  */
-const api = {
-  getVerificationActivity: () => ipcRenderer.invoke('verification:activity'),
-  getVerification: (id: string) => ipcRenderer.invoke('verification:get', id),
-  saveVerification: (input: SaveVerificationInput) => ipcRenderer.invoke('verification:save', input),
-  suggestVerification: (id: string) => ipcRenderer.invoke('verification:suggest', id),
-  startVerification: (input: StartVerificationInput) => ipcRenderer.invoke('verification:start', input),
-  cancelVerification: (id: string, runId: string) => ipcRenderer.invoke('verification:cancel', id, runId),
-  getVerificationLogs: (id: string, runId: string, stepId: string) => ipcRenderer.invoke('verification:logs', id, runId, stepId),
-  prepareVerificationHandoff: (id: string, runId: string) => ipcRenderer.invoke('verification:handoff', id, runId),
-  onVerificationUpdate: (cb: (id: string) => void) => {
-    const handler = (_event: IpcRendererEvent, id: string) => cb(id)
-    ipcRenderer.on('verification:update', handler)
-    return () => { ipcRenderer.removeListener('verification:update', handler) }
-  },
-  getProjectMemory: (id: string) => ipcRenderer.invoke('context:getMemory', id),
-  saveProjectMemory: (input: SaveProjectMemoryInput) => ipcRenderer.invoke('context:saveMemory', input),
-  prepareProjectHandoff: (id: string, options: ProjectHandoffOptions) => ipcRenderer.invoke('context:handoff', id, options),
-  inspectToolEnvironment: (id: string) => ipcRenderer.invoke('tools:environment', id),
-  getAppUpdateState: () => ipcRenderer.invoke('app:updateState'),
-  checkAppUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
-  onAppUpdateState: (cb: (state: AppUpdateState) => void) => {
-    const listener = (_event: IpcRendererEvent, state: AppUpdateState) => cb(state)
-    ipcRenderer.on('app:update-state', listener)
-    return () => ipcRenderer.removeListener('app:update-state', listener)
-  },
-  getPendingImports: (): Promise<{ id: string; name: string; destination: string }[]> => ipcRenderer.invoke('share:pendingImports'),
-  resumeImport: (id: string): Promise<Omit<StagedShare, 'stagePath'>> => ipcRenderer.invoke('share:resumeImport', id),
-  getLibraryRecovery: (): Promise<string | null> => ipcRenderer.invoke('tools:recovery'),
-  listTools: (): Promise<Tool[]> => ipcRenderer.invoke('tools:list'),
-  /** Launchability snapshot for every tool — one batched port scan. */
-  getToolHealth: (): Promise<ToolHealth[]> => ipcRenderer.invoke('tools:health'),
-  saveTool: (tool: Tool): Promise<Tool> => ipcRenderer.invoke('tools:save', tool),
-  deleteTool: (id: string): Promise<void> => ipcRenderer.invoke('tools:delete', id),
-  pickFolder: (): Promise<string | null> => ipcRenderer.invoke('tools:pickFolder'),
-  inspectProject: (projectPath: string): Promise<ProjectImportSuggestion> =>
-    ipcRenderer.invoke('tools:inspectProject', projectPath),
-  /** One-shot register: inspect → save → (consented) setup → launch. */
-  registerProject: (
-    projectPath: string,
-    options?: RegisterProjectOptions,
-  ): Promise<RegisterProjectResult> =>
-    ipcRenderer.invoke('tools:registerProject', projectPath, options),
-  /** Absolute path for a dropped File (drag-and-drop folder support). */
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
-  pickIcon: (): Promise<string | null> => ipcRenderer.invoke('tools:pickIcon'),
-  /** Read a local icon file and return a data URL safe for <img src>. */
-  getIconDataUrl: (iconPath: string): Promise<string | null> =>
-    ipcRenderer.invoke('tools:iconDataUrl', iconPath),
+function invoke<K extends IpcInvokeChannel>(channel: K, ...args: IpcArgs<K>): Promise<IpcResult<K>> {
+  return ipcRenderer.invoke(channel, ...args)
+}
 
-  getActivityBoard: () => ipcRenderer.invoke('activity:board'),
-  listToolDrafts: () => ipcRenderer.invoke('drafts:list'),
-  acceptToolDraft: (id: string, expectedUpdatedAt?: string) => ipcRenderer.invoke('drafts:accept', id, expectedUpdatedAt),
-  rejectToolDraft: (id: string) => ipcRenderer.invoke('drafts:reject', id),
-  prepareToolStarter: () => ipcRenderer.invoke('starter:prepare'),
-  createToolFromIdea: (input: ToolStarterRequest) => ipcRenderer.invoke('starter:create', input),
-  chooseToolsFolder: () => ipcRenderer.invoke('starter:chooseFolder'),
-  openToolInAgent: (toolId: string, agent: ToolStarterAgent) => ipcRenderer.invoke('starter:openAgent', toolId, agent),
-  listCollections: (): Promise<Collection[]> =>
-    ipcRenderer.invoke('collections:list'),
-  saveCollection: (collection: Collection): Promise<Collection> =>
-    ipcRenderer.invoke('collections:save', collection),
-  deleteCollection: (id: string): Promise<void> =>
-    ipcRenderer.invoke('collections:delete', id),
+function on<K extends IpcEventChannel>(
+  channel: K,
+  cb: (...args: IpcEventMap[K]) => void,
+): () => void {
+  const listener = (_event: IpcRendererEvent, ...args: unknown[]) => cb(...(args as IpcEventMap[K]))
+  ipcRenderer.on(channel, listener)
+  return () => { ipcRenderer.removeListener(channel, listener) }
+}
+
+const api = {
+  getVerificationActivity: () => invoke('verification:activity'),
+  getVerification: (id) => invoke('verification:get', id),
+  saveVerification: (input) => invoke('verification:save', input),
+  suggestVerification: (id) => invoke('verification:suggest', id),
+  startVerification: (input) => invoke('verification:start', input),
+  cancelVerification: (id, runId) => invoke('verification:cancel', id, runId),
+  getVerificationLogs: (id, runId, stepId) => invoke('verification:logs', id, runId, stepId),
+  prepareVerificationHandoff: (id, runId) => invoke('verification:handoff', id, runId),
+  onVerificationUpdate: (cb) => on('verification:update', cb),
+  getProjectMemory: (id) => invoke('context:getMemory', id),
+  saveProjectMemory: (input) => invoke('context:saveMemory', input),
+  prepareProjectHandoff: (id, options) => invoke('context:handoff', id, options),
+  inspectToolEnvironment: (id) => invoke('tools:environment', id),
+  getAppUpdateState: () => invoke('app:updateState'),
+  checkAppUpdates: () => invoke('app:checkUpdates'),
+  onAppUpdateState: (cb) => on('app:update-state', cb),
+  getPendingImports: () => invoke('share:pendingImports'),
+  resumeImport: (id) => invoke('share:resumeImport', id),
+  getLibraryRecovery: () => invoke('tools:recovery'),
+  listTools: () => invoke('tools:list'),
+  /** Launchability snapshot for every tool — one batched port scan. */
+  getToolHealth: () => invoke('tools:health'),
+  saveTool: (tool) => invoke('tools:save', tool),
+  deleteTool: (id) => invoke('tools:delete', id),
+  pickFolder: () => invoke('tools:pickFolder'),
+  inspectProject: (projectPath) => invoke('tools:inspectProject', projectPath),
+  /** One-shot register: inspect → save → (consented) setup → launch. */
+  registerProject: (projectPath, options) => invoke('tools:registerProject', projectPath, options),
+  /** Absolute path for a dropped File (drag-and-drop folder support). */
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+  pickIcon: () => invoke('tools:pickIcon'),
+  /** Read a local icon file and return a data URL safe for <img src>. */
+  getIconDataUrl: (iconPath) => invoke('tools:iconDataUrl', iconPath),
+
+  getActivityBoard: () => invoke('activity:board'),
+  listToolDrafts: () => invoke('drafts:list'),
+  acceptToolDraft: (id, expectedUpdatedAt) => invoke('drafts:accept', id, expectedUpdatedAt),
+  rejectToolDraft: (id) => invoke('drafts:reject', id),
+  prepareToolStarter: () => invoke('starter:prepare'),
+  createToolFromIdea: (input) => invoke('starter:create', input),
+  chooseToolsFolder: () => invoke('starter:chooseFolder'),
+  openToolInAgent: (toolId, agent) => invoke('starter:openAgent', toolId, agent),
+  listCollections: () => invoke('collections:list'),
+  saveCollection: (collection) => invoke('collections:save', collection),
+  deleteCollection: (id) => invoke('collections:delete', id),
   /** Launch every stopped member of a collection ("Start stack"). */
-  startCollection: (
-    id: string,
-    options?: StartOptions,
-  ): Promise<CollectionActionResult> =>
-    ipcRenderer.invoke('collections:start', id, options),
+  startCollection: (id, options) => invoke('collections:start', id, options),
   /** Stop every running member Shelf owns ("Stop stack"). */
-  stopCollection: (id: string): Promise<CollectionActionResult> =>
-    ipcRenderer.invoke('collections:stop', id),
+  stopCollection: (id) => invoke('collections:stop', id),
   /** Design Engine profiles — the GUI is the only write surface (agents read over MCP). */
-  listDesignProfiles: (): Promise<DesignProfile[]> =>
-    ipcRenderer.invoke('designProfiles:list'),
-  saveDesignProfile: (input: SaveDesignProfileInput): Promise<DesignProfile> =>
-    ipcRenderer.invoke('designProfiles:save', input),
-  deleteDesignProfile: (id: string): Promise<void> =>
-    ipcRenderer.invoke('designProfiles:delete', id),
-  setDefaultDesignProfile: (id: string): Promise<DesignProfile> =>
-    ipcRenderer.invoke('designProfiles:setDefault', id),
+  listDesignProfiles: () => invoke('designProfiles:list'),
+  saveDesignProfile: (input) => invoke('designProfiles:save', input),
+  deleteDesignProfile: (id) => invoke('designProfiles:delete', id),
+  setDefaultDesignProfile: (id) => invoke('designProfiles:setDefault', id),
   /** Native file picker → copy into brand-assets; null when canceled. */
-  pickDesignAsset: (profileId: string, kind: DesignAssetKind): Promise<DesignAsset | null> =>
-    ipcRenderer.invoke('designProfiles:pickAsset', profileId, kind),
+  pickDesignAsset: (profileId, kind) => invoke('designProfiles:pickAsset', profileId, kind),
   /** Import a known path (drag-and-drop) into brand-assets. */
-  importDesignAsset: (
-    profileId: string,
-    sourcePath: string,
-    kind: DesignAssetKind,
-  ): Promise<DesignAsset> =>
-    ipcRenderer.invoke('designProfiles:importAsset', profileId, sourcePath, kind),
-  removeDesignAsset: (profileId: string, assetPath: string): Promise<void> =>
-    ipcRenderer.invoke('designProfiles:removeAsset', profileId, assetPath),
+  importDesignAsset: (profileId, sourcePath, kind) =>
+    invoke('designProfiles:importAsset', profileId, sourcePath, kind),
+  removeDesignAsset: (profileId, assetPath) => invoke('designProfiles:removeAsset', profileId, assetPath),
   /** Paste-ready markdown brand brief (secrets masked); null for unknown ids. */
-  designBrief: (id: string): Promise<string | null> =>
-    ipcRenderer.invoke('designProfiles:brief', id),
+  designBrief: (id) => invoke('designProfiles:brief', id),
   /** Preview data-url for a brand asset; null for non-image assets. */
-  designAssetDataUrl: (assetPath: string): Promise<string | null> =>
-    ipcRenderer.invoke('designProfiles:assetDataUrl', assetPath),
+  designAssetDataUrl: (assetPath) => invoke('designProfiles:assetDataUrl', assetPath),
   /** Deterministic token extraction from a project folder (Phase 3 assist). */
-  extractDesignTokens: (projectPath: string): Promise<ExtractedTokens> =>
-    ipcRenderer.invoke('designProfiles:extractTokens', projectPath),
+  extractDesignTokens: (projectPath) => invoke('designProfiles:extractTokens', projectPath),
 
   /** Tool Sharing (1.2) — send side. Writes shelf.json, copies the link when a remote exists. */
-  exportToolManifest: (
-    id: string,
-  ): Promise<{
-    manifestPath: string
-    remote?: string
-    link?: string
-    linkNote?: string
-    copied: boolean
-    envKeys: string[]
-  }> => ipcRenderer.invoke('share:exportManifest', id),
-  exportToolBundle: (id: string): Promise<{ saved: boolean; path?: string; bytes?: number }> =>
-    ipcRenderer.invoke('share:exportBundle', id),
+  exportToolManifest: (id) => invoke('share:exportManifest', id),
+  exportToolBundle: (id) => invoke('share:exportBundle', id),
   /** Receive: fetch into scratch and describe for the consent sheet (runs nothing). */
-  stageSharedTool: (
-    source: ShareSource,
-  ): Promise<{ ok: true; stage: Omit<StagedShare, 'stagePath'> } | ShareFailure> =>
-    ipcRenderer.invoke('share:stage', source),
-  pickShareBundle: (): Promise<string | null> => ipcRenderer.invoke('share:pickBundle'),
-  pickShareDestination: (
-    stageId: string,
-  ): Promise<{ ok: true; destination: string | null } | ShareFailure> =>
-    ipcRenderer.invoke('share:pickDestination', stageId),
+  stageSharedTool: (source) => invoke('share:stage', source),
+  pickShareBundle: () => invoke('share:pickBundle'),
+  pickShareDestination: (stageId) => invoke('share:pickDestination', stageId),
   /** The approval: move, save, consented setup, launch. */
-  confirmSharedTool: (
-    stageId: string,
-    input: ConfirmShareInput,
-  ): Promise<{ ok: true; result: ConfirmShareResult } | ShareFailure> =>
-    ipcRenderer.invoke('share:confirm', stageId, input),
-  discardSharedTool: (stageId: string): Promise<void> =>
-    ipcRenderer.invoke('share:discard', stageId),
-  checkToolUpdates: (id: string): Promise<UpdateCheck> =>
-    ipcRenderer.invoke('share:checkUpdates', id),
-  applyToolUpdate: (id: string, input: ApplyUpdateInput): Promise<ApplyUpdateResult> =>
-    ipcRenderer.invoke('share:applyUpdate', id, input),
+  confirmSharedTool: (stageId, input) => invoke('share:confirm', stageId, input),
+  discardSharedTool: (stageId) => invoke('share:discard', stageId),
+  checkToolUpdates: (id) => invoke('share:checkUpdates', id),
+  applyToolUpdate: (id, input) => invoke('share:applyUpdate', id, input),
   /** Team Tools catalogs (1.4): subscribe, refresh, publish an entry. */
-  prepareCatalogStarter: (name: string, toolIds: string[]) => ipcRenderer.invoke('catalog:prepareStarter', name, toolIds),
-  exportCatalogStarter: (content: string) => ipcRenderer.invoke('catalog:exportStarter', content),
-  listTeamCatalogs: (): Promise<TeamCatalog[]> => ipcRenderer.invoke('catalog:list'),
-  addTeamCatalog: (url: string): Promise<CatalogSyncView | ShareFailure> =>
-    ipcRenderer.invoke('catalog:add', url),
-  refreshTeamCatalog: (id: string): Promise<CatalogSyncView | ShareFailure> =>
-    ipcRenderer.invoke('catalog:refresh', id),
-  removeTeamCatalog: (id: string): Promise<boolean> => ipcRenderer.invoke('catalog:remove', id),
-  publishToTeamCatalog: (
-    catalogId: string,
-    toolId: string,
-  ): Promise<
-    { ok: true; result: CatalogPublishResult; catalog?: TeamCatalog } | ShareFailure
-  > => ipcRenderer.invoke('catalog:publish', catalogId, toolId),
+  prepareCatalogStarter: (name, toolIds) => invoke('catalog:prepareStarter', name, toolIds),
+  exportCatalogStarter: (content) => invoke('catalog:exportStarter', content),
+  listTeamCatalogs: () => invoke('catalog:list'),
+  addTeamCatalog: (url) => invoke('catalog:add', url),
+  refreshTeamCatalog: (id) => invoke('catalog:refresh', id),
+  removeTeamCatalog: (id) => invoke('catalog:remove', id),
+  publishToTeamCatalog: (catalogId, toolId) => invoke('catalog:publish', catalogId, toolId),
   /** A shelf://add link arrived — renderer opens the Add-from-URL sheet. */
-  onAddShared: (cb: (info: { repo: string }) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, info: { repo: string }) => cb(info)
-    ipcRenderer.on('app:add-shared', listener)
-    return () => ipcRenderer.removeListener('app:add-shared', listener)
-  },
+  onAddShared: (cb) => on('app:add-shared', cb),
 
-  getPrefs: (): Promise<UiPrefs> => ipcRenderer.invoke('prefs:get'),
-  updatePrefs: (
-    patch: Partial<UiPrefs>,
-  ): Promise<{ prefs: UiPrefs; shortcutStatus: ShortcutStatus }> =>
-    ipcRenderer.invoke('prefs:update', patch),
-  getShortcutStatus: (): Promise<ShortcutStatus> =>
-    ipcRenderer.invoke('desktop:shortcutStatus'),
-  submitOnboarding: (
-    input: OnboardingSubmissionInput,
-  ): Promise<{ appVersion: string }> =>
-    ipcRenderer.invoke('onboarding:submit', input),
+  getPrefs: () => invoke('prefs:get'),
+  updatePrefs: (patch) => invoke('prefs:update', patch),
+  getShortcutStatus: () => invoke('desktop:shortcutStatus'),
+  submitOnboarding: (input) => invoke('onboarding:submit', input),
 
-  getDesignMd: (opts: {
-    id?: string
-    projectPath?: string
-  }): Promise<DesignMdResult> => ipcRenderer.invoke('designMd:get', opts),
-  checkToolReadiness: (id: string): Promise<ToolReadiness> =>
-    ipcRenderer.invoke('tools:readiness', id),
-  listCapabilityGaps: (opts?: {
-    status?: CapabilityGapStatus
-    limit?: number
-  }): Promise<CapabilityGap[]> => ipcRenderer.invoke('capabilityGaps:list', opts),
-  recordCapabilityGap: (input: {
-    task: string
-    capabilities: string[]
-    reason: string
-    relatedToolIds?: string[]
-    suggestedAccess?: AgentAccessKind
-  }): Promise<{ action: 'created' | 'updated'; gap: CapabilityGap }> =>
-    ipcRenderer.invoke('capabilityGaps:record', input),
-  updateCapabilityGapStatus: (
-    id: string,
-    status: CapabilityGapStatus,
-  ): Promise<CapabilityGap> =>
-    ipcRenderer.invoke('capabilityGaps:updateStatus', id, status),
-  updateCapabilityGap: (
-    id: string,
-    patch: { status?: CapabilityGapStatus; relatedToolIds?: string[] },
-  ): Promise<CapabilityGap> =>
-    ipcRenderer.invoke('capabilityGaps:update', id, patch),
-  deleteCapabilityGap: (id: string): Promise<void> =>
-    ipcRenderer.invoke('capabilityGaps:delete', id),
+  getDesignMd: (opts) => invoke('designMd:get', opts),
+  checkToolReadiness: (id) => invoke('tools:readiness', id),
+  listCapabilityGaps: (opts) => invoke('capabilityGaps:list', opts),
+  recordCapabilityGap: (input) => invoke('capabilityGaps:record', input),
+  updateCapabilityGapStatus: (id, status) => invoke('capabilityGaps:updateStatus', id, status),
+  updateCapabilityGap: (id, patch) => invoke('capabilityGaps:update', id, patch),
+  deleteCapabilityGap: (id) => invoke('capabilityGaps:delete', id),
   /** Paste-ready build brief for a capability gap (markdown). */
-  getGapBrief: (id: string): Promise<string> =>
-    ipcRenderer.invoke('capabilityGaps:brief', id),
-  listGapSuggestions: (): Promise<GapResolveSuggestion[]> =>
-    ipcRenderer.invoke('capabilityGaps:suggestions'),
-  dismissGapSuggestion: (id: string, toolId: string): Promise<CapabilityGap> =>
-    ipcRenderer.invoke('capabilityGaps:dismissSuggestion', id, toolId),
+  getGapBrief: (id) => invoke('capabilityGaps:brief', id),
+  listGapSuggestions: () => invoke('capabilityGaps:suggestions'),
+  dismissGapSuggestion: (id, toolId) => invoke('capabilityGaps:dismissSuggestion', id, toolId),
 
-  getRuntimeStates: (): Promise<ToolRuntimeState[]> =>
-    ipcRenderer.invoke('process:states'),
-  startTool: (id: string, options?: StartOptions): Promise<ToolRuntimeState> =>
-    ipcRenderer.invoke('process:start', id, options),
-  stopTool: (id: string): Promise<ToolRuntimeState> =>
-    ipcRenderer.invoke('process:stop', id),
-  restartTool: (id: string): Promise<ToolRuntimeState> =>
-    ipcRenderer.invoke('process:restart', id),
-  getLogs: (id: string, runId?: string): Promise<LogLine[]> => ipcRenderer.invoke('process:logs', id, runId),
+  getRuntimeStates: () => invoke('process:states'),
+  startTool: (id, options) => invoke('process:start', id, options),
+  stopTool: (id) => invoke('process:stop', id),
+  restartTool: (id) => invoke('process:restart', id),
+  getLogs: (id, runId) => invoke('process:logs', id, runId),
   /** Paste-ready failure report (secrets already masked). */
-  getErrorReport: (id: string, runId?: string): Promise<string | null> =>
-    ipcRenderer.invoke('process:errorReport', id, runId),
-  listReceipts: (opts?: {
-    toolId?: string
-    limit?: number
-    outcomes?: ReceiptOutcome[]
-    query?: string
-  }): Promise<RunReceipt[]> => ipcRenderer.invoke('receipts:list', opts),
-  clearReceipts: (opts?: { toolId?: string }): Promise<{ removed: number }> =>
-    ipcRenderer.invoke('receipts:clear', opts),
-  exportReceipts: (opts?: {
-    format?: 'json' | 'csv'
-    toolId?: string
-    outcomes?: ReceiptOutcome[]
-    query?: string
-  }): Promise<{ saved: boolean; path?: string }> =>
-    ipcRenderer.invoke('receipts:export', opts),
+  getErrorReport: (id, runId) => invoke('process:errorReport', id, runId),
+  listReceipts: (opts) => invoke('receipts:list', opts),
+  clearReceipts: (opts) => invoke('receipts:clear', opts),
+  exportReceipts: (opts) => invoke('receipts:export', opts),
   /** A process outside this window (MCP server) changed a shared data file. */
-  onExternalDataChange: (cb: (filename: string) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, filename: string) => cb(filename)
-    ipcRenderer.on('data:external-change', listener)
-    return () => ipcRenderer.removeListener('data:external-change', listener)
-  },
-  onReceiptUpdate: (cb: (receipt: RunReceipt) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, receipt: RunReceipt) => cb(receipt)
-    ipcRenderer.on('receipts:update', listener)
-    return () => ipcRenderer.removeListener('receipts:update', listener)
-  },
-  openUrl: (url: string): Promise<void> => ipcRenderer.invoke('system:openUrl', url),
-  openPath: (targetPath: string): Promise<void> =>
-    ipcRenderer.invoke('system:openPath', targetPath),
-  openEditor: (projectPath: string): Promise<void> =>
-    ipcRenderer.invoke('system:openEditor', projectPath),
-  openTerminal: (projectPath: string): Promise<void> =>
-    ipcRenderer.invoke('system:openTerminal', projectPath),
-  getMcpServerPath: (): Promise<string> => ipcRenderer.invoke('system:mcpServerPath'),
-  getClaudeDesktopStatus: (): Promise<ClaudeDesktopStatus> =>
-    ipcRenderer.invoke('claude:status'),
-  connectClaudeDesktop: (): Promise<ClaudeConnectResult> =>
-    ipcRenderer.invoke('claude:connect'),
-  disconnectClaudeDesktop: (): Promise<ClaudeConnectResult> =>
-    ipcRenderer.invoke('claude:disconnect'),
-  openClaudeDesktop: (): Promise<void> => ipcRenderer.invoke('claude:openApp'),
-  detectMcpClients: (): Promise<McpClientDetection[]> =>
-    ipcRenderer.invoke('mcpClients:detect'),
-  getClaudeCodeMcpStatus: (): Promise<ClaudeCodeMcpStatus> =>
-    ipcRenderer.invoke('claudeCode:status'),
-  connectClaudeCodeMcp: (): Promise<ClaudeCodeConnectResult> =>
-    ipcRenderer.invoke('claudeCode:connect'),
-  disconnectClaudeCodeMcp: (): Promise<ClaudeCodeConnectResult> =>
-    ipcRenderer.invoke('claudeCode:disconnect'),
-  getCursorMcpStatus: (): Promise<CursorMcpStatus> =>
-    ipcRenderer.invoke('cursor:status'),
-  connectCursorMcp: (): Promise<CursorConnectResult> =>
-    ipcRenderer.invoke('cursor:connect'),
-  disconnectCursorMcp: (): Promise<CursorConnectResult> =>
-    ipcRenderer.invoke('cursor:disconnect'),
-  openCursorApp: (): Promise<void> => ipcRenderer.invoke('cursor:openApp'),
-  getCodexMcpStatus: (): Promise<CodexMcpStatus> =>
-    ipcRenderer.invoke('codex:status'),
-  connectCodexMcp: (): Promise<CodexConnectResult> =>
-    ipcRenderer.invoke('codex:connect'),
-  disconnectCodexMcp: (): Promise<CodexConnectResult> =>
-    ipcRenderer.invoke('codex:disconnect'),
-  openCodexApp: (): Promise<void> => ipcRenderer.invoke('codex:openApp'),
-  onRuntimeUpdate: (cb: (state: ToolRuntimeState) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, state: ToolRuntimeState) => cb(state)
-    ipcRenderer.on('process:update', listener)
-    return () => ipcRenderer.removeListener('process:update', listener)
-  },
-  onLogLine: (cb: (line: LogLine) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, line: LogLine) => cb(line)
-    ipcRenderer.on('logs:line', listener)
-    return () => ipcRenderer.removeListener('logs:line', listener)
-  },
+  onExternalDataChange: (cb) => on('data:external-change', cb),
+  onReceiptUpdate: (cb) => on('receipts:update', cb),
+  openUrl: (url) => invoke('system:openUrl', url),
+  openPath: (targetPath) => invoke('system:openPath', targetPath),
+  openEditor: (projectPath) => invoke('system:openEditor', projectPath),
+  openTerminal: (projectPath) => invoke('system:openTerminal', projectPath),
+  getMcpServerPath: () => invoke('system:mcpServerPath'),
+  getClaudeDesktopStatus: () => invoke('claude:status'),
+  connectClaudeDesktop: () => invoke('claude:connect'),
+  disconnectClaudeDesktop: () => invoke('claude:disconnect'),
+  openClaudeDesktop: () => invoke('claude:openApp'),
+  detectMcpClients: () => invoke('mcpClients:detect'),
+  getClaudeCodeMcpStatus: () => invoke('claudeCode:status'),
+  connectClaudeCodeMcp: () => invoke('claudeCode:connect'),
+  disconnectClaudeCodeMcp: () => invoke('claudeCode:disconnect'),
+  getCursorMcpStatus: () => invoke('cursor:status'),
+  connectCursorMcp: () => invoke('cursor:connect'),
+  disconnectCursorMcp: () => invoke('cursor:disconnect'),
+  openCursorApp: () => invoke('cursor:openApp'),
+  getCodexMcpStatus: () => invoke('codex:status'),
+  connectCodexMcp: () => invoke('codex:connect'),
+  disconnectCodexMcp: () => invoke('codex:disconnect'),
+  openCodexApp: () => invoke('codex:openApp'),
+  onRuntimeUpdate: (cb) => on('process:update', cb),
+  onLogLine: (cb) => on('logs:line', cb),
   /** Menu / shortcut navigation from the main process. */
-  onNavigate: (cb: (path: string) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, route: string) => cb(route)
-    ipcRenderer.on('app:navigate', listener)
-    return () => ipcRenderer.removeListener('app:navigate', listener)
-  },
-  onFocusSearch: (cb: () => void): (() => void) => {
-    const listener = () => cb()
-    ipcRenderer.on('app:focus-search', listener)
-    return () => ipcRenderer.removeListener('app:focus-search', listener)
-  },
+  onNavigate: (cb) => on('app:navigate', cb),
+  onFocusSearch: (cb) => on('app:focus-search', cb),
   /** Menu ⌘K — renderer toggles the Quick Open palette. */
-  onQuickOpen: (cb: () => void): (() => void) => {
-    const listener = () => cb()
-    ipcRenderer.on('app:quick-open', listener)
-    return () => ipcRenderer.removeListener('app:quick-open', listener)
-  },
-  onHistory: (cb: (direction: 'back' | 'forward') => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, direction: 'back' | 'forward') => cb(direction)
-    ipcRenderer.on('app:history', listener)
-    return () => ipcRenderer.removeListener('app:history', listener)
-  },
-  onAddFolder: (cb: (projectPath: string) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, projectPath: string) => cb(projectPath)
-    ipcRenderer.on('app:add-folder', listener)
-    return () => ipcRenderer.removeListener('app:add-folder', listener)
-  },
+  onQuickOpen: (cb) => on('app:quick-open', cb),
+  onHistory: (cb) => on('app:history', cb),
+  onAddFolder: (cb) => on('app:add-folder', cb),
   /** Global hotkey registration result (conflict / success). */
-  onShortcutStatus: (cb: (status: ShortcutStatus) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, status: ShortcutStatus) => cb(status)
-    ipcRenderer.on('app:shortcut-status', listener)
-    return () => ipcRenderer.removeListener('app:shortcut-status', listener)
-  },
+  onShortcutStatus: (cb) => on('app:shortcut-status', cb),
   /** A downloaded update is ready — renderer shows the restart banner. */
-  onUpdateReady: (cb: (info: { version: string }) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, info: { version: string }) => cb(info)
-    ipcRenderer.on('app:update-ready', listener)
-    return () => ipcRenderer.removeListener('app:update-ready', listener)
-  },
+  onUpdateReady: (cb) => on('app:update-ready', cb),
   /** Stop tools, quit, install the downloaded update, and relaunch. */
-  installUpdate: (): Promise<void> => ipcRenderer.invoke('app:installUpdate'),
-}
+  installUpdate: () => invoke('app:installUpdate'),
+} satisfies ShelfApi
 
 // Compile-time parity includes payloads and callbacks, not only channel names.
 const checkedApi: ShelfApi = api

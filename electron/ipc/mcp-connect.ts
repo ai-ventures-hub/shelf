@@ -1,83 +1,84 @@
 /**
- * IPC handlers for one-click MCP client connects
- * (Claude Desktop / Claude Code / Cursor / Codex).
- * Kept out of main.ts so window/bootstrap wiring stays readable.
+ * One-click MCP client connects (Claude Desktop / Claude Code / Cursor / Codex).
  */
-import { clientObservation } from '../shared/client-observation'
-import { ipcMain } from 'electron'
+import { clientObservation } from '../../shared/client-observation'
 import {
   connectClaudeDesktop,
   disconnectClaudeDesktop,
   getClaudeDesktopStatus,
-} from '../shared/claude-desktop'
+} from '../../shared/claude-desktop'
 import {
   connectClaudeCodeMcp,
   disconnectClaudeCodeMcp,
   getClaudeCodeMcpStatus,
-} from '../shared/claude-code-mcp'
+} from '../../shared/claude-code-mcp'
 import {
   connectCodexMcp,
   disconnectCodexMcp,
   getCodexMcpStatus,
-} from '../shared/codex-mcp'
+} from '../../shared/codex-mcp'
 import {
   connectCursorMcp,
   disconnectCursorMcp,
   getCursorMcpStatus,
-} from '../shared/cursor-mcp'
-import { detectInstalledClients } from '../shared/mcp-client-detect'
-import * as system from './system-bridge'
+} from '../../shared/cursor-mcp'
+import { detectInstalledClients } from '../../shared/mcp-client-detect'
+import * as system from '../system-bridge'
+import type { IpcContext } from './context'
+import { handle } from './typed'
 
-export function registerMcpConnectIpc(resolveMcpServerPath: () => string): void {
-  ipcMain.handle('mcpClients:detect', () => detectInstalledClients())
+export function registerMcpConnectIpc(ctx: IpcContext): void {
+  const { resolveMcpServerPath } = ctx
 
-  ipcMain.handle('claude:status', () =>
+  handle('mcpClients:detect', () => detectInstalledClients())
+
+  handle('claude:status', () =>
     getClaudeDesktopStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'claude') })),
   )
-  ipcMain.handle('claude:connect', () =>
+  handle('claude:connect', () =>
     connectClaudeDesktop({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('claude:disconnect', () =>
+  handle('claude:disconnect', () =>
     disconnectClaudeDesktop({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('claude:openApp', async () => {
+  handle('claude:openApp', async () => {
     await system.openApp('Claude')
   })
 
-  ipcMain.handle('claudeCode:status', () =>
+  handle('claudeCode:status', () =>
     getClaudeCodeMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'claude-code') })),
   )
-  ipcMain.handle('claudeCode:connect', () =>
+  handle('claudeCode:connect', () =>
     connectClaudeCodeMcp({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('claudeCode:disconnect', () =>
+  handle('claudeCode:disconnect', () =>
     disconnectClaudeCodeMcp({ serverPath: resolveMcpServerPath() }),
   )
 
-  ipcMain.handle('cursor:status', () =>
+  handle('cursor:status', () =>
     getCursorMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'cursor') })),
   )
-  ipcMain.handle('cursor:connect', () =>
+  handle('cursor:connect', () =>
     connectCursorMcp({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('cursor:disconnect', () =>
+  handle('cursor:disconnect', () =>
     disconnectCursorMcp({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('cursor:openApp', async () => {
+  handle('cursor:openApp', async () => {
     await system.openApp('Cursor')
   })
 
-  ipcMain.handle('codex:status', () =>
+  handle('codex:status', () =>
     getCodexMcpStatus({ serverPath: resolveMcpServerPath() }).then((status) => ({ ...status, ...clientObservation(resolveMcpServerPath(), 'codex') })),
   )
-  ipcMain.handle('codex:connect', () =>
+  handle('codex:connect', () =>
     connectCodexMcp({ serverPath: resolveMcpServerPath() }),
   )
-  ipcMain.handle('codex:disconnect', () =>
+  handle('codex:disconnect', () =>
     disconnectCodexMcp({ serverPath: resolveMcpServerPath() }),
   )
   // Codex desktop and CLI share the same config.toml.
-  ipcMain.handle('codex:openApp', async () => {
+  handle('codex:openApp', async () => {
     await system.openApp('Codex')
   })
 }
