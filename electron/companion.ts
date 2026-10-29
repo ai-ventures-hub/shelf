@@ -137,6 +137,8 @@ export class CompanionManager {
       this.preview = new PreviewProxy({
         bindAddress: bind.address,
         tls: { key: this.cert.key, cert: this.cert.cert },
+        // Previews live right above the Companion port, never on a tool's own port.
+        basePort: Math.min(65535, port + 1),
         log: (message) => console.log(`[shelf] ${message}`),
       })
       this.syncPreviews()

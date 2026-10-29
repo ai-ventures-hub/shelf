@@ -27,7 +27,7 @@ import { isLoopbackAddress, isUnspecifiedAddress } from './companion-net'
 
 export interface PreviewTarget {
   toolId: string
-  /** The tool's port: the proxy listens on it (companion interface) and forwards to it (loopback). */
+  /** The tool's own port on loopback, where the proxy forwards to. */
   port: number
   backend: 'http' | 'https'
 }
@@ -35,6 +35,15 @@ export interface PreviewTarget {
 export interface PreviewProxyOptions {
   bindAddress: string
   tls: { key: string; cert: string }
+  /**
+   * First port the proxy may listen on; each tool gets the next free one
+   * above it. The proxy never listens on the tool's own port number: Shelf's
+   * process truth is port-based (lsof), and a proxy holding the tool's port
+   * on another interface reads as the tool being up when it is not.
+   */
+  basePort: number
+  /** How many ports above basePort may be tried. */
+  portSpan?: number
   ticketTtlMs?: number
   grantTtlMs?: number
   log?: (message: string) => void
@@ -52,6 +61,8 @@ interface Credential {
 
 interface Listener {
   target: PreviewTarget
+  /** The port this listener holds on the companion interface (never target.port). */
+  listenPort: number
   server: https.Server
   origin: string
   tickets: Map<string, Credential>
@@ -110,13 +121,22 @@ export class PreviewProxy {
   private readonly listeners = new Map<string, Listener>()
   private readonly ticketTtl: number
   private readonly grantTtl: number
+  private readonly portSpan: number
 
   constructor(private readonly options: PreviewProxyOptions) {
     if (isLoopbackAddress(options.bindAddress) || isUnspecifiedAddress(options.bindAddress)) {
       throw new Error('Preview proxy refuses loopback and all-interface addresses.')
     }
+    if (!Number.isInteger(options.basePort) || options.basePort < 1024 || options.basePort > 65535) {
+      throw new Error('Preview proxy needs a base port between 1024 and 65535.')
+    }
     this.ticketTtl = options.ticketTtlMs ?? DEFAULT_TICKET_TTL_MS
     this.grantTtl = options.grantTtlMs ?? DEFAULT_GRANT_TTL_MS
+    this.portSpan = options.portSpan ?? 200
+  }
+
+  listenPort(toolId: string): number | null {
+    return this.listeners.get(toolId)?.listenPort ?? null
   }
 
   get bindAddress(): string {
@@ -135,43 +155,58 @@ export class PreviewProxy {
     return this.listeners.get(toolId)?.origin || null
   }
 
-  /** Make sure a listener exists for the target. Idempotent; a changed port replaces it. */
+  /** Make sure a listener exists for the target. Idempotent; a changed backend replaces it. */
   async ensure(target: PreviewTarget): Promise<string> {
     const current = this.listeners.get(target.toolId)
     if (current && current.target.port === target.port && current.target.backend === target.backend) return current.origin
     if (current) await this.release(target.toolId)
+    const server = https.createServer({ key: this.options.tls.key, cert: this.options.tls.cert, minVersion: 'TLSv1.2' })
+    const listenPort = await this.bind(server)
     const listener: Listener = {
       target,
-      server: https.createServer({ key: this.options.tls.key, cert: this.options.tls.cert, minVersion: 'TLSv1.2' }),
-      origin: previewOrigin(this.options.bindAddress, target.port),
+      listenPort,
+      server,
+      origin: previewOrigin(this.options.bindAddress, listenPort),
       tickets: new Map(),
       grants: new Map(),
       sockets: new Set(),
     }
-    listener.server.on('request', (req, res) => this.handle(listener, req, res))
-    listener.server.on('upgrade', (req, socket, head) => this.upgrade(listener, req, socket, head))
-    listener.server.on('connection', (socket) => {
+    server.on('request', (req, res) => this.handle(listener, req, res))
+    server.on('upgrade', (req, socket, head) => this.upgrade(listener, req, socket, head))
+    server.on('connection', (socket) => {
       listener.sockets.add(socket)
       socket.on('close', () => listener.sockets.delete(socket))
     })
-    listener.server.on('tlsClientError', () => { /* plain HTTP on the TLS port: refused */ })
-    await new Promise<void>((resolve, reject) => {
-      listener.server.once('error', reject)
-      listener.server.listen(target.port, this.options.bindAddress, () => {
-        listener.server.off('error', reject)
-        resolve()
-      })
-    }).catch((err: NodeJS.ErrnoException) => {
-      throw new Error(
-        err.code === 'EADDRINUSE'
-          ? `Port ${target.port} is already taken on ${this.options.bindAddress}; the tool may already listen on every interface.`
-          : err.message,
-      )
-    })
-    listener.server.on('error', (err) => this.options.log?.(`preview proxy ${target.toolId}: ${err.message}`))
+    server.on('tlsClientError', () => { /* plain HTTP on the TLS port: refused */ })
+    server.on('error', (err) => this.options.log?.(`preview proxy ${target.toolId}: ${err.message}`))
     this.listeners.set(target.toolId, listener)
     this.options.log?.(`preview proxy: ${target.toolId} on ${listener.origin} → ${target.backend}://127.0.0.1:${target.port}`)
     return listener.origin
+  }
+
+  /** First free port at or above basePort that no listener of ours holds. */
+  private async bind(server: https.Server): Promise<number> {
+    const taken = new Set([...this.listeners.values()].map((item) => item.listenPort))
+    const last = Math.min(65535, this.options.basePort + this.portSpan)
+    for (let port = this.options.basePort; port <= last; port += 1) {
+      if (taken.has(port)) continue
+      const outcome = await new Promise<'ok' | 'busy'>((resolve, reject) => {
+        const onError = (err: NodeJS.ErrnoException) => {
+          server.off('listening', onListening)
+          if (err.code === 'EADDRINUSE' || err.code === 'EACCES') resolve('busy')
+          else reject(err)
+        }
+        const onListening = () => {
+          server.off('error', onError)
+          resolve('ok')
+        }
+        server.once('error', onError)
+        server.once('listening', onListening)
+        server.listen(port, this.options.bindAddress)
+      })
+      if (outcome === 'ok') return port
+    }
+    throw new Error(`No free preview port between ${this.options.basePort} and ${last} on ${this.options.bindAddress}.`)
   }
 
   async release(toolId: string): Promise<void> {

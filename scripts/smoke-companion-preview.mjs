@@ -45,8 +45,9 @@ const { WebSocketServer, WebSocket } = require('ws')
   assert.equal(previewBlocker({ port: 3000, url: 'http://localhost:3000/app' }), null)
   assert.equal(toolSchema.shape.remotePreview.safeParse(true).success, true)
   assert.equal(toolSchema.shape.remotePreview.safeParse(undefined).success, true)
-  assert.throws(() => new PreviewProxy({ bindAddress: '127.0.0.1', tls: { key: 'k', cert: 'c' } }), /loopback/)
-  assert.throws(() => new PreviewProxy({ bindAddress: '0.0.0.0', tls: { key: 'k', cert: 'c' } }), /loopback|all-interface/)
+  assert.throws(() => new PreviewProxy({ bindAddress: '127.0.0.1', tls: { key: 'k', cert: 'c' }, basePort: 48621 }), /loopback/)
+  assert.throws(() => new PreviewProxy({ bindAddress: '0.0.0.0', tls: { key: 'k', cert: 'c' }, basePort: 48621 }), /loopback|all-interface/)
+  assert.throws(() => new PreviewProxy({ bindAddress: '192.168.1.20', tls: { key: 'k', cert: 'c' }, basePort: 80 }), /base port/)
   console.log('OK: preview policy — port required, loopback url only, proxy never binds loopback or 0.0.0.0')
 }
 
@@ -115,18 +116,23 @@ async function live(address) {
 
   const cert = ensureCompanionCertificate(root, [address])
   let logs = []
-  const proxy = new PreviewProxy({ bindAddress: address, tls: { key: cert.key, cert: cert.cert }, ticketTtlMs: 500, log: (m) => logs.push(m) })
+  // Base port chosen at random high in the range so repeated runs do not collide with a stale listener.
+  const basePort = 50000 + Math.floor(Math.random() * 5000)
+  const proxy = new PreviewProxy({ bindAddress: address, tls: { key: cert.key, cert: cert.cert }, basePort, ticketTtlMs: 500, log: (m) => logs.push(m) })
 
   assert.equal(proxy.listening('tool'), false)
   assert.throws(() => proxy.issueTicket('tool', 'device-1'), /not available/, 'no ticket without a listener')
   const origin = await proxy.ensure({ toolId: 'tool', port, backend: 'http' })
-  assert.equal(origin, `https://${address}:${port}`)
+  const lport = proxy.listenPort('tool')
+  assert.equal(lport, basePort, 'the first listener takes the base port')
+  assert.notEqual(lport, port, 'the proxy never listens on the tool’s own port number')
+  assert.equal(origin, `https://${address}:${lport}`)
   assert.equal(proxy.listening('tool'), true)
   assert.equal(await proxy.ensure({ toolId: 'tool', port, backend: 'http' }), origin, 'ensure is idempotent')
-  console.log(`OK: proxy listening on ${origin} → 127.0.0.1:${port}`)
+  console.log(`OK: proxy listening on ${origin} → 127.0.0.1:${port} (own port, not the tool’s)`)
 
   const request = (p, { cookie, method = 'GET', headers = {} } = {}) => new Promise((resolve, reject) => {
-    const req = https.request({ host: address, port, method, path: p, rejectUnauthorized: false, headers: { ...(cookie ? { cookie } : {}), ...headers } }, (res) => {
+    const req = https.request({ host: address, port: lport, method, path: p, rejectUnauthorized: false, headers: { ...(cookie ? { cookie } : {}), ...headers } }, (res) => {
       let text = ''
       res.on('data', (c) => { text += c })
       res.on('end', () => resolve({ status: res.statusCode, body: text, headers: res.headers }))
@@ -137,7 +143,7 @@ async function live(address) {
 
   // Plain HTTP on the TLS port gets nothing.
   await new Promise((resolve) => {
-    const socket = net.connect(port, address, () => socket.write(`GET / HTTP/1.1\r\nHost: ${address}\r\n\r\n`))
+    const socket = net.connect(lport, address, () => socket.write(`GET / HTTP/1.1\r\nHost: ${address}\r\n\r\n`))
     let data = ''
     socket.on('data', (c) => { data += c })
     socket.on('close', () => { assert.equal(data.includes('tool saw'), false); resolve() })
@@ -180,7 +186,7 @@ async function live(address) {
   const last = seen.at(-1)
   assert.equal(last.host, `127.0.0.1:${port}`, 'Host is rewritten to loopback so dev servers accept it')
   assert.equal(last.cookie, 'other=1', 'the grant cookie never reaches the tool; other cookies do')
-  assert.equal(last.forwardedHost, `${address}:${port}`)
+  assert.equal(last.forwardedHost, `${address}:${lport}`)
   const redirected = await request('/redirect', { cookie })
   assert.equal(redirected.status, 302)
   assert.equal(redirected.headers.location, `${origin}/after`, 'loopback redirects land back on the proxy')
@@ -188,7 +194,7 @@ async function live(address) {
 
   // WebSocket upgrade reaches the tool; without the cookie it is refused.
   const echoed = await new Promise((resolve, reject) => {
-    const ws = new WebSocket(`wss://${address}:${port}/ws`, { rejectUnauthorized: false, headers: { cookie } })
+    const ws = new WebSocket(`wss://${address}:${lport}/ws`, { rejectUnauthorized: false, headers: { cookie } })
     ws.on('open', () => ws.send('ping'))
     ws.on('message', (data) => { resolve(String(data)); ws.close() })
     ws.on('error', reject)
@@ -196,7 +202,7 @@ async function live(address) {
   })
   assert.equal(echoed, 'echo:ping')
   await new Promise((resolve) => {
-    const ws = new WebSocket(`wss://${address}:${port}/ws`, { rejectUnauthorized: false })
+    const ws = new WebSocket(`wss://${address}:${lport}/ws`, { rejectUnauthorized: false })
     ws.on('open', () => { ws.close(); assert.fail('tokenless upgrade must not open') })
     ws.on('unexpected-response', (_req, res) => { assert.equal(res.statusCode, 401); resolve() })
     ws.on('error', () => resolve())
@@ -221,11 +227,18 @@ async function live(address) {
   // Backend still runs on loopback; only the companion-side door closed.
   await new Promise((resolve, reject) => http.get(`http://127.0.0.1:${port}/still`, (res) => { assert.equal(res.statusCode, 200); res.resume(); resolve() }).on('error', reject))
 
-  // EADDRINUSE on the companion address is reported, not swallowed.
+  // A taken port in the range is skipped, and two tools never share a listener port.
   const squatter = net.createServer()
-  await new Promise((resolve) => squatter.listen(port, address, resolve))
-  await assert.rejects(proxy.ensure({ toolId: 'tool', port, backend: 'http' }), /already taken/)
+  await new Promise((resolve) => squatter.listen(basePort, address, resolve))
+  const again = await proxy.ensure({ toolId: 'tool', port, backend: 'http' })
+  assert.equal(proxy.listenPort('tool'), basePort + 1, 'a squatted base port is skipped')
+  assert.equal(again, `https://${address}:${basePort + 1}`)
+  await proxy.ensure({ toolId: 'other', port, backend: 'http' })
+  assert.equal(proxy.listenPort('other'), basePort + 2, 'each tool gets its own port')
   await new Promise((resolve) => squatter.close(resolve))
+  // Nothing in the range at all → a clear error, not a hang.
+  const tiny = new PreviewProxy({ bindAddress: address, tls: { key: cert.key, cert: cert.cert }, basePort: basePort + 1, portSpan: 1 })
+  await assert.rejects(tiny.ensure({ toolId: 'x', port, backend: 'http' }), /No free preview port/)
 
   await proxy.releaseAll()
   wss.close()

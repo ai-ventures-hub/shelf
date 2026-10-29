@@ -289,10 +289,18 @@ the server and preload share one typed channel map.
 
 Built as specified, with these deviations and findings recorded:
 
-- **The proxy terminates TLS** with the Companion certificate on
-  `<bind>:<tool.port>` and forwards to `127.0.0.1:<tool.port>` (plain
-  HTTP, or HTTPS when the tool's url says so). A phone that already trusts
-  the Companion certificate trusts every preview port too.
+- **Not port-for-port after all.** The first real test (2026-10-28) showed
+  why: Shelf's process truth is port-based (lsof), so a proxy holding the
+  tool's port number on the Tailscale interface read as the tool being up
+  after it had stopped, and the library card cycled Running → Error. The
+  proxy now takes its own port, the first free one above the Companion
+  port (48621, 48622, …), one per tool, and forwards to
+  `127.0.0.1:<tool.port>`. Dev servers do not care: absolute asset paths
+  and the HMR socket use the page's own origin, which is the proxy's. It
+  also removes the clash with tools that bind every interface.
+- **The proxy terminates TLS** with the Companion certificate (plain HTTP
+  to the tool, or HTTPS when the tool's url says so). A phone that already
+  trusts the Companion certificate trusts every preview port too.
 - **Host is rewritten to `127.0.0.1:<port>`** on the way in, because Vite
   6 and friends refuse unknown Host headers; `X-Forwarded-Host/Proto/For`
   carry the originals. Loopback redirects from the tool are rewritten back
@@ -315,8 +323,8 @@ Built as specified, with these deviations and findings recorded:
   preview smoke caught it.
 - **0.0.0.0 detection is not attempted.** Shelf cannot know what a tool
   binds; the editor copy says a tool that already listens on every
-  interface is reachable regardless, and an `EADDRINUSE` on the Companion
-  address is reported as such.
+  interface is reachable regardless. With the proxy on its own port, such a
+  tool no longer collides with it.
 - **Vite HMR verified by hand** on 2026-10-28 with Shelf's own dev server:
   through the proxy, `/` served the page with `/@vite/client`, the client
   script loaded, and the HMR WebSocket upgraded (101) and sent
