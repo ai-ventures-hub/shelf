@@ -272,7 +272,7 @@ async function live(iface) {
     ws.on('error', reject)
     setTimeout(() => reject(new Error('no hello')), 4000).unref()
   })
-  assert.deepEqual(hello.states, processes.peekStates())
+  assert.deepEqual(hello.states, await processes.getStates(), 'hello carries the probed state table')
   assert.equal(hello.device.id, paired.body.device.id)
   assert.equal(clientCount, 1, 'onClientsChanged fired')
   // A socket without the token is refused at upgrade.

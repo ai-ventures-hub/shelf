@@ -546,8 +546,16 @@ export class CompanionServer {
     wss.handleUpgrade(req, socket, head, (ws) => {
       this.clients.set(ws, paired)
       this.options.onClientsChanged?.(this.clients.size)
-      const hello: CompanionWsMessage = { type: 'hello', states: this.options.host.peekStates(), device: paired }
-      ws.send(JSON.stringify(hello))
+      // The probed table, not the in-memory one: tools launched by an agent
+      // or adopted from outside are running too, and the phone's list must
+      // not flip to Stopped on every reconnect.
+      void this.options.host.getStates()
+        .catch(() => this.options.host.peekStates())
+        .then((states) => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          const hello: CompanionWsMessage = { type: 'hello', states, device: paired }
+          ws.send(JSON.stringify(hello))
+        })
       ws.on('message', () => { /* the phone only listens; nothing is accepted here */ })
       ws.on('close', () => {
         this.clients.delete(ws)

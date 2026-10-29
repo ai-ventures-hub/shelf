@@ -183,7 +183,13 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
     const refreshLater = debounce(() => void refresh(), 400)
     return connectLive((message) => {
       if (message.type === 'hello') {
-        setStates(new Map(message.states.map((state) => [state.toolId, state])))
+        // Merge, never replace: a greeting must not erase a state the
+        // overview just reported for a tool the greeting does not know.
+        setStates((prev) => {
+          const next = new Map(prev)
+          for (const state of message.states) next.set(state.toolId, state)
+          return next
+        })
       } else if (message.type === 'process:update') {
         setStates((prev) => new Map(prev).set(message.state.toolId, message.state))
       } else if (message.type === 'logs:line') {
@@ -191,7 +197,12 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
       } else if (message.type === 'library:changed' || message.type === 'receipts:update') {
         refreshLater()
       }
-    }, setLive)
+    }, (open) => {
+      setLive(open)
+      // iOS drops the socket whenever the app is backgrounded; the overview
+      // is the full truth, so fetch it again on every reconnect.
+      if (open) void refresh()
+    })
   }, [refresh])
 
   // Running count on the Home Screen icon, same rule as the Dock badge.
@@ -224,6 +235,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
             health={health.find((item) => item.toolId === route.id)}
             onLogSink={(sink) => { logSink.current = sink }}
             onStateChange={(state) => setStates((prev) => new Map(prev).set(state.toolId, state))}
+            onRefresh={() => void refresh()}
           />
         ) : null}
         {route.name === 'collections' ? <CollectionsScreen overview={overview} states={states} /> : null}
@@ -365,12 +377,13 @@ function ToolTile({ tool }: { tool: CompanionTool }) {
   )
 }
 
-function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
+function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }: {
   tool: CompanionTool | null
   state: ToolRuntimeState | undefined
   health: CompanionOverview['health'][number] | undefined
   onLogSink: (sink: ((line: LogLine) => void) | null) => void
   onStateChange: (state: ToolRuntimeState) => void
+  onRefresh: () => void
 }) {
   const [logs, setLogs] = useState<LogLine[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -461,7 +474,7 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
                 setBusy('preview')
                 setError(null)
                 api.previewGrant(tool.id)
-                  .then((next) => setGrant(next))
+                  .then((next) => { setGrant(next); onRefresh() })
                   .catch((err: unknown) => setError(errorMessage(err)))
                   .finally(() => setBusy(null))
               }}
@@ -473,7 +486,7 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
         </div>
       ) : null}
       {status === 'running' && !tool.remotePreview && tool.url ? (
-        <p className="c-muted c-small">Serving on the Mac at <code>{tool.url}</code>. To open it here, allow remote preview in the tool’s editor on the Mac (Advanced).</p>
+        <p className="c-muted c-small">Serving on the Mac at <code>{tool.url}</code>. To open it here: on the Mac, open this tool, press <strong>Edit</strong>, expand <strong>Advanced</strong>, and turn on <strong>Allow remote preview from paired phones</strong>.</p>
       ) : null}
       <div className="c-log-head">
         <h2>Log</h2>
