@@ -469,6 +469,14 @@
   color: var(--danger);
 }
 
+.control-preview {
+  color: var(--subtle);
+}
+
+.control-preview.is-active {
+  color: var(--brand);
+}
+
 .control-open {
   color: var(--brand-strong);
 }
@@ -594,7 +602,14 @@
 .tool-card-compact:has(.health-warning-icon) .tool-card-top { padding-right:36px; }
 .health-warning-trigger.health-warning-icon { width:32px; height:32px; padding:0; justify-content:center; background:transparent; border-color:transparent; }
 .health-warning-trigger.health-warning-icon:hover,.health-warning-trigger.health-warning-icon[aria-expanded=true] { background:color-mix(in srgb,var(--warning) 12%,var(--panel)); }
-.tool-card-compact .tool-card-footer { margin:0; align-items:center; gap:8px; }
+/* Compact cards are narrow: the footer is two fixed rows, status (with the
+   origin chip or finished line) above the controls, so five icon buttons
+   never squeeze beside the status and overflow the card. Height stays
+   fixed (142px) so the grid keeps its rhythm. */
+.tool-card.tool-card-compact { grid-template-rows:36px 60px; }
+.tool-card-compact .tool-card-footer { margin:0; height:60px; align-items:center; align-content:space-between; gap:0 8px; flex-wrap:wrap; }
+.tool-card-compact .tool-card-footer .tool-meta { display:flex; align-items:center; gap:8px; min-height:20px; }
+.tool-card-compact .tool-card-controls { flex:1 0 100%; margin-left:0; }
 .tool-card-compact .status-pill { padding:0; min-height:0; background:none; font-size:11px; font-weight:500; }
 .tool-card-compact .status-pill[data-tone=neutral] { color:var(--muted); }
 .tool-card-compact .tool-card-controls { gap:6px; }

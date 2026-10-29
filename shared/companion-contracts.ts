@@ -70,6 +70,11 @@ export interface CompanionStatus {
   pairing: CompanionPairingView | null
 }
 
+/** A tool's icon as the phone draws it: Lucide glyphs come as inline SVG, custom images as data URLs. */
+export type CompanionToolIcon =
+  | { kind: 'svg'; svg: string }
+  | { kind: 'image'; dataUrl: string }
+
 /**
  * The tool as the phone sees it. No env, no commands, no notes: the
  * Companion controls tools, it does not edit them, and a phone must never
@@ -92,6 +97,8 @@ export interface CompanionTool {
   remotePreview: boolean
   /** The preview proxy is listening for this tool right now. */
   previewReady: boolean
+  /** Rendered on the Mac; absent means show the first letter. */
+  icon?: CompanionToolIcon
 }
 
 /** Where the phone should open the preview: a one-time grant URL on the proxy port. */

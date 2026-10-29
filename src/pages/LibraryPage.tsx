@@ -109,6 +109,10 @@ export function LibraryPage({
     (tool: Tool) => void act(tool, 'favorite', () => saveTool({ ...tool, favorite: !tool.favorite })),
     [act, saveTool],
   )
+  const onTogglePreview = useCallback(
+    (tool: Tool) => void act(tool, 'preview', () => saveTool({ ...tool, remotePreview: !tool.remotePreview })),
+    [act, saveTool],
+  )
   const { tag, collectionId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
@@ -680,6 +684,7 @@ export function LibraryPage({
               onStop={onStop}
               onOpenUrl={tool.url ? onOpenUrl : undefined}
               onToggleFavorite={onToggleFavorite}
+              onTogglePreview={onTogglePreview}
             />
           ))}
           {prefs.viewMode === 'compact' && mode === 'all' && !query.trim() && !activeFilters.length && (

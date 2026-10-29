@@ -18,6 +18,7 @@ import {
 import { previewBlocker, PreviewProxy, toolUrlHost, type PreviewTarget } from '../shared/companion-preview'
 import { CompanionServer, type CompanionHost } from '../shared/companion-server'
 import { CompanionDeviceStore } from '../shared/companion-store'
+import { companionToolIcon } from './companion-icons'
 import type { UiPrefs } from '../shared/contracts'
 import type { DesignProfileStore } from '../shared/design-profile-store'
 import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
@@ -358,6 +359,7 @@ export class CompanionManager {
       startCollection: (collectionId, device) => startCollection(collectionId, { store, processes }, originFor(device)),
       stopCollection: (collectionId) => stopCollection(collectionId, { store, processes }),
       keepAwakeActive: () => this.blockerId !== null,
+      toolIcon: (tool) => companionToolIcon(tool, store.getIconsDir()),
       previewReady: (toolId) => Boolean(this.preview?.listening(toolId)),
       previewGrant: async (toolId, device) => {
         const tool = store.get(toolId)

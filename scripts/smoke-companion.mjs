@@ -169,6 +169,9 @@ async function live(iface) {
     startCollection: async () => ({ collectionId: 'x', name: 'x', results: [] }),
     stopCollection: async () => ({ collectionId: 'x', name: 'x', results: [] }),
     keepAwakeActive: () => false,
+    toolIcon: () => null,
+    previewReady: () => false,
+    previewGrant: async () => { throw new Error('no preview in this smoke') },
   }
   const server = new CompanionServer({
     host, devices,

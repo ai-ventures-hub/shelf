@@ -1,4 +1,5 @@
-import { ExternalLink, Play, Square, Star } from 'lucide-react'
+import { ExternalLink, Play, Smartphone, Square, Star } from 'lucide-react'
+import { previewBlocker } from '../../shared/companion-preview-policy'
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { launchOriginLabel } from '../lib/launchOrigin'
@@ -9,7 +10,7 @@ import { ToolIcon } from './ToolIcon'
 import { ToolHealthWarning } from './ToolHealthWarning'
 
 /** A card action awaiting its IPC result; its button shows as busy. */
-export type CardAction = 'launch' | 'stop' | 'favorite' | 'open'
+export type CardAction = 'launch' | 'stop' | 'favorite' | 'open' | 'preview'
 
 /**
  * "Who started this?" — shown in BOTH ui modes on live cards; provenance is
@@ -89,6 +90,8 @@ interface ToolCardProps {
   onStop?: (tool: Tool) => void
   onOpenUrl?: (tool: Tool) => void
   onToggleFavorite?: (tool: Tool) => void
+  /** Companion: allow or stop allowing preview from paired phones. */
+  onTogglePreview?: (tool: Tool) => void
 }
 
 function ToolCardView({
@@ -104,6 +107,7 @@ function ToolCardView({
   onStop,
   onOpenUrl,
   onToggleFavorite,
+  onTogglePreview,
 }: ToolCardProps) {
   const status = state?.status || 'stopped'
   const live = status === 'running' || status === 'starting' || status === 'stopping' || (status === 'error' && Boolean(state?.pid))
@@ -218,6 +222,29 @@ function ToolCardView({
                 <Play size={13} aria-hidden style={{ marginLeft: 1 }} />
               </button>
             )}
+            {onTogglePreview ? (
+              <button
+                type="button"
+                className={`btn btn-quiet btn-sm btn-icon control-preview${tool.remotePreview ? ' is-active' : ''}`}
+                title={
+                  previewBlocker(tool)
+                    ? `Remote preview: ${previewBlocker(tool)}`
+                    : tool.remotePreview
+                      ? 'Phones can preview this tool while it runs (click to stop allowing)'
+                      : 'Allow paired phones to preview this tool while it runs'
+                }
+                aria-label={
+                  tool.remotePreview
+                    ? `Stop allowing phones to preview ${tool.name}`
+                    : `Allow phones to preview ${tool.name}`
+                }
+                aria-pressed={Boolean(tool.remotePreview)}
+                disabled={pending === 'preview' || Boolean(previewBlocker(tool))}
+                onClick={() => onTogglePreview(tool)}
+              >
+                <Smartphone size={13} aria-hidden />
+              </button>
+            ) : null}
             {tool.url && status === 'running' && onOpenUrl ? (
               <button
                 type="button"

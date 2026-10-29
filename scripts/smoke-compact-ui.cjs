@@ -69,11 +69,13 @@ async function run(win) {
       for(const card of document.querySelectorAll('.tool-card-compact')) {
         const r=card.getBoundingClientRect();
         if(r.width < 219) problems.push('narrow tile');
-        if(Math.abs(r.height-114)>1) problems.push('reserved vertical space');
+        // Two fixed footer rows (status, then controls) since 2.4: 16+36+12+60+16 plus borders.
+        if(Math.abs(r.height-142)>1) problems.push('reserved vertical space '+Math.round(r.height));
         const buttons=[...card.querySelectorAll('.tool-card-controls button')];
         for(const b of buttons) { const q=b.getBoundingClientRect(); if(q.width<32 || q.height<32 || q.right>r.right || q.left<r.left) problems.push('clipped action'); }
         const status=card.querySelector('.status-pill').getBoundingClientRect();
-        if(buttons.length && status.right+6>buttons[0].getBoundingClientRect().left) problems.push('status overlaps controls');
+        // Controls sit on their own row under the status, never beside it.
+        if(buttons.length && status.bottom>buttons[0].getBoundingClientRect().top+1) problems.push('status overlaps controls');
         const title=card.querySelector('.tool-name').getBoundingClientRect();
         const warning=card.querySelector('.health-warning-trigger');
         if(warning) {
@@ -84,7 +86,7 @@ async function run(win) {
           if(document.elementFromPoint(w.x+w.width/2,w.y+w.height/2)?.closest('button') !== warning && w.y>=0 && w.bottom<=innerHeight) problems.push('warning is covered by card link');
         }
         const origin=card.querySelector('.origin-chip');
-        if(origin) { const o=origin.getBoundingClientRect(); if(o.bottom>r.bottom-14 || (buttons.length && o.right+6>buttons[0].getBoundingClientRect().left)) problems.push('origin overlaps footer'); }
+        if(origin) { const o=origin.getBoundingClientRect(); if(o.right>r.right-16 || (buttons.length && o.bottom>buttons[0].getBoundingClientRect().top+1)) problems.push('origin overlaps footer'); }
       }
       if(document.documentElement.scrollWidth>innerWidth) problems.push('page horizontal overflow');
       return problems;

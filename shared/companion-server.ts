@@ -26,6 +26,7 @@ import {
   type CompanionPairResponse,
   type CompanionPreviewGrant,
   type CompanionTool,
+  type CompanionToolIcon,
   type CompanionWsMessage,
   type PairedDeviceView,
 } from './companion-contracts'
@@ -60,6 +61,8 @@ export interface CompanionHost {
   startCollection(collectionId: string, device: PairedDeviceView): Promise<CollectionActionResult>
   stopCollection(collectionId: string): Promise<CollectionActionResult>
   keepAwakeActive(): boolean
+  /** The tool's icon as the phone should draw it, or null for the letter fallback. */
+  toolIcon(tool: Tool): CompanionToolIcon | null
   /** Phase B: is the preview proxy listening for this tool right now? */
   previewReady(toolId: string): boolean
   /** Phase B: a one-time grant URL for the device, or throw with the reason. */
@@ -104,10 +107,11 @@ class HttpError extends Error {
   }
 }
 
-export function toCompanionTool(tool: Tool, previewReady = false): CompanionTool {
+export function toCompanionTool(tool: Tool, previewReady = false, icon: CompanionToolIcon | null = null): CompanionTool {
   return {
     remotePreview: Boolean(tool.remotePreview),
     previewReady: Boolean(tool.remotePreview) && previewReady,
+    ...(icon ? { icon } : {}),
     id: tool.id,
     name: tool.name,
     description: tool.description,
@@ -305,7 +309,7 @@ export class CompanionServer {
       const overview: CompanionOverview = {
         appVersion: host.appVersion,
         generatedAt: new Date().toISOString(),
-        tools: host.listTools().map((tool) => toCompanionTool(tool, host.previewReady(tool.id))),
+        tools: host.listTools().map((tool) => toCompanionTool(tool, host.previewReady(tool.id), host.toolIcon(tool))),
         collections: host.listCollections(),
         states,
         health,

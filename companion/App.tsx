@@ -1,7 +1,9 @@
+import { LayoutGrid, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
 import type { LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
 import { dockBadgeText } from '../shared/desktop-status'
+import { ShelfMark } from '../src/components/ShelfMark'
 import { api, ApiError, clearPaired, connectLive, getToken, setPaired } from './api'
 
 type Route =
@@ -9,6 +11,9 @@ type Route =
   | { name: 'tool'; id: string }
   | { name: 'stacks' }
   | { name: 'more' }
+
+type ViewMode = 'list' | 'grid'
+const VIEW_KEY = 'shelf-companion-view'
 
 function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
@@ -26,6 +31,10 @@ function useRoute(): [Route, (hash: string) => void] {
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
   return [route, (hash) => { location.hash = hash }]
+}
+
+function readView(): ViewMode {
+  try { return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list' } catch { return 'list' }
 }
 
 /** `/pair#CODE.FINGERPRINT` from the QR, or nothing. */
@@ -106,6 +115,7 @@ function PairScreen({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="app">
       <main className="scroll pair">
+        <ShelfMark className="pair-mark" />
         <h1>Shelf</h1>
         {isStandalone() ? (
           <p className="muted">
@@ -155,8 +165,12 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   const [states, setStates] = useState<Map<string, ToolRuntimeState>>(new Map())
   const [live, setLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<ViewMode>(readView)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const logSink = useRef<((line: LogLine) => void) | null>(null)
   const scroll = useRef<HTMLElement | null>(null)
+  const searchRef = useRef<HTMLInputElement | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -216,22 +230,58 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
     else void nav.clearAppBadge?.().catch(() => undefined)
   }, [states])
 
+  function chooseView(next: ViewMode) {
+    setView(next)
+    try { localStorage.setItem(VIEW_KEY, next) } catch { /* private mode */ }
+  }
+
+  function toggleSearch() {
+    setSearchOpen((open) => {
+      if (open) setQuery('')
+      return !open
+    })
+    setTimeout(() => searchRef.current?.focus(), 0)
+  }
+
   const tools = overview?.tools ?? []
   const health = overview?.health ?? []
   const running = [...states.values()].filter((state) => state.status === 'running').length
-  const title = route.name === 'stacks' ? 'Stacks' : route.name === 'more' ? 'More' : 'Tools'
+  const onTools = route.name === 'tools'
 
   return (
     <div className="app">
       <header className="top">
-        <h1>{route.name === 'tool' ? 'Shelf' : title}</h1>
-        <span className={`live${live ? ' is-live' : ''}`} aria-label={live ? 'Live' : 'Reconnecting'}>
-          <i />{live ? `${running} running` : 'Reconnecting…'}
-        </span>
+        <a href="#/" className="brand" aria-label="Tools">
+          <ShelfMark className="brand-mark" />
+          <span>{route.name === 'stacks' ? 'Stacks' : route.name === 'more' ? 'More' : 'Shelf'}</span>
+        </a>
+        <div className="top-right">
+          <span className={`live${live ? ' is-live' : ''}`} aria-label={live ? 'Live' : 'Reconnecting'} title={live ? `${running} running` : 'Reconnecting…'}>
+            <i />{running}
+          </span>
+          {onTools ? (
+            <>
+              <button type="button" className={`iconbtn${searchOpen ? ' is-on' : ''}`} aria-label="Search" aria-pressed={searchOpen} onClick={toggleSearch}>
+                <Search size={20} aria-hidden />
+              </button>
+              <button type="button" className={`iconbtn${view === 'list' ? ' is-on' : ''}`} aria-label="List view" aria-pressed={view === 'list'} onClick={() => chooseView('list')}>
+                <List size={20} aria-hidden />
+              </button>
+              <button type="button" className={`iconbtn${view === 'grid' ? ' is-on' : ''}`} aria-label="Grid view" aria-pressed={view === 'grid'} onClick={() => chooseView('grid')}>
+                <LayoutGrid size={20} aria-hidden />
+              </button>
+            </>
+          ) : null}
+        </div>
       </header>
+      {onTools && searchOpen ? (
+        <div className="searchbar">
+          <input ref={searchRef} className="search" type="search" placeholder="Search tools" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+      ) : null}
       <main className="scroll" ref={scroll}>
         {error ? <p className="notice error" role="alert">{error} <button type="button" className="link" onClick={() => void refresh()}>Retry</button></p> : null}
-        {route.name === 'tools' ? <ToolsScreen tools={tools} states={states} health={health} loaded={Boolean(overview)} go={go} /> : null}
+        {onTools ? <ToolsScreen tools={tools} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} go={go} /> : null}
         {route.name === 'tool' ? (
           <ToolScreen
             tool={tools.find((item) => item.id === route.id) || null}
@@ -246,7 +296,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
         {route.name === 'more' ? <MoreScreen overview={overview} onUnpaired={onUnpaired} /> : null}
       </main>
       <nav className="tabs" aria-label="Sections">
-        <Tab hash="#/" active={route.name === 'tools' || route.name === 'tool'} label="Tools" icon="◫" />
+        <Tab hash="#/" active={onTools || route.name === 'tool'} label="Tools" icon="◫" />
         <Tab hash="#/stacks" active={route.name === 'stacks'} label="Stacks" icon="☰" />
         <Tab hash="#/more" active={route.name === 'more'} label="More" icon="⋯" />
       </nav>
@@ -277,35 +327,69 @@ function StatusPill({ status, compact = false }: { status: ToolStatus | undefine
   return <span className={`pill is-${status || 'stopped'}${compact ? ' compact' : ''}`}>{statusLabel(status)}</span>
 }
 
-function Tile({ tool, size = 'm' }: { tool: CompanionTool; size?: 'm' | 'l' }) {
+/** The tool's mark: the Mac-rendered icon when there is one, else the first letter. */
+function Tile({ tool, size = 'm', status }: { tool: CompanionTool; size?: 'm' | 'l' | 'xl'; status?: ToolStatus }) {
+  const style = { background: tool.iconBackground || 'linear-gradient(145deg, #9aafff, #526fdd)', color: tool.iconColor || '#081021' }
+  const letter = tool.name.trim().charAt(0).toUpperCase() || '•'
   return (
-    <span
-      className={`tile ${size}`}
-      style={{ background: tool.iconBackground || 'var(--panel-raised)', color: tool.iconColor || 'var(--ink)' }}
-      aria-hidden="true"
-    >
-      {tool.name.trim().charAt(0).toUpperCase() || '•'}
+    <span className={`tile ${size}`} style={style} aria-hidden="true">
+      {tool.icon?.kind === 'svg' ? (
+        // Rendered on the Mac from the Lucide set; same origin, never user-authored markup.
+        <span className="tile-svg" dangerouslySetInnerHTML={{ __html: tool.icon.svg }} />
+      ) : tool.icon?.kind === 'image' ? (
+        <img src={tool.icon.dataUrl} alt="" />
+      ) : (
+        letter
+      )}
+      {status ? <i className={`tile-dot is-${status}`} /> : null}
     </span>
   )
 }
 
-function ToolsScreen({ tools, states, health, loaded, go }: {
+function ToolsScreen({ tools, states, health, loaded, view, query, go }: {
   tools: CompanionTool[]
   states: Map<string, ToolRuntimeState>
   health: CompanionOverview['health']
   loaded: boolean
+  view: ViewMode
+  query: string
   go: (hash: string) => void
 }) {
-  const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
   const matches = tools
     .filter((tool) => !q || tool.name.toLowerCase().includes(q) || tool.tags.some((tag) => tag.toLowerCase().includes(q)))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const active = matches.filter((tool) => {
+  const isActive = (tool: CompanionTool) => {
     const status = states.get(tool.id)?.status
     return status === 'running' || status === 'starting' || status === 'stopping' || status === 'error'
-  })
-  const idle = matches.filter((tool) => !active.includes(tool))
+  }
+  const active = matches.filter(isActive)
+  const idle = matches.filter((tool) => !isActive(tool))
+  const open = (tool: CompanionTool) => go(`#/tools/${encodeURIComponent(tool.id)}`)
+
+  if (!loaded) return <section className="screen"><p className="muted center">Loading…</p></section>
+  if (tools.length === 0) return <section className="screen"><p className="muted center">No tools in the library yet.</p></section>
+  if (matches.length === 0) return <section className="screen"><p className="muted center">Nothing matches “{query}”.</p></section>
+
+  if (view === 'grid') {
+    const cell = (tool: CompanionTool) => {
+      const status = states.get(tool.id)?.status
+      return (
+        <li key={tool.id}>
+          <button type="button" className="cell" onClick={() => open(tool)}>
+            <Tile tool={tool} size="xl" status={status && status !== 'stopped' ? status : undefined} />
+            <span className="cell-name">{tool.name}</span>
+          </button>
+        </li>
+      )
+    }
+    return (
+      <section className="screen">
+        {active.length > 0 ? <><h2>Active</h2><ul className="grid">{active.map(cell)}</ul></> : null}
+        {idle.length > 0 ? <>{active.length > 0 ? <h2>Stopped</h2> : null}<ul className="grid">{idle.map(cell)}</ul></> : null}
+      </section>
+    )
+  }
 
   const row = (tool: CompanionTool) => {
     const state = states.get(tool.id)
@@ -317,7 +401,7 @@ function ToolsScreen({ tools, states, health, loaded, go }: {
         : tool.description || (tool.port ? `Port ${tool.port}` : '')
     return (
       <li key={tool.id}>
-        <button type="button" className="row" onClick={() => go(`#/tools/${encodeURIComponent(tool.id)}`)}>
+        <button type="button" className="row" onClick={() => open(tool)}>
           <Tile tool={tool} />
           <span className="row-main">
             <strong>{tool.name}</strong>
@@ -329,25 +413,10 @@ function ToolsScreen({ tools, states, health, loaded, go }: {
       </li>
     )
   }
-
   return (
     <section className="screen">
-      <input className="search" type="search" placeholder="Search tools" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {!loaded ? <p className="muted center">Loading…</p> : null}
-      {loaded && tools.length === 0 ? <p className="muted center">No tools in the library yet.</p> : null}
-      {loaded && tools.length > 0 && matches.length === 0 ? <p className="muted center">Nothing matches “{query}”.</p> : null}
-      {active.length > 0 ? (
-        <>
-          <h2>Active</h2>
-          <ul className="list">{active.map(row)}</ul>
-        </>
-      ) : null}
-      {idle.length > 0 ? (
-        <>
-          {active.length > 0 ? <h2>Stopped</h2> : null}
-          <ul className="list">{idle.map(row)}</ul>
-        </>
-      ) : null}
+      {active.length > 0 ? <><h2>Active</h2><ul className="list">{active.map(row)}</ul></> : null}
+      {idle.length > 0 ? <>{active.length > 0 ? <h2>Stopped</h2> : null}<ul className="list">{idle.map(row)}</ul></> : null}
     </section>
   )
 }
@@ -456,8 +525,8 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }
       {tool.description ? <p className="muted">{tool.description}</p> : null}
       {isUp && !tool.remotePreview ? (
         <p className="muted small">
-          To open this tool here, on the Mac press <strong>Edit</strong> on it, expand <strong>Advanced</strong>, and turn on
-          <strong> Allow remote preview from paired phones</strong>.
+          To open this tool here, tap the phone icon on its card in Shelf on the Mac, or turn on
+          <strong> Allow remote preview</strong> under Edit → Advanced.
         </p>
       ) : null}
 
