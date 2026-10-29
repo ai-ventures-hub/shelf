@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.1 - 2026-10-29
 
 - Companion: agent registrations reach the phone. When an agent (Codex,
   Claude, any MCP client) asks to add a new folder, the "Waiting for you"
