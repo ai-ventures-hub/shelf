@@ -44,6 +44,7 @@
     "smoke:sharing": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-sharing.mjs",
     "smoke:catalog": "tsc -p tsconfig.electron.json && node scripts/smoke-catalog.mjs",
     "smoke:companion": "tsc -p tsconfig.electron.json && node scripts/smoke-companion.mjs",
+    "smoke:companion-preview": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-companion-preview.mjs",
     "smoke:all": "node scripts/smoke-all.mjs",
     "icon": "python3 scripts/generate-icon.py",
     "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",

@@ -6,6 +6,7 @@ import {
   COMPANION_WS_PROTOCOL,
   type CompanionOverview,
   type CompanionPairResponse,
+  type CompanionPreviewGrant,
   type CompanionWsMessage,
 } from '../shared/companion-contracts'
 import type { CollectionActionResult, LogLine, RunReceipt, ToolRuntimeState } from '../shared/contracts'
@@ -67,6 +68,7 @@ export const api = {
   start: (toolId: string) => call<ToolRuntimeState>('POST', `/api/tools/${encodeURIComponent(toolId)}/start`),
   stop: (toolId: string) => call<ToolRuntimeState>('POST', `/api/tools/${encodeURIComponent(toolId)}/stop`),
   restart: (toolId: string) => call<ToolRuntimeState>('POST', `/api/tools/${encodeURIComponent(toolId)}/restart`),
+  previewGrant: (toolId: string) => call<CompanionPreviewGrant>('POST', `/api/tools/${encodeURIComponent(toolId)}/preview-grant`),
   startCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/start`),
   stopCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/stop`),
 }

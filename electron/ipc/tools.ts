@@ -17,7 +17,12 @@ export function registerToolsIpc(ctx: IpcContext): void {
 
   handle('tools:list', () => store.list())
   handle('tools:recovery', () => store.recoveryNotice())
-  handle('tools:save', (_e, tool) => store.save(tool))
+  handle('tools:save', (_e, tool) => {
+    const saved = store.save(tool)
+    // The remote-preview toggle takes effect without waiting for the file watcher.
+    ctx.companion.syncPreviews()
+    return saved
+  })
   handle('tools:delete', async (_e, id) => {
     // Stop must complete AND succeed before the record goes: deleting first
     // would orphan a child that a failed stop left running, with nothing in
@@ -40,6 +45,7 @@ export function registerToolsIpc(ctx: IpcContext): void {
     }
     store.delete(id)
     processes.forget(id)
+    ctx.companion.syncPreviews()
     // History for a tool that no longer exists only grows; clear it. Best
     // effort: a cleanup failure must not undo a completed delete.
     try { verification.forgetTool(id) } catch { /* left for a later delete */ }

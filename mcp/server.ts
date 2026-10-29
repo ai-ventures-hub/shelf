@@ -467,6 +467,8 @@ server.registerTool(
           ? { ...(incomingEnv ?? existing?.env ?? {}), PORT: String(port) }
           : (incomingEnv ?? existing?.env),
       notes: incomingNotes ?? existing?.notes,
+      // Remote preview widens a tool's reach; only the desktop editor may set it.
+      remotePreview: existing?.remotePreview,
       iconPath: args.iconPath ?? existing?.iconPath,
       iconLucide: args.iconLucide ?? existing?.iconLucide,
       iconColor: args.iconColor ?? existing?.iconColor,

@@ -23,6 +23,12 @@ export const toolSchema = z.object({
   iconLucide: z.string().optional(), iconColor: z.string().optional(), iconBackground: z.string().optional(),
   createdAt: z.string(), updatedAt: z.string(), lastLaunchedAt: z.string().optional(),
   capabilitiesUpdatedAt: z.string().optional(), source: toolSourceSchema.optional(),
+  /**
+   * Companion (2.4, Phase B): expose this tool's port to paired phones on the
+   * Companion interface while it runs. GUI-only: every agent and import path
+   * carries the stored value through and never sets it.
+   */
+  remotePreview: z.boolean().optional(),
 })
 
 export type Tool = z.infer<typeof toolSchema>

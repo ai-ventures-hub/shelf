@@ -24,6 +24,7 @@ import {
   COMPANION_WS_PROTOCOL,
   type CompanionOverview,
   type CompanionPairResponse,
+  type CompanionPreviewGrant,
   type CompanionTool,
   type CompanionWsMessage,
   type PairedDeviceView,
@@ -59,6 +60,10 @@ export interface CompanionHost {
   startCollection(collectionId: string, device: PairedDeviceView): Promise<CollectionActionResult>
   stopCollection(collectionId: string): Promise<CollectionActionResult>
   keepAwakeActive(): boolean
+  /** Phase B: is the preview proxy listening for this tool right now? */
+  previewReady(toolId: string): boolean
+  /** Phase B: a one-time grant URL for the device, or throw with the reason. */
+  previewGrant(toolId: string, device: PairedDeviceView): Promise<CompanionPreviewGrant>
 }
 
 export interface CompanionServerOptions {
@@ -99,8 +104,10 @@ class HttpError extends Error {
   }
 }
 
-export function toCompanionTool(tool: Tool): CompanionTool {
+export function toCompanionTool(tool: Tool, previewReady = false): CompanionTool {
   return {
+    remotePreview: Boolean(tool.remotePreview),
+    previewReady: Boolean(tool.remotePreview) && previewReady,
     id: tool.id,
     name: tool.name,
     description: tool.description,
@@ -298,7 +305,7 @@ export class CompanionServer {
       const overview: CompanionOverview = {
         appVersion: host.appVersion,
         generatedAt: new Date().toISOString(),
-        tools: host.listTools().map(toCompanionTool),
+        tools: host.listTools().map((tool) => toCompanionTool(tool, host.previewReady(tool.id))),
         collections: host.listCollections(),
         states,
         health,
@@ -343,6 +350,14 @@ export class CompanionServer {
       if (method === 'POST' && action === 'start') { this.json(res, 200, await host.start(toolId, device)); return }
       if (method === 'POST' && action === 'stop') { this.json(res, 200, await host.stop(toolId)); return }
       if (method === 'POST' && action === 'restart') { this.json(res, 200, await host.restart(toolId, device)); return }
+      if (method === 'POST' && action === 'preview-grant') {
+        try {
+          this.json(res, 200, await host.previewGrant(toolId, device))
+        } catch (err) {
+          throw new HttpError(409, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
       throw new HttpError(404, 'Not found')
     }
 

@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { previewBlocker as remotePreviewBlocker } from '../../shared/companion-preview-policy'
 import { ColorField } from './ColorField'
 import { LucideIconPicker } from './LucideIconPicker'
 import type { AgentAccess, AgentAccessKind, Tool, UiPrefs } from '../types'
@@ -327,6 +328,22 @@ export function ToolFormAdvanced({
             <p className="field-hint">
               One KEY=value per line. Prefer project <code>.env.local</code> when it already
               exists. For Python venvs, launch with <code>.venv/bin/python app.py</code>.
+            </p>
+          </div>
+
+          <div className="field span-2">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={Boolean(form.remotePreview)}
+                disabled={Boolean(remotePreviewBlocker(form))}
+                onChange={(e) => update('remotePreview', e.target.checked)}
+              />
+              Allow remote preview from paired phones
+            </label>
+            <p className="field-hint">
+              {remotePreviewBlocker(form) ||
+                'While this tool runs, Shelf opens its port to phones paired in Settings → Companion, on the Companion address only (Tailscale or the chosen network). A phone still needs a grant from the Companion to get in. A tool that already listens on every interface is reachable on your network regardless.'}
             </p>
           </div>
 

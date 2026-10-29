@@ -425,8 +425,30 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
         </button>
       </div>
       {error ? <p className="c-error" role="alert">{error}</p> : null}
-      {tool.url && status === 'running' ? (
-        <p className="c-muted c-small">Serving on the Mac at <code>{tool.url}</code>. Preview from the phone arrives in a later release.</p>
+      {status === 'running' && tool.remotePreview ? (
+        <div className="c-actions">
+          <button
+            type="button"
+            className="c-btn"
+            disabled={busy === 'preview'}
+            onClick={() => {
+              // Open the tab first: Safari only honors window.open inside the tap.
+              const tab = window.open('', '_blank')
+              setBusy('preview')
+              setError(null)
+              api.previewGrant(tool.id)
+                .then((grant) => { if (tab) tab.location.href = grant.url; else location.href = grant.url })
+                .catch((err: unknown) => { tab?.close(); setError(errorMessage(err)) })
+                .finally(() => setBusy(null))
+            }}
+          >
+            {busy === 'preview' ? 'Opening…' : 'Open preview'}
+          </button>
+          {!tool.previewReady ? <span className="c-muted c-small">Preview is coming up…</span> : null}
+        </div>
+      ) : null}
+      {status === 'running' && !tool.remotePreview && tool.url ? (
+        <p className="c-muted c-small">Serving on the Mac at <code>{tool.url}</code>. To open it here, allow remote preview in the tool’s editor on the Mac (Advanced).</p>
       ) : null}
       <div className="c-log-head">
         <h2>Log</h2>

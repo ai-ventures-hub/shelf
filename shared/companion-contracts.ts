@@ -88,6 +88,16 @@ export interface CompanionTool {
   iconBackground?: string
   hasProject: boolean
   lastLaunchedAt?: string
+  /** The user allowed preview from paired phones (tool editor, Advanced). */
+  remotePreview: boolean
+  /** The preview proxy is listening for this tool right now. */
+  previewReady: boolean
+}
+
+/** Where the phone should open the preview: a one-time grant URL on the proxy port. */
+export interface CompanionPreviewGrant {
+  url: string
+  expiresAt: string
 }
 
 export interface CompanionOverview {

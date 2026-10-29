@@ -15,6 +15,7 @@ import {
   resolveBindAddress,
   validateCompanionPort,
 } from '../shared/companion-net'
+import { previewBlocker, PreviewProxy, toolUrlHost, type PreviewTarget } from '../shared/companion-preview'
 import { CompanionServer, type CompanionHost } from '../shared/companion-server'
 import { CompanionDeviceStore } from '../shared/companion-store'
 import type { UiPrefs } from '../shared/contracts'
@@ -59,6 +60,10 @@ export function prefsPatchAffectsCompanion(patch: Partial<UiPrefs>): boolean {
 
 export class CompanionManager {
   private server: CompanionServer | null = null
+  /** Phase B: one listener per running tool with remotePreview on. */
+  private preview: PreviewProxy | null = null
+  private previewSync: Promise<void> = Promise.resolve()
+  private previewErrors = new Map<string, string>()
   private readonly devices: CompanionDeviceStore
   private cert: CompanionCertificate | null = null
   private error: string | null = null
@@ -129,6 +134,12 @@ export class CompanionManager {
       this.server = server
       this.running = { address: bind.address, port }
       this.error = null
+      this.preview = new PreviewProxy({
+        bindAddress: bind.address,
+        tls: { key: this.cert.key, cert: this.cert.cert },
+        log: (message) => console.log(`[shelf] ${message}`),
+      })
+      this.syncPreviews()
     } catch (err) {
       this.server = null
       this.running = null
@@ -144,8 +155,56 @@ export class CompanionManager {
     const server = this.server
     this.server = null
     this.running = null
+    const preview = this.preview
+    this.preview = null
+    this.previewErrors.clear()
+    if (preview) await preview.releaseAll()
     if (server) await server.close()
     this.onClientsChanged(0)
+  }
+
+  // ---- preview proxy (Phase B) ----------------------------------------------
+
+  /**
+   * Bring the preview listeners in line with the library and the process
+   * table: one per tool that is running, has remotePreview on, and serves on
+   * loopback. Called on every process transition and library change; the
+   * work is serialized so a quick stop/start cannot interleave.
+   */
+  syncPreviews(): void {
+    this.previewSync = this.previewSync.then(() => this.reconcilePreviews()).catch((err) => {
+      console.error('[shelf] preview sync failed:', err)
+    })
+  }
+
+  private async reconcilePreviews(): Promise<void> {
+    const proxy = this.preview
+    if (!proxy) return
+    const states = new Map(this.deps.processes.peekStates().map((state) => [state.toolId, state]))
+    const wanted = new Map<string, PreviewTarget>()
+    for (const tool of this.deps.store.list()) {
+      if (!tool.remotePreview || previewBlocker(tool)) continue
+      const state = states.get(tool.id)
+      if (state?.status !== 'running') continue
+      const port = state.port ?? tool.port
+      if (!port) continue
+      const backend = (toolUrlHost(tool.url) && tool.url?.toLowerCase().startsWith('https:')) ? 'https' : 'http'
+      wanted.set(tool.id, { toolId: tool.id, port, backend })
+    }
+    for (const toolId of proxy.activeToolIds()) {
+      if (!wanted.has(toolId)) {
+        await proxy.release(toolId)
+        this.previewErrors.delete(toolId)
+      }
+    }
+    for (const target of wanted.values()) {
+      try {
+        await proxy.ensure(target)
+        this.previewErrors.delete(target.toolId)
+      } catch (err) {
+        this.previewErrors.set(target.toolId, err instanceof Error ? err.message : String(err))
+      }
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -190,6 +249,7 @@ export class CompanionManager {
   revokeDevice(id: string): CompanionStatus {
     this.devices.revoke(id)
     this.server?.dropClientsOf(id)
+    this.preview?.revokeDevice(id)
     this.publish()
     return this.status()
   }
@@ -220,10 +280,13 @@ export class CompanionManager {
 
   broadcast(channel: string, payload: unknown): void {
     this.server?.broadcast(channel, payload)
+    // A tool starting or stopping is exactly when a preview listener comes or goes.
+    if (channel === 'process:update' && this.preview) this.syncPreviews()
   }
 
   notifyLibraryChanged(): void {
     this.server?.notifyLibraryChanged()
+    if (this.preview) this.syncPreviews()
   }
 
   private publish(): void {
@@ -293,6 +356,25 @@ export class CompanionManager {
       startCollection: (collectionId, device) => startCollection(collectionId, { store, processes }, originFor(device)),
       stopCollection: (collectionId) => stopCollection(collectionId, { store, processes }),
       keepAwakeActive: () => this.blockerId !== null,
+      previewReady: (toolId) => Boolean(this.preview?.listening(toolId)),
+      previewGrant: async (toolId, device) => {
+        const tool = store.get(toolId)
+        if (!tool) throw new Error('That tool is no longer in the library.')
+        if (!tool.remotePreview) throw new Error('Remote preview is off for this tool. Turn it on in the tool editor on your Mac (Advanced).')
+        const blocker = previewBlocker(tool)
+        if (blocker) throw new Error(blocker)
+        const state = processes.peekState(toolId)
+        if (state.status !== 'running') throw new Error('Start the tool first; preview follows once it is running.')
+        if (!this.preview) throw new Error('Companion is not running.')
+        if (!this.preview.listening(toolId)) {
+          // The listener may still be coming up after the start; give it one sync.
+          this.syncPreviews()
+          await this.previewSync
+        }
+        const failure = this.previewErrors.get(toolId)
+        if (failure) throw new Error(failure)
+        return this.preview.issueTicket(toolId, device.id)
+      },
     }
   }
 }

@@ -278,7 +278,47 @@ log tail, keep-awake. No preview. Ships on its own and already answers
 Prerequisite: the IPC-by-domain split from PRODUCT.md "Later" item 2, so
 the server and preload share one typed channel map.
 
-### Phase B — Preview
+### Phase B — Preview — shipped 2026-10-28 (2.4.0, unreleased)
+
+Built as specified, with these deviations and findings recorded:
+
+- **The proxy terminates TLS** with the Companion certificate on
+  `<bind>:<tool.port>` and forwards to `127.0.0.1:<tool.port>` (plain
+  HTTP, or HTTPS when the tool's url says so). A phone that already trusts
+  the Companion certificate trusts every preview port too.
+- **Host is rewritten to `127.0.0.1:<port>`** on the way in, because Vite
+  6 and friends refuse unknown Host headers; `X-Forwarded-Host/Proto/For`
+  carry the originals. Loopback redirects from the tool are rewritten back
+  to the proxy origin. The grant cookie is stripped before forwarding, so
+  the tool never sees it.
+- **Grant flow:** the phone calls `POST /api/tools/:id/preview-grant`
+  (device auth) and receives a one-time ticket URL on the proxy port
+  (`/__shelf_grant?t=…`, 60 s, single use); opening it sets an
+  `HttpOnly; Secure; SameSite=Lax` cookie scoped to that port and redirects
+  to `/`. Grants last 8 hours, die with the listener (tool stopped, toggle
+  off, Companion off) and with a revoked device.
+- **Lifecycle** follows `process:update` events through
+  `CompanionManager.broadcast` plus the tools IPC save/delete and the data
+  watcher, serialized so a quick stop/start cannot interleave.
+- **`remotePreview` is carried through, never set, by every non-GUI write
+  path.** `shelf_upsert_tool` passes the stored value explicitly; drafts,
+  shared-tool import, update, and catalog install build tools from explicit
+  fields. The library's write normalizer had to learn the field: it rebuilds
+  every stored tool field by field and was silently dropping the flag — the
+  preview smoke caught it.
+- **0.0.0.0 detection is not attempted.** Shelf cannot know what a tool
+  binds; the editor copy says a tool that already listens on every
+  interface is reachable regardless, and an `EADDRINUSE` on the Companion
+  address is reported as such.
+- **Vite HMR verified by hand** on 2026-10-28 with Shelf's own dev server:
+  through the proxy, `/` served the page with `/@vite/client`, the client
+  script loaded, and the HMR WebSocket upgraded (101) and sent
+  `{"type":"connected"}`. `smoke:companion-preview` covers the upgrade path
+  with a WebSocket echo backend; a Vite-based smoke was not added because
+  it would start a second dev server on 5173.
+
+Original scope follows.
+
 
 Port-for-port proxy, `remotePreview` flag and editor toggle, grant
 cookie, lifecycle tied to `ProcessManager`, WebSocket passthrough

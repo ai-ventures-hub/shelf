@@ -575,6 +575,8 @@ function normalizeTool(input: Partial<Tool>): Tool {
     env: input.env,
     notes: input.notes?.trim() || undefined,
     lastLaunchedAt: input.lastLaunchedAt,
+    // Companion (2.4): only a literal true survives; anything else reads as off.
+    remotePreview: input.remotePreview === true ? true : undefined,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
     // Fail closed for pre-0.9 records: createdAt, never "now" — a normalize

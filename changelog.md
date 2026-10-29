@@ -16,6 +16,14 @@
   phone is not in this release.
 - Save the Companion certificate from Settings to install and trust it on the
   phone, which removes Safari's self-signed warning.
+- Companion, Phase B: preview a running tool from the phone. Turn on "Allow
+  remote preview from paired phones" in the tool editor (Advanced) and the
+  tool's page in the Companion gains Open preview. Shelf proxies the tool's
+  port on the Companion address only while the tool runs and the toggle is
+  on, WebSocket and HMR included, so dev servers work unchanged. A phone
+  gets in with a grant from the Companion (eight hours, per device, per
+  port); a bare request is refused and never reaches the tool. Agents and
+  imports can never turn the toggle on.
 
 ## 2.3.1 - unreleased
 
