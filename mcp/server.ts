@@ -243,6 +243,12 @@ server.registerTool(
         .describe('Lucide icon PascalCase name, e.g. Wrench'),
       iconColor: toolSchema.shape.iconColor.describe('Hex color for Lucide glyph'),
       iconBackground: toolSchema.shape.iconBackground.describe('Hex background behind Lucide glyph'),
+      remotePreview: z
+        .boolean()
+        .optional()
+        .describe(
+          'Allow preview of this tool from the phones the user paired in Settings → Companion (nothing else can reach it; the user still has to turn Companion on). On a NEW folder it rides on the draft and takes effect when the user accepts. Omit to keep the stored value.',
+        ),
       checkPort: z
         .boolean()
         .optional()
@@ -301,6 +307,7 @@ server.registerTool(
             },
             description: args.description,
             capabilities: args.capabilities,
+            remotePreview: args.remotePreview,
             envKeys: Object.keys(args.env || {}),
           })
           const notCarried = [
@@ -467,8 +474,9 @@ server.registerTool(
           ? { ...(incomingEnv ?? existing?.env ?? {}), PORT: String(port) }
           : (incomingEnv ?? existing?.env),
       notes: incomingNotes ?? existing?.notes,
-      // Remote preview widens a tool's reach; only the desktop editor may set it.
-      remotePreview: existing?.remotePreview,
+      // Reaches only phones the user paired; an agent may ask for it so the
+      // user can preview from the phone without a trip to the Mac.
+      remotePreview: (args.remotePreview ?? existing?.remotePreview) ? true : undefined,
       iconPath: args.iconPath ?? existing?.iconPath,
       iconLucide: args.iconLucide ?? existing?.iconLucide,
       iconColor: args.iconColor ?? existing?.iconColor,
@@ -781,10 +789,16 @@ server.registerTool(
         .max(20)
         .optional()
         .describe('What it can do, e.g. from a gap brief'),
+      remotePreview: z
+        .boolean()
+        .optional()
+        .describe(
+          'Ask for preview from the phones the user paired (Companion). Rides on the draft of a NEW folder and takes effect when the user accepts; for a library folder set it with shelf_upsert_tool.',
+        ),
     },
     annotations: RUNS_COMMANDS,
   },
-  async ({ projectPath, launch, onPortConflict, runSetup, dryRun, description, capabilities }) => {
+  async ({ projectPath, launch, onPortConflict, runSetup, dryRun, description, capabilities, remotePreview }) => {
     try {
       const check = checkFolder(projectPath)
       if (!check.ok) return textResult(invalidFolderResult(check.folder, check.reason))
@@ -797,6 +811,7 @@ server.registerTool(
             folder,
             description,
             capabilities,
+            remotePreview,
           })
           return textResult(
             pendingConsentResult(draft, suggestion, {
@@ -821,12 +836,13 @@ server.registerTool(
 
       const registered = findToolByFolder(store, folder)
       const ignoredDraftFields =
-        registered && (description !== undefined || capabilities !== undefined)
+        registered && (description !== undefined || capabilities !== undefined || remotePreview !== undefined)
           ? {
               ignored: {
                 fields: [
                   ...(description !== undefined ? ['description'] : []),
                   ...(capabilities !== undefined ? ['capabilities'] : []),
+                  ...(remotePreview !== undefined ? ['remotePreview'] : []),
                 ],
                 reason: `This folder is already in the library. Set these with shelf_upsert_tool and id ${registered.id}.`,
               },

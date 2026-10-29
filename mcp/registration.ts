@@ -85,6 +85,8 @@ export interface StageInput {
   overrides?: { name?: string; launchCommand?: string; port?: number; url?: string }
   description?: string
   capabilities?: string[]
+  /** Ask for preview from paired phones; the user grants it by accepting. */
+  remotePreview?: boolean
   /** Env KEY NAMES the agent mentioned (values are never staged). */
   envKeys?: string[]
 }
@@ -108,6 +110,7 @@ export async function stageRegistration(
     overrides: input.overrides,
     description: input.description,
     capabilities: input.capabilities,
+    remotePreview: input.remotePreview,
     isRegistered: registeredFolderCheck(host.store),
   })
   return { draft, suggestion }

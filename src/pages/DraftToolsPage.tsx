@@ -126,6 +126,12 @@ export function DraftToolsPage() {
                     <dd>{draft.capabilities.join(' · ')}</dd>
                   </div>
                 ) : null}
+                {draft.remotePreview ? (
+                  <div>
+                    <dt>Remote preview</dt>
+                    <dd>Requested: accepting allows preview from the phones you paired in Settings → Companion.</dd>
+                  </div>
+                ) : null}
               </dl>
               <div className="action-row">
                 <button

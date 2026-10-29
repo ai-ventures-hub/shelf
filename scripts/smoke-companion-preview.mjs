@@ -75,16 +75,31 @@ const { WebSocketServer, WebSocket } = require('ws')
     assert.ok(!result.isError, text)
     return JSON.parse(text)
   }
-  // An agent passing remotePreview is ignored: unknown input is dropped.
+  // An agent may ask for preview from the user's paired phones; omitting the
+  // field keeps what is stored, and false turns it off again.
   await upsert({ id: tool.id, description: 'edited by an agent', remotePreview: true })
-  assert.equal(library.get(tool.id).remotePreview, undefined, 'shelf_upsert_tool cannot turn remote preview on')
+  assert.equal(library.get(tool.id).remotePreview, true, 'shelf_upsert_tool can turn remote preview on')
   assert.equal(library.get(tool.id).description, 'edited by an agent')
-  // The desktop turns it on; a later agent edit carries it through unchanged.
-  library.save({ ...library.get(tool.id), remotePreview: true })
   await upsert({ id: tool.id, description: 'edited again by an agent' })
-  assert.equal(library.get(tool.id).remotePreview, true, 'shelf_upsert_tool keeps the stored flag')
+  assert.equal(library.get(tool.id).remotePreview, true, 'shelf_upsert_tool keeps the stored flag when omitted')
+  await upsert({ id: tool.id, remotePreview: false })
+  assert.equal(library.get(tool.id).remotePreview, undefined, 'false clears the flag (stored as absent)')
+  // A NEW folder is only staged; the request rides on the draft for the user to see.
+  const stagedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-preview-draft-'))
+  fs.writeFileSync(path.join(stagedDir, 'package.json'), JSON.stringify({ name: 'staged', scripts: { start: 'node server.js' } }))
+  const staged = await upsert({ name: 'Staged With Preview', projectPath: stagedDir, launchCommand: 'npm start', port: 8768, remotePreview: true })
+  assert.equal(staged.outcome, 'pending_consent')
+  assert.equal(staged.draft.remotePreview, true, 'the draft says preview was requested')
+  const { ToolDraftStore, acceptToolDraft } = require('../dist-electron/shared/tool-draft-store.js')
+  const drafts = new ToolDraftStore(root)
+  assert.equal(drafts.get(staged.draft.id)?.remotePreview, true)
+  const { ProcessManager } = require('../dist-electron/shared/process-manager.js')
+  const accepted = await acceptToolDraft(staged.draft.id, drafts, { store: library, processes: new ProcessManager(library, { defaultOrigin: () => ({ kind: 'gui' }) }) }, { expectedUpdatedAt: staged.draft.updatedAt })
+  assert.equal(accepted.tool?.remotePreview, true, 'accepting the draft grants the requested preview')
+  assert.equal(accepted.tool?.launchCommand, 'npm start')
+  fs.rmSync(stagedDir, { recursive: true, force: true })
   await client.close()
-  console.log('OK: shelf_upsert_tool neither sets nor drops remotePreview')
+  console.log('OK: shelf_upsert_tool sets, keeps, and clears remotePreview; a staged draft carries the request')
 }
 
 // ---- live proxy --------------------------------------------------------------------------

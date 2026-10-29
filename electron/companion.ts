@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import { buildActivityBoard } from '../shared/activity-board'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
 import { ensureCompanionCertificate, type CompanionCertificate } from '../shared/companion-cert'
-import type { CompanionStatus, CompanionToolIcon, PairedDeviceView } from '../shared/companion-contracts'
+import type { CompanionDraft, CompanionStatus, CompanionToolIcon, PairedDeviceView } from '../shared/companion-contracts'
 import {
   listCompanionInterfaces,
   resolveBindAddress,
@@ -20,7 +20,7 @@ import type { PreviewProxy, PreviewTarget } from '../shared/companion-preview'
 import type { CompanionHost, CompanionServer } from '../shared/companion-server'
 import { CompanionDeviceStore, companionDir } from '../shared/companion-store'
 import path from 'node:path'
-import type { Tool, UiPrefs } from '../shared/contracts'
+import type { RegisterOutcome, Tool, UiPrefs } from '../shared/contracts'
 import type { DesignProfileStore } from '../shared/design-profile-store'
 import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
 import type { LibraryStore } from '../shared/library-store'
@@ -28,7 +28,7 @@ import type { PrefsStore } from '../shared/prefs-store'
 import type { ProcessManager } from '../shared/process-manager'
 import type { ReceiptStore } from '../shared/receipt-store'
 import { startCollection, stopCollection } from '../shared/collection-launch'
-import type { ToolDraftStore } from '../shared/tool-draft-store'
+import { acceptToolDraft, publicToolDraft, type ToolDraftStore } from '../shared/tool-draft-store'
 import { deriveLibraryHealth } from '../shared/tool-health'
 import type { VerificationRunner } from '../shared/verification-runner'
 
@@ -50,6 +50,16 @@ export interface CompanionManagerDeps {
 
 /** Release the power-save blocker this long after the last phone disconnects. */
 const KEEP_AWAKE_GRACE_MS = 60_000
+
+/** What the phone says after Accept; the desktop sheet uses the same words. */
+const DRAFT_OUTCOME_COPY: Partial<Record<RegisterOutcome, string>> = {
+  saved: 'Saved. Start it from the tool list when you want it running.',
+  needs_setup: 'Saved. It still needs setup on the Mac before it can run.',
+  saved_needs_review: 'Saved. Review the launch command on the Mac before you run it.',
+  saved_launch_failed: 'Saved, but the first launch failed. The draft is cleared.',
+  launched: 'Saved and running.',
+  invalid_folder: 'That folder is gone. The draft is still here.',
+}
 
 export function prefsPatchAffectsCompanion(patch: Partial<UiPrefs>): boolean {
   return (
@@ -310,6 +320,10 @@ export class CompanionManager {
     if (this.preview) this.syncPreviews()
   }
 
+  notifyDraftsChanged(): void {
+    this.server?.notifyDraftsChanged()
+  }
+
   private publish(): void {
     this.deps.sendToRenderer('companion:status', this.status())
   }
@@ -344,7 +358,24 @@ export class CompanionManager {
   // ---- what the server may do -------------------------------------------
 
   private host(): CompanionHost {
-    const { store, processes, receipts, verification, capabilityGaps, designProfiles, toolDrafts } = this.deps
+    const { store, processes, receipts, verification, capabilityGaps, designProfiles, toolDrafts, prefs } = this.deps
+    const listDrafts = (): CompanionDraft[] =>
+      toolDrafts.list().map((draft) => {
+        const view = publicToolDraft(draft)
+        return {
+          id: view.id,
+          name: view.name,
+          projectPath: view.projectPath,
+          launchCommand: view.launchCommand,
+          port: view.port,
+          envKeys: view.envKeys,
+          client: view.client,
+          description: view.description,
+          capabilities: view.capabilities,
+          remotePreview: view.remotePreview,
+          updatedAt: view.updatedAt,
+        }
+      })
     const originFor = (device: PairedDeviceView) => ({
       origin: { kind: 'companion' as const, client: device.name },
       // The phone is elsewhere; opening the tool's URL on the Mac would surprise nobody usefully.
@@ -396,6 +427,32 @@ export class CompanionManager {
         const failure = this.previewErrors.get(toolId)
         if (failure) throw new Error(failure)
         return this.preview.issueTicket(toolId, device.id)
+      },
+      listDrafts,
+      acceptDraft: async (id, updatedAt, device) => {
+        // The same path as the desktop sheet: save as shown, never launch.
+        const uiPrefs = prefs.get()
+        const result = await acceptToolDraft(id, toolDrafts, { store, processes }, {
+          expectedUpdatedAt: updatedAt,
+          toolDefaults: {
+            iconLucide: uiPrefs.defaultIconLucide,
+            iconColor: uiPrefs.defaultIconColor,
+            iconBackground: uiPrefs.defaultIconBackground,
+          },
+        })
+        this.deps.sendToRenderer('data:external-change', 'tool-drafts.json')
+        this.deps.sendToRenderer('data:external-change', 'library.json')
+        this.notifyLibraryChanged()
+        this.notifyDraftsChanged()
+        console.log(`Companion: ${device.name} accepted draft ${id} (${result.outcome})`)
+        return { outcome: result.outcome, message: DRAFT_OUTCOME_COPY[result.outcome] || `Saved (${result.outcome}).` }
+      },
+      rejectDraft: (id, device) => {
+        toolDrafts.delete(id)
+        this.deps.sendToRenderer('data:external-change', 'tool-drafts.json')
+        this.notifyDraftsChanged()
+        console.log(`Companion: ${device.name} rejected draft ${id}`)
+        return { outcome: 'rejected', message: 'Rejected. Nothing was saved.' }
       },
     }
   }

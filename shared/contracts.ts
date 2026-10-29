@@ -817,6 +817,8 @@ export interface ToolDraft {
   /** Agent-supplied; saved on accept exactly as the sheet shows them. */
   description?: string
   capabilities?: string[]
+  /** The agent asked for preview from paired phones; accepting grants it. */
+  remotePreview?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -948,6 +950,8 @@ export interface RegisterOverrides {
   agentAccess?: AgentAccess[]
   notes?: string
   env?: Record<string, string>
+  /** Allow preview from paired phones (Companion). */
+  remotePreview?: boolean
 }
 
 export type CatalogPublishResult = PublishResult

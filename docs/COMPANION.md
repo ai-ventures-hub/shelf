@@ -340,6 +340,32 @@ cookie, lifecycle tied to `ProcessManager`, WebSocket passthrough
 verified against a Vite tool and the zero-dependency starter from
 `shared/tool-starter.ts`.
 
+### After 2.4.0 — registrations and agent-requested preview (shipped 2026-10-29)
+
+Real use from the phone turned up the gap: an agent driven from the phone
+stages a new folder, and the user had to walk to the Mac to accept it.
+
+- `CompanionOverview.drafts` carries the agent registrations waiting for the
+  user, as `CompanionDraft` (the `publicToolDraft` view: command masked the
+  way the MCP server masks it, env key names only). `GET /api/drafts`,
+  `POST /api/drafts/:id/accept` (body `{updatedAt}`, 409 when the draft was
+  re-staged since it was shown) and `POST /api/drafts/:id/reject`. The host
+  runs the same `acceptToolDraft` the desktop sheet runs: save as shown,
+  never launch. Both sides refresh: the data-root watcher pushes
+  `drafts:changed` to phones when `tool-drafts.json` changes, and a decision
+  taken on the phone sends `data:external-change` to the renderer.
+- The phone shows the cards at the top of the tool list ("Waiting for you"),
+  list or grid, above everything else; a search hides them.
+- `remotePreview` is no longer GUI-only. `shelf_upsert_tool` takes it (applies
+  at once on a library tool; omitted keeps the stored value, `false` clears
+  it) and both `shelf_upsert_tool` and `shelf_register_project` carry it on a
+  staged draft, where the desktop sheet and the phone card say "Remote
+  preview: requested" and Accept grants it (`RegisterOverrides.remotePreview`
+  → `newToolFrom`). The reach is unchanged: only paired phones, only while
+  Companion is on, only while the tool runs.
+- Not done: push. A draft staged while the phone app is closed waits until
+  the user opens it (Phase C still parked).
+
 ### Phase C — Notifications (optional)
 
 Web push for "tool crashed" and "stack finished starting," reusing

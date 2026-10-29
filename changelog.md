@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Companion: agent registrations reach the phone. When an agent (Codex,
+  Claude, any MCP client) asks to add a new folder, the "Waiting for you"
+  card now shows at the top of the phone's tool list with the same facts as
+  the desktop sheet (folder, command, port, env key names, who asked), and
+  Accept or Reject there does exactly what it does on the Mac: Accept saves
+  the tool as shown and never launches it; Reject writes nothing. The desktop
+  and the phone stay in step either way.
+- Agents can ask for remote preview. `shelf_upsert_tool` and
+  `shelf_register_project` take `remotePreview`; on a library tool it applies
+  at once (only the phones you paired can reach a preview, and only while
+  Companion is on), and on a new folder it rides on the draft as "Remote
+  preview: requested" so you grant it by accepting.
+- A Shelf installed with `npm run install:desktop` (a `dir` build) now
+  carries its update feed, so it updates like a released build instead of
+  showing "Update failed" on every check. The sidebar message now names the
+  real cause when a check or download fails.
+
 ## 2.4.0 - 2026-10-28
 
 - Companion, Phase A: see, start, stop, restart, and read the logs of your

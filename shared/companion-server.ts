@@ -22,6 +22,8 @@ import { WebSocket, WebSocketServer } from 'ws'
 import {
   COMPANION_PAIRING_TTL_MS,
   COMPANION_WS_PROTOCOL,
+  type CompanionDraft,
+  type CompanionDraftDecision,
   type CompanionOverview,
   type CompanionPairResponse,
   type CompanionPreviewGrant,
@@ -67,6 +69,11 @@ export interface CompanionHost {
   previewReady(toolId: string): boolean
   /** Phase B: a one-time grant URL for the device, or throw with the reason. */
   previewGrant(toolId: string, device: PairedDeviceView): Promise<CompanionPreviewGrant>
+  /** Agent registrations waiting for the user. */
+  listDrafts(): CompanionDraft[]
+  /** Accept as shown (updatedAt guards against a re-staged draft); saves, never launches. */
+  acceptDraft(id: string, updatedAt: string | undefined, device: PairedDeviceView): Promise<CompanionDraftDecision>
+  rejectDraft(id: string, device: PairedDeviceView): CompanionDraftDecision
 }
 
 export interface CompanionServerOptions {
@@ -253,6 +260,10 @@ export class CompanionServer {
     this.send({ type: 'library:changed' })
   }
 
+  notifyDraftsChanged(): void {
+    this.send({ type: 'drafts:changed' })
+  }
+
   private send(message: CompanionWsMessage): void {
     const text = JSON.stringify(message)
     for (const ws of this.clients.keys()) {
@@ -310,6 +321,7 @@ export class CompanionServer {
         appVersion: host.appVersion,
         generatedAt: new Date().toISOString(),
         tools: host.listTools().map((tool) => toCompanionTool(tool, host.previewReady(tool.id), host.toolIcon(tool))),
+        drafts: host.listDrafts(),
         collections: host.listCollections(),
         states,
         health,
@@ -361,6 +373,25 @@ export class CompanionServer {
           throw new HttpError(409, err instanceof Error ? err.message : String(err))
         }
         return
+      }
+      throw new HttpError(404, 'Not found')
+    }
+
+    if (parts[1] === 'drafts') {
+      if (method === 'GET' && !parts[2]) { this.json(res, 200, host.listDrafts()); return }
+      if (method === 'POST' && parts[2]) {
+        const draftId = decodeURIComponent(parts[2])
+        if (!host.listDrafts().some((draft) => draft.id === draftId)) throw new HttpError(404, 'That draft is no longer waiting.')
+        if (parts[3] === 'accept') {
+          const body = await this.readJson(req) as { updatedAt?: unknown }
+          try {
+            this.json(res, 200, await host.acceptDraft(draftId, typeof body.updatedAt === 'string' ? body.updatedAt : undefined, device))
+          } catch (err) {
+            throw new HttpError(409, err instanceof Error ? err.message : String(err))
+          }
+          return
+        }
+        if (parts[3] === 'reject') { this.json(res, 200, host.rejectDraft(draftId, device)); return }
       }
       throw new HttpError(404, 'Not found')
     }

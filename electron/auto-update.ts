@@ -15,6 +15,19 @@ function update(patch: Partial<AppUpdateState>) {
   state = nextAppUpdateState(state, patch)
   send('app:update-state', state)
 }
+/**
+ * A cause the sidebar may name. Upstream error text never reaches the
+ * renderer (it can carry URLs and paths), so only two causes are classified:
+ * a copy with no update feed (a `dir` build) and an unreachable network. The
+ * full error goes to the console either way.
+ */
+function knownCause(err: unknown): string | null {
+  const message = err instanceof Error ? err.message : String(err)
+  if (/ENOENT.*app-update\.yml/.test(message)) return 'This copy of Shelf has no update feed; reinstall it from the DMG to get updates.'
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|net::ERR|getaddrinfo/i.test(message)) return 'The update server is unreachable.'
+  return null
+}
+
 export function getAppUpdateState(): AppUpdateState {
   return { ...state }
 }
@@ -27,10 +40,11 @@ export function checkAppUpdates(): Promise<AppUpdateState> {
   pending = autoUpdater
     .checkForUpdates()
     .then(() => getAppUpdateState())
-    .catch(() => {
+    .catch((err: unknown) => {
+      console.error('Update check failed:', err)
       update({
         status: 'error',
-        error: 'Could not check for updates. Check your connection and try again.',
+        error: knownCause(err) ?? 'Could not check for updates. Check your connection and try again.',
       })
       return getAppUpdateState()
     })
@@ -59,12 +73,13 @@ export function initAutoUpdate(sendToRenderer: typeof send): void {
     update({ status: 'ready', version: info.version })
     send('app:update-ready', { version: info.version })
   })
-  autoUpdater.on('error', () =>
+  autoUpdater.on('error', (err) => {
+    console.error('Updater error:', err)
     update({
       status: 'error',
-      error: 'Update check or download failed. Check your connection and retry.',
-    }),
-  )
+      error: knownCause(err) ?? 'Update check or download failed. Check your connection and retry.',
+    })
+  })
   setTimeout(() => {
     void checkAppUpdates()
   }, FIRST_CHECK_DELAY_MS).unref()

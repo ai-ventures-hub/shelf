@@ -1,6 +1,6 @@
 import { LayoutGrid, List, MoreHorizontal, Search, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
+import type { CompanionDraft, CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
 import type { LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
 import { dockBadgeText } from '../shared/desktop-status'
 import { ShelfMark } from '../src/components/ShelfMark'
@@ -211,7 +211,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
         setStates((prev) => new Map(prev).set(message.state.toolId, message.state))
       } else if (message.type === 'logs:line') {
         logSink.current?.(message.line)
-      } else if (message.type === 'library:changed' || message.type === 'receipts:update') {
+      } else if (message.type === 'library:changed' || message.type === 'receipts:update' || message.type === 'drafts:changed') {
         refreshLater()
       }
     }, (open) => {
@@ -255,6 +255,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   }
 
   const tools = overview?.tools ?? []
+  const drafts = overview?.drafts ?? []
   const health = overview?.health ?? []
   const running = [...states.values()].filter((state) => state.status === 'running').length
   const onTools = route.name === 'tools'
@@ -298,7 +299,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
       ) : null}
       <main className="scroll" ref={scroll}>
         {error ? <p className="notice error" role="alert">{error} <button type="button" className="link" onClick={() => void refresh()}>Retry</button></p> : null}
-        {onTools ? <ToolsScreen tools={tools} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} favoritesOnly={favoritesOnly} go={go} /> : null}
+        {onTools ? <ToolsScreen tools={tools} drafts={drafts} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} favoritesOnly={favoritesOnly} go={go} onRefresh={() => void refresh()} /> : null}
         {route.name === 'tool' ? (
           <ToolScreen
             tool={tools.find((item) => item.id === route.id) || null}
@@ -348,8 +349,9 @@ function Tile({ tool, size = 'm', status }: { tool: CompanionTool; size?: 'm' | 
   )
 }
 
-function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly, go }: {
+function ToolsScreen({ tools, drafts, states, health, loaded, view, query, favoritesOnly, go, onRefresh }: {
   tools: CompanionTool[]
+  drafts: CompanionDraft[]
   states: Map<string, ToolRuntimeState>
   health: CompanionOverview['health']
   loaded: boolean
@@ -357,6 +359,7 @@ function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly
   query: string
   favoritesOnly: boolean
   go: (hash: string) => void
+  onRefresh: () => void
 }) {
   const q = query.trim().toLowerCase()
   const matches = tools
@@ -371,11 +374,16 @@ function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly
   const idle = matches.filter((tool) => !isActive(tool))
   const open = (tool: CompanionTool) => go(`#/tools/${encodeURIComponent(tool.id)}`)
 
+  // Agent registrations wait at the top: they need the user, and the phone
+  // is where the user is when the agent runs from the phone.
+  const waiting = !q && drafts.length > 0 ? <DraftsSection drafts={drafts} onDecided={onRefresh} /> : null
+
   if (!loaded) return <section className="screen"><p className="muted center">Loading…</p></section>
-  if (tools.length === 0) return <section className="screen"><p className="muted center">No tools in the library yet.</p></section>
+  if (tools.length === 0) return <section className="screen">{waiting}<p className="muted center">No tools in the library yet.</p></section>
   if (matches.length === 0) {
     return (
       <section className="screen">
+        {waiting}
         <p className="muted center">{favoritesOnly && !q ? 'No favorites yet. Star a tool in Shelf on your Mac.' : `Nothing matches “${query}”.`}</p>
       </section>
     )
@@ -395,6 +403,7 @@ function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly
     }
     return (
       <section className="screen">
+        {waiting}
         {active.length > 0 ? <><h2>Active</h2><ul className="grid">{active.map(cell)}</ul></> : null}
         {idle.length > 0 ? <>{active.length > 0 ? <h2>Stopped</h2> : null}<ul className="grid">{idle.map(cell)}</ul></> : null}
       </section>
@@ -425,9 +434,76 @@ function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly
   }
   return (
     <section className="screen">
+      {waiting}
       {active.length > 0 ? <><h2>Active</h2><ul className="list">{active.map(row)}</ul></> : null}
       {idle.length > 0 ? <>{active.length > 0 ? <h2>Stopped</h2> : null}<ul className="list">{idle.map(row)}</ul></> : null}
     </section>
+  )
+}
+
+/** Shorten a folder path for a phone: ~ for the home folder, the last three segments. */
+function shortFolder(projectPath: string): string {
+  const home = projectPath.match(/^\/Users\/[^/]+/)?.[0]
+  const rel = home ? `~${projectPath.slice(home.length)}` : projectPath
+  const parts = rel.split('/').filter(Boolean)
+  return parts.length > 4 ? `…/${parts.slice(-3).join('/')}` : rel
+}
+
+/**
+ * The desktop's "Waiting for you" sheet, one card per agent registration.
+ * Accept saves the tool exactly as shown and never launches it; Reject writes
+ * nothing. Both go through the same code the desktop sheet uses.
+ */
+function DraftsSection({ drafts, onDecided }: { drafts: CompanionDraft[]; onDecided: () => void }) {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+
+  async function decide(draft: CompanionDraft, accept: boolean) {
+    setBusyId(draft.id)
+    setNotice(null)
+    try {
+      const result = accept ? await api.acceptDraft(draft.id, draft.updatedAt) : await api.rejectDraft(draft.id)
+      setNotice({ tone: result.outcome === 'invalid_folder' ? 'error' : 'ok', text: result.message })
+    } catch (err) {
+      setNotice({ tone: 'error', text: errorMessage(err) })
+    } finally {
+      setBusyId(null)
+      onDecided()
+    }
+  }
+
+  return (
+    <>
+      <h2>Waiting for you</h2>
+      {notice ? <p className={`notice${notice.tone === 'error' ? ' error' : ''}`} role="status">{notice.text}</p> : null}
+      <ul className="list">
+        {drafts.map((draft) => (
+          <li key={draft.id} className="card draft">
+            <div className="row-main">
+              <strong>{draft.name}</strong>
+              <small>{draft.client ? `From ${draft.client}` : 'From an agent'} · not in the library, nothing launched</small>
+            </div>
+            <dl className="facts">
+              <dt>Folder</dt><dd title={draft.projectPath}>{shortFolder(draft.projectPath)}</dd>
+              <dt>Command</dt><dd><code>{draft.launchCommand || 'No command detected'}</code></dd>
+              <dt>Port</dt><dd>{draft.port ?? 'None'}</dd>
+              {draft.envKeys.length ? <><dt>Env keys</dt><dd>{draft.envKeys.join(', ')}</dd></> : null}
+              {draft.description ? <><dt>About</dt><dd>{draft.description}</dd></> : null}
+              {draft.capabilities?.length ? <><dt>Can do</dt><dd>{draft.capabilities.join(' · ')}</dd></> : null}
+              {draft.remotePreview ? <><dt>Preview</dt><dd>Requested for this phone; accepting allows it.</dd></> : null}
+            </dl>
+            <div className="actions">
+              <button type="button" className="btn primary grow" disabled={busyId !== null} onClick={() => void decide(draft, true)}>
+                {busyId === draft.id ? 'Saving…' : 'Accept'}
+              </button>
+              <button type="button" className="btn" disabled={busyId !== null} onClick={() => void decide(draft, false)}>
+                Reject
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 

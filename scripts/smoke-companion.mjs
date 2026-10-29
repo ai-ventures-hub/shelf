@@ -172,7 +172,27 @@ async function live(iface) {
     toolIcon: () => null,
     previewReady: () => false,
     previewGrant: async () => { throw new Error('no preview in this smoke') },
+    listDrafts: () => drafts.map((d) => ({ ...d })),
+    acceptDraft: async (id, updatedAt, device) => {
+      const draft = drafts.find((d) => d.id === id)
+      if (!draft) throw new Error('That draft is no longer waiting.')
+      if (updatedAt && draft.updatedAt !== updatedAt) throw new Error('This draft changed after it was shown. Review it again before accepting.')
+      drafts.splice(drafts.indexOf(draft), 1)
+      decisions.push({ id, by: device.name, accepted: true })
+      return { outcome: 'saved', message: 'Saved.' }
+    },
+    rejectDraft: (id, device) => {
+      const at = drafts.findIndex((d) => d.id === id)
+      if (at >= 0) drafts.splice(at, 1)
+      decisions.push({ id, by: device.name, accepted: false })
+      return { outcome: 'rejected', message: 'Rejected. Nothing was saved.' }
+    },
   }
+  const drafts = [
+    { id: 'd1', name: 'Agent Draft', projectPath: '/tmp/agent-draft', launchCommand: 'TOKEN=*** npm start', port: 5250, envKeys: ['TOKEN'], client: 'smoke-agent', remotePreview: true, updatedAt: '2026-10-29T00:00:00.000Z' },
+    { id: 'd2', name: 'Second Draft', projectPath: '/tmp/second', launchCommand: 'npm start', envKeys: [], updatedAt: '2026-10-29T00:00:01.000Z' },
+  ]
+  const decisions = []
   const server = new CompanionServer({
     host, devices,
     tls: { key: cert.key, cert: cert.cert, fingerprint: cert.fingerprint },
@@ -261,6 +281,26 @@ async function live(iface) {
   const me = await request('GET', '/api/me', { token })
   assert.equal(me.body.id, paired.body.device.id)
   assert.equal('tokenHash' in me.body, false)
+
+  // Agent registrations: the overview carries them; accept and reject go
+  // through the host, and a stale card is refused rather than accepted blind.
+  assert.equal(overview.body.drafts.length, 2, 'the overview carries waiting drafts')
+  assert.equal(overview.body.drafts[0].remotePreview, true, 'the phone sees that preview was requested')
+  assert.equal((await request('GET', '/api/drafts')).status, 401, 'drafts need a paired phone')
+  const listed = await request('GET', '/api/drafts', { token })
+  assert.equal(listed.body.map((d) => d.id).join(','), 'd1,d2')
+  const stale = await request('POST', '/api/drafts/d1/accept', { token, body: { updatedAt: 'not-the-shown-revision' } })
+  assert.equal(stale.status, 409, 'a draft that changed since it was shown is not accepted')
+  assert.match(stale.body.error, /changed after it was shown/)
+  const accepted = await request('POST', '/api/drafts/d1/accept', { token, body: { updatedAt: '2026-10-29T00:00:00.000Z' } })
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body))
+  assert.equal(accepted.body.outcome, 'saved')
+  const rejected = await request('POST', '/api/drafts/d2/reject', { token })
+  assert.equal(rejected.body.outcome, 'rejected')
+  assert.equal((await request('POST', '/api/drafts/d1/accept', { token, body: {} })).status, 404, 'a decided draft is gone')
+  assert.deepEqual(decisions.map((d) => `${d.id}:${d.accepted ? 'accept' : 'reject'}:${d.by}`), ['d1:accept:Smoke iPhone', 'd2:reject:Smoke iPhone'], 'the host saw who decided')
+  assert.equal((await request('GET', '/api/overview', { token })).body.drafts.length, 0)
+  console.log('OK: a phone can accept or reject agent registrations; stale cards are refused')
 
   // Unknown tool → 404; unknown route → 404; wrong method → 405.
   assert.equal((await request('POST', '/api/tools/nope/start', { token })).status, 404)

@@ -6,6 +6,7 @@ import type {
   Collection,
   CollectionActionResult,
   LogLine,
+  RegisterOutcome,
   RunReceipt,
   ToolHealth,
   ToolRuntimeState,
@@ -107,10 +108,37 @@ export interface CompanionPreviewGrant {
   expiresAt: string
 }
 
+/**
+ * An agent registration waiting for the user, as the phone shows it: the
+ * same facts as the desktop sheet with the command masked the way the MCP
+ * server masks it. Env values never exist on a draft.
+ */
+export interface CompanionDraft {
+  id: string
+  name: string
+  projectPath: string
+  launchCommand: string
+  port?: number
+  envKeys: string[]
+  client?: string
+  description?: string
+  capabilities?: string[]
+  /** The agent asked for preview from paired phones; accepting grants it. */
+  remotePreview?: boolean
+  updatedAt: string
+}
+
+export interface CompanionDraftDecision {
+  outcome: RegisterOutcome | 'rejected'
+  message: string
+}
+
 export interface CompanionOverview {
   appVersion: string
   generatedAt: string
   tools: CompanionTool[]
+  /** Agent registrations waiting for the user (the desktop's "Waiting for you"). */
+  drafts: CompanionDraft[]
   collections: Collection[]
   states: ToolRuntimeState[]
   health: ToolHealth[]
@@ -134,5 +162,6 @@ export type CompanionWsMessage =
   | { type: 'logs:line'; line: LogLine }
   | { type: 'receipts:update'; receipt: RunReceipt }
   | { type: 'library:changed' }
+  | { type: 'drafts:changed' }
 
 export type CompanionCollectionResult = CollectionActionResult

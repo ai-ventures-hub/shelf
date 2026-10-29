@@ -147,6 +147,7 @@ function newToolFrom(
     port,
     env: overrides.env,
     notes: exact ? overrides.notes : overrides.notes || suggestion.notesHint,
+    ...(overrides.remotePreview === true ? { remotePreview: true } : {}),
     source,
     createdAt: now,
     updatedAt: now,

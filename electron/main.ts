@@ -704,6 +704,9 @@ if (gotLock) {
               refreshTray(getDesktopHost())
               companion.notifyLibraryChanged()
             }
+            // An agent staged or re-staged a registration: the phone's
+            // "Waiting for you" cards must follow the desktop's.
+            if (filename === 'tool-drafts.json') companion.notifyDraftsChanged()
           }, 400),
         )
       })

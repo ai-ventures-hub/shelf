@@ -197,7 +197,8 @@
         ]
       }
     ],
-    "asar": true
+    "asar": true,
+    "afterPack": "build/after-pack.cjs"
   },
   "engines": {
     "node": ">=22.12.0"

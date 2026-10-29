@@ -4,6 +4,8 @@
  */
 import {
   COMPANION_WS_PROTOCOL,
+  type CompanionDraft,
+  type CompanionDraftDecision,
   type CompanionOverview,
   type CompanionPairResponse,
   type CompanionPreviewGrant,
@@ -69,6 +71,10 @@ export const api = {
   stop: (toolId: string) => call<ToolRuntimeState>('POST', `/api/tools/${encodeURIComponent(toolId)}/stop`),
   restart: (toolId: string) => call<ToolRuntimeState>('POST', `/api/tools/${encodeURIComponent(toolId)}/restart`),
   previewGrant: (toolId: string) => call<CompanionPreviewGrant>('POST', `/api/tools/${encodeURIComponent(toolId)}/preview-grant`),
+  drafts: () => call<CompanionDraft[]>('GET', '/api/drafts'),
+  acceptDraft: (id: string, updatedAt: string) =>
+    call<CompanionDraftDecision>('POST', `/api/drafts/${encodeURIComponent(id)}/accept`, { updatedAt }),
+  rejectDraft: (id: string) => call<CompanionDraftDecision>('POST', `/api/drafts/${encodeURIComponent(id)}/reject`),
   startCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/start`),
   stopCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/stop`),
 }

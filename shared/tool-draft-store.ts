@@ -54,6 +54,8 @@ export interface StageToolDraftInput {
   overrides?: { name?: string; launchCommand?: string; port?: number; url?: string }
   description?: string
   capabilities?: string[]
+  /** The agent asked for preview from paired phones; the sheet says so. */
+  remotePreview?: boolean
   /**
    * Whether a folder is already a library tool (canonical comparison). A
    * registered folder is never staged, and any draft left for one is dropped.
@@ -84,6 +86,7 @@ export function publicToolDraft(draft: StagedToolDraft) {
     url: draft.url,
     description: draft.description,
     capabilities: draft.capabilities,
+    remotePreview: draft.remotePreview === true ? true : undefined,
     envKeys: draft.envKeys,
     client: draft.client,
     createdAt: draft.createdAt,
@@ -210,6 +213,7 @@ export class ToolDraftStore {
         client: cleanText(input.client, MAX_CLIENT_CHARS),
         ...(description ? { description } : {}),
         ...(capabilities ? { capabilities } : {}),
+        ...(input.remotePreview === true ? { remotePreview: true } : {}),
         createdAt: existing?.createdAt || now,
         updatedAt: now,
       }
@@ -325,6 +329,8 @@ export async function acceptToolDraft(
       ...(Array.isArray(draft.capabilities)
         ? { capabilities: draft.capabilities.filter((capability): capability is string => typeof capability === 'string') }
         : {}),
+      // Shown on the sheet as "Remote preview: requested"; accepting grants it.
+      ...(draft.remotePreview === true ? { remotePreview: true } : {}),
     },
   })
   if (result.outcome !== 'invalid_folder') drafts.delete(id)
