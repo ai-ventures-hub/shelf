@@ -16,7 +16,7 @@ export type CardAction = 'launch' | 'stop' | 'favorite' | 'open' | 'preview'
  * "Who started this?" — shown in BOTH ui modes on live cards; provenance is
  * the Simple-mode payoff, unlike the developer-only port/tag chips.
  */
-function OriginChip({ state }: { state?: ToolRuntimeState }) {
+function OriginChip({ state, compact = false }: { state?: ToolRuntimeState; compact?: boolean }) {
   const status = state?.status
   if (status !== 'running' && status !== 'starting') return null
   const label = launchOriginLabel(state?.startedBy, {
@@ -25,7 +25,7 @@ function OriginChip({ state }: { state?: ToolRuntimeState }) {
   if (!label) return null
   return (
     <span className="meta-chip origin-chip" title={`Started by ${label}`}>
-      {label}
+      {compact ? `· ${label}` : label}
     </span>
   )
 }
@@ -133,7 +133,18 @@ function ToolCardView({
           iconColor={tool.iconColor}
           iconBackground={tool.iconBackground}
         />
-        {compact ? title : <StatusPill status={status} message={state?.message} />}
+        {compact ? (
+          <div className="tool-card-head">
+            {title}
+            <div className="tool-compact-meta">
+              <StatusPill status={status} message={state?.message} />
+              {finished ? <FinishedLine tool={tool} state={state} finishedAt={finishedAt} compact /> : null}
+              <OriginChip state={state} compact />
+            </div>
+          </div>
+        ) : (
+          <StatusPill status={status} message={state?.message} />
+        )}
       </div>
       {!compact && <div>
         {title}
@@ -154,11 +165,9 @@ function ToolCardView({
         </p>
       ) : null}
       <div className="tool-card-footer">
-        <div className="tool-meta">
-          {compact && <StatusPill status={status} message={state?.message} />}
-          {compact && finished ? <FinishedLine tool={tool} state={state} finishedAt={finishedAt} compact /> : null}
+        {!compact ? <div className="tool-meta">
           <OriginChip state={state} />
-          {!hideChips && !compact ? (
+          {!hideChips ? (
             <>
               {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
               <span className="meta-chip">{formatRelativeTime(tool.lastLaunchedAt, 'Never')}</span>
@@ -170,7 +179,7 @@ function ToolCardView({
               {extraTags > 0 ? <span className="tag-chip">+{extraTags}</span> : null}
             </>
           ) : null}
-        </div>
+        </div> : null}
         {hasControls ? (
           <div className="tool-card-controls">
             {onToggleFavorite ? (

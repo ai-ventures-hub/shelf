@@ -16,15 +16,16 @@
   phone is not in this release.
 - Save the Companion certificate from Settings to install and trust it on the
   phone, which removes Safari's self-signed warning.
-- The phone app is built like a phone app: Tools is the first screen with
-  real tool icons (rendered on the Mac), a list or an app-grid layout
-  (switch from the header, remembered), search behind a header icon, a tool
-  page that leads with one action, and a tab bar that stays put. Logs and
-  the error report sit behind Show log. The activity board is not on the
-  phone.
+- The phone app is built like a phone app: one screen of your tools with
+  real icons (rendered on the Mac), a list or an app-grid layout, a
+  favorites filter, and search, all from the header; the Shelf mark takes
+  you home and ⋯ opens the rest. A tool page leads with one action; logs
+  and the error report sit behind Show log. No tab bar, no stacks, no
+  activity board on the phone.
 - A phone icon on each library card allows or stops allowing preview from
-  paired phones with one click; compact cards wrap their controls under the
-  status instead of overflowing.
+  paired phones with one click and fills in when it is on. Compact cards
+  show the status line right under the name and keep their controls on a
+  row of their own, so nothing overflows.
 - Companion, Phase B: preview a running tool from the phone. Turn on "Allow
   remote preview from paired phones" in the tool editor (Advanced) and the
   tool's page in the Companion gains Open preview. Shelf proxies the tool on

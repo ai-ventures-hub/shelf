@@ -69,8 +69,8 @@ async function run(win) {
       for(const card of document.querySelectorAll('.tool-card-compact')) {
         const r=card.getBoundingClientRect();
         if(r.width < 219) problems.push('narrow tile');
-        // Two fixed footer rows (status, then controls) since 2.4: 16+36+12+60+16 plus borders.
-        if(Math.abs(r.height-142)>1) problems.push('reserved vertical space '+Math.round(r.height));
+        // Since 2.4: head row (name + status line) 44px, controls row 32px: 16+44+12+32+16 plus borders.
+        if(Math.abs(r.height-122)>1) problems.push('reserved vertical space '+Math.round(r.height));
         const buttons=[...card.querySelectorAll('.tool-card-controls button')];
         for(const b of buttons) { const q=b.getBoundingClientRect(); if(q.width<32 || q.height<32 || q.right>r.right || q.left<r.left) problems.push('clipped action'); }
         const status=card.querySelector('.status-pill').getBoundingClientRect();

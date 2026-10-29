@@ -1,4 +1,4 @@
-import { LayoutGrid, List, Search } from 'lucide-react'
+import { LayoutGrid, List, MoreHorizontal, Search, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
 import type { LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
@@ -9,16 +9,15 @@ import { api, ApiError, clearPaired, connectLive, getToken, setPaired } from './
 type Route =
   | { name: 'tools' }
   | { name: 'tool'; id: string }
-  | { name: 'stacks' }
   | { name: 'more' }
 
 type ViewMode = 'list' | 'grid'
 const VIEW_KEY = 'shelf-companion-view'
+const FAV_KEY = 'shelf-companion-favorites'
 
 function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   if (parts[0] === 'tools' && parts[1]) return { name: 'tool', id: decodeURIComponent(parts[1]) }
-  if (parts[0] === 'stacks' || parts[0] === 'collections') return { name: 'stacks' }
   if (parts[0] === 'more') return { name: 'more' }
   return { name: 'tools' }
 }
@@ -35,6 +34,10 @@ function useRoute(): [Route, (hash: string) => void] {
 
 function readView(): ViewMode {
   try { return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list' } catch { return 'list' }
+}
+
+function readFavoritesOnly(): boolean {
+  try { return localStorage.getItem(FAV_KEY) === '1' } catch { return false }
 }
 
 /** `/pair#CODE.FINGERPRINT` from the QR, or nothing. */
@@ -166,6 +169,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   const [live, setLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>(readView)
+  const [favoritesOnly, setFavoritesOnly] = useState<boolean>(readFavoritesOnly)
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const logSink = useRef<((line: LogLine) => void) | null>(null)
@@ -235,6 +239,13 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
     try { localStorage.setItem(VIEW_KEY, next) } catch { /* private mode */ }
   }
 
+  function toggleFavorites() {
+    setFavoritesOnly((on) => {
+      try { localStorage.setItem(FAV_KEY, on ? '0' : '1') } catch { /* private mode */ }
+      return !on
+    })
+  }
+
   function toggleSearch() {
     setSearchOpen((open) => {
       if (open) setQuery('')
@@ -251,18 +262,21 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   return (
     <div className="app">
       <header className="top">
-        <a href="#/" className="brand" aria-label="Tools">
+        <a href="#/" className="brand" aria-label="All tools">
           <ShelfMark className="brand-mark" />
-          <span>{route.name === 'stacks' ? 'Stacks' : route.name === 'more' ? 'More' : 'Shelf'}</span>
+          <span>Shelf</span>
         </a>
         <div className="top-right">
-          <span className={`live${live ? ' is-live' : ''}`} aria-label={live ? 'Live' : 'Reconnecting'} title={live ? `${running} running` : 'Reconnecting…'}>
+          <span className={`live${live ? ' is-live' : ''}`} aria-label={live ? `${running} running` : 'Reconnecting'} title={live ? `${running} running` : 'Reconnecting…'}>
             <i />{running}
           </span>
           {onTools ? (
             <>
               <button type="button" className={`iconbtn${searchOpen ? ' is-on' : ''}`} aria-label="Search" aria-pressed={searchOpen} onClick={toggleSearch}>
                 <Search size={20} aria-hidden />
+              </button>
+              <button type="button" className={`iconbtn${favoritesOnly ? ' is-on' : ''}`} aria-label="Favorites only" aria-pressed={favoritesOnly} onClick={toggleFavorites}>
+                <Star size={20} aria-hidden fill={favoritesOnly ? 'currentColor' : 'none'} />
               </button>
               <button type="button" className={`iconbtn${view === 'list' ? ' is-on' : ''}`} aria-label="List view" aria-pressed={view === 'list'} onClick={() => chooseView('list')}>
                 <List size={20} aria-hidden />
@@ -272,6 +286,9 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
               </button>
             </>
           ) : null}
+          <a href="#/more" className={`iconbtn${route.name === 'more' ? ' is-on' : ''}`} aria-label="More" aria-current={route.name === 'more' ? 'page' : undefined}>
+            <MoreHorizontal size={20} aria-hidden />
+          </a>
         </div>
       </header>
       {onTools && searchOpen ? (
@@ -281,7 +298,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
       ) : null}
       <main className="scroll" ref={scroll}>
         {error ? <p className="notice error" role="alert">{error} <button type="button" className="link" onClick={() => void refresh()}>Retry</button></p> : null}
-        {onTools ? <ToolsScreen tools={tools} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} go={go} /> : null}
+        {onTools ? <ToolsScreen tools={tools} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} favoritesOnly={favoritesOnly} go={go} /> : null}
         {route.name === 'tool' ? (
           <ToolScreen
             tool={tools.find((item) => item.id === route.id) || null}
@@ -292,24 +309,9 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
             onRefresh={() => void refresh()}
           />
         ) : null}
-        {route.name === 'stacks' ? <StacksScreen overview={overview} states={states} /> : null}
         {route.name === 'more' ? <MoreScreen overview={overview} onUnpaired={onUnpaired} /> : null}
       </main>
-      <nav className="tabs" aria-label="Sections">
-        <Tab hash="#/" active={onTools || route.name === 'tool'} label="Tools" icon="◫" />
-        <Tab hash="#/stacks" active={route.name === 'stacks'} label="Stacks" icon="☰" />
-        <Tab hash="#/more" active={route.name === 'more'} label="More" icon="⋯" />
-      </nav>
     </div>
-  )
-}
-
-function Tab({ hash, active, label, icon }: { hash: string; active: boolean; label: string; icon: string }) {
-  return (
-    <a href={hash} aria-current={active ? 'page' : undefined}>
-      <span className="tab-icon" aria-hidden="true">{icon}</span>
-      {label}
-    </a>
   )
 }
 
@@ -346,17 +348,19 @@ function Tile({ tool, size = 'm', status }: { tool: CompanionTool; size?: 'm' | 
   )
 }
 
-function ToolsScreen({ tools, states, health, loaded, view, query, go }: {
+function ToolsScreen({ tools, states, health, loaded, view, query, favoritesOnly, go }: {
   tools: CompanionTool[]
   states: Map<string, ToolRuntimeState>
   health: CompanionOverview['health']
   loaded: boolean
   view: ViewMode
   query: string
+  favoritesOnly: boolean
   go: (hash: string) => void
 }) {
   const q = query.trim().toLowerCase()
   const matches = tools
+    .filter((tool) => !favoritesOnly || tool.favorite)
     .filter((tool) => !q || tool.name.toLowerCase().includes(q) || tool.tags.some((tag) => tag.toLowerCase().includes(q)))
     .sort((a, b) => a.name.localeCompare(b.name))
   const isActive = (tool: CompanionTool) => {
@@ -369,7 +373,13 @@ function ToolsScreen({ tools, states, health, loaded, view, query, go }: {
 
   if (!loaded) return <section className="screen"><p className="muted center">Loading…</p></section>
   if (tools.length === 0) return <section className="screen"><p className="muted center">No tools in the library yet.</p></section>
-  if (matches.length === 0) return <section className="screen"><p className="muted center">Nothing matches “{query}”.</p></section>
+  if (matches.length === 0) {
+    return (
+      <section className="screen">
+        <p className="muted center">{favoritesOnly && !q ? 'No favorites yet. Star a tool in Shelf on your Mac.' : `Nothing matches “${query}”.`}</p>
+      </section>
+    )
+  }
 
   if (view === 'grid') {
     const cell = (tool: CompanionTool) => {
@@ -583,56 +593,6 @@ function ToolLog({ toolId, onLogSink }: { toolId: string; onLogSink: (sink: ((li
       </div>
       {report && !note ? <textarea className="report" readOnly value={report} rows={8} onFocus={(e) => e.currentTarget.select()} /> : null}
     </div>
-  )
-}
-
-// ---- stacks --------------------------------------------------------------------
-
-function StacksScreen({ overview, states }: { overview: CompanionOverview | null; states: Map<string, ToolRuntimeState> }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
-  const collections = overview?.collections ?? []
-  async function act(id: string, run: () => Promise<{ results: { toolId: string; outcome: string }[] }>) {
-    setBusy(id)
-    setNote(null)
-    try {
-      const result = await run()
-      const summary = result.results.reduce<Record<string, number>>((acc, item) => { acc[item.outcome] = (acc[item.outcome] || 0) + 1; return acc }, {})
-      setNote(Object.entries(summary).map(([outcome, count]) => `${count} ${outcome.replace(/-/g, ' ')}`).join(', ') || 'Nothing to do.')
-    } catch (err) {
-      setNote(errorMessage(err))
-    } finally {
-      setBusy(null)
-    }
-  }
-  return (
-    <section className="screen">
-      {!overview ? <p className="muted center">Loading…</p> : null}
-      {overview && collections.length === 0 ? <p className="muted center">No collections yet. Make one in Shelf on your Mac.</p> : null}
-      {note ? <p className="notice">{note}</p> : null}
-      <ul className="list">
-        {collections.map((collection) => {
-          const running = collection.toolIds.filter((id) => states.get(id)?.status === 'running').length
-          const all = running === collection.toolIds.length && running > 0
-          return (
-            <li key={collection.id} className="card">
-              <div className="row-main">
-                <strong>{collection.name}</strong>
-                <small>{running} of {collection.toolIds.length} running{collection.description ? ` · ${collection.description}` : ''}</small>
-              </div>
-              <div className="actions">
-                <button type="button" className="btn primary grow" disabled={!!busy || all} onClick={() => void act(collection.id, () => api.startCollection(collection.id))}>
-                  {busy === collection.id ? 'Working…' : 'Start all'}
-                </button>
-                <button type="button" className="btn grow" disabled={!!busy || running === 0} onClick={() => void act(collection.id, () => api.stopCollection(collection.id))}>
-                  Stop all
-                </button>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-    </section>
   )
 }
 
