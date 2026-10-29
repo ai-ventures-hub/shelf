@@ -103,3 +103,7 @@
   background:var(--input);
 }
 .companion-device-name { max-width:14rem; }
+/* Long unbreakable values (fingerprint, URL) must wrap, or they stretch the
+   panel past its box and the rest of the text is clipped. */
+.companion-fingerprint { overflow-wrap:anywhere; word-break:break-all; }
+.settings-group .panel-body { min-width:0; }

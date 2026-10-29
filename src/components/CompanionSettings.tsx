@@ -180,7 +180,7 @@ export function CompanionSettings() {
                   more and type the code into it.
                 </p>
                 <p style={{ margin: 0, color: 'var(--muted)' }}>
-                  Or open <code className="mono">{status.url}</code> on the phone and type the code{' '}
+                  Or open <code className="mono companion-fingerprint">{status.url}</code> on the phone and type the code{' '}
                   <code className="mono">{status.pairing.url.split('#')[1]?.split('.')[0]}</code>.
                 </p>
                 <p className="field-hint" style={{ margin: 0 }}>
@@ -261,7 +261,7 @@ export function CompanionSettings() {
           </p>
           {status?.certFingerprint ? (
             <p className="field-hint" style={{ margin: 0 }}>
-              SHA-256 fingerprint: <code className="mono">{status.certFingerprint}</code>
+              SHA-256 fingerprint: <code className="mono companion-fingerprint">{status.certFingerprint}</code>
             </p>
           ) : null}
           <button
