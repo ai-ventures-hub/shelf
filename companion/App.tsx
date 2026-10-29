@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CompanionOverview, CompanionTool } from '../shared/companion-contracts'
+import type { CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
 import type { LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
 import { dockBadgeText } from '../shared/desktop-status'
 import { api, ApiError, clearPaired, connectLive, getToken, setPaired } from './api'
@@ -376,8 +376,12 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<string | null>(null)
+  const [grant, setGrant] = useState<CompanionPreviewGrant | null>(null)
   const logEnd = useRef<HTMLDivElement | null>(null)
   const toolId = tool?.id
+
+  // A grant belongs to one tool and one minute; drop it when either changes.
+  useEffect(() => { setGrant(null) }, [toolId, state?.status])
 
   useEffect(() => {
     if (!toolId) return
@@ -439,25 +443,33 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange }: {
       </div>
       {error ? <p className="c-error" role="alert">{error}</p> : null}
       {status === 'running' && tool.remotePreview ? (
-        <div className="c-actions">
-          <button
-            type="button"
-            className="c-btn"
-            disabled={busy === 'preview'}
-            onClick={() => {
-              // Open the tab first: Safari only honors window.open inside the tap.
-              const tab = window.open('', '_blank')
-              setBusy('preview')
-              setError(null)
-              api.previewGrant(tool.id)
-                .then((grant) => { if (tab) tab.location.href = grant.url; else location.href = grant.url })
-                .catch((err: unknown) => { tab?.close(); setError(errorMessage(err)) })
-                .finally(() => setBusy(null))
-            }}
-          >
-            {busy === 'preview' ? 'Opening…' : 'Open preview'}
-          </button>
-          {!tool.previewReady ? <span className="c-muted c-small">Preview is coming up…</span> : null}
+        <div className="c-preview">
+          {grant ? (
+            <>
+              {/* A real link: a Home Screen app cannot script a new tab, but a tap on an anchor opens Safari. */}
+              <a className="c-btn c-btn-primary" href={grant.url} target="_blank" rel="noopener" onClick={() => setGrant(null)}>
+                Open {tool.name} ↗
+              </a>
+              <span className="c-muted c-small">Opens in Safari. This link works once, within a minute.</span>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="c-btn"
+              disabled={busy === 'preview'}
+              onClick={() => {
+                setBusy('preview')
+                setError(null)
+                api.previewGrant(tool.id)
+                  .then((next) => setGrant(next))
+                  .catch((err: unknown) => setError(errorMessage(err)))
+                  .finally(() => setBusy(null))
+              }}
+            >
+              {busy === 'preview' ? 'Getting access…' : 'Open preview'}
+            </button>
+          )}
+          {!tool.previewReady && !grant ? <span className="c-muted c-small">Preview is coming up…</span> : null}
         </div>
       ) : null}
       {status === 'running' && !tool.remotePreview && tool.url ? (

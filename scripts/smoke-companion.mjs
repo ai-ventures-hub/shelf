@@ -27,7 +27,7 @@ const {
 } = require('../dist-electron/shared/companion-net.js')
 const { CompanionDeviceStore, hashDeviceToken } = require('../dist-electron/shared/companion-store.js')
 const { CompanionServer, toCompanionTool, mintPairingCode } = require('../dist-electron/shared/companion-server.js')
-const { ensureCompanionCertificate } = require('../dist-electron/shared/companion-cert.js')
+const { ensureCompanionCertificate, certificateProblem } = require('../dist-electron/shared/companion-cert.js')
 const { LibraryStore } = require('../dist-electron/shared/library-store.js')
 const { ProcessManager } = require('../dist-electron/shared/process-manager.js')
 const { ReceiptStore } = require('../dist-electron/shared/receipt-store.js')
@@ -121,11 +121,27 @@ if (interfaces.length === 0) {
 
 async function live(iface) {
   const address = iface.address
-  const cert = ensureCompanionCertificate(root, [address])
+  let cert = ensureCompanionCertificate(root, [address])
   assert.match(cert.fingerprint, /^[0-9a-f]{64}$/)
   assert.equal(fs.statSync(cert.keyPath).mode & 0o777, 0o600, 'private key is 0600')
   const again = ensureCompanionCertificate(root, [address])
-  assert.equal(again.fingerprint, cert.fingerprint, 'an existing certificate is never regenerated')
+  assert.equal(again.fingerprint, cert.fingerprint, 'a good certificate is never regenerated')
+  {
+    const { X509Certificate } = await import('node:crypto')
+    const parsed = new X509Certificate(cert.cert)
+    const days = (Date.parse(parsed.validTo) - Date.parse(parsed.validFrom)) / 86_400_000
+    assert.ok(days <= 825, `iOS refuses server certificates over 825 days (got ${days})`)
+    assert.equal(parsed.ca, true, 'iOS only trusts a self-signed server certificate that is a CA')
+    assert.match(parsed.subjectAltName || '', /IP Address:/, 'SAN carries the Mac address')
+    assert.equal(certificateProblem(cert.cert), null)
+    // A pre-fix certificate (10 years, CA:FALSE) is replaced on the next load.
+    fs.writeFileSync(cert.certPath, oldStyleCert(cert.keyPath))
+    const replaced = ensureCompanionCertificate(root, [address])
+    assert.notEqual(replaced.fingerprint, cert.fingerprint, 'a certificate iOS cannot trust is regenerated')
+    assert.ok(fs.readdirSync(path.dirname(cert.certPath)).some((f) => /companion-cert\.pem\.(too-long|not-ca)-/.test(f)), 'the old certificate is set aside, not deleted')
+    assert.equal(certificateProblem(replaced.cert), null)
+    cert = replaced
+  }
 
   const library = new LibraryStore()
   const receipts = new ReceiptStore()
@@ -319,6 +335,19 @@ async function live(iface) {
   await server.close()
   assert.equal(server.listening, null)
   console.log('OK: companion server smoke passed')
+}
+
+/** A certificate the way Phase A minted it: ten years, CA:FALSE. */
+function oldStyleCert(keyPath) {
+  const { execFileSync } = require('node:child_process')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-old-cert-'))
+  const cfg = path.join(dir, 'o.cnf')
+  fs.writeFileSync(cfg, '[req]\ndistinguished_name=dn\nx509_extensions=v3\nprompt=no\n[dn]\nCN=Shelf Companion\n[v3]\nbasicConstraints=CA:FALSE\nsubjectAltName=IP:127.0.0.1\n')
+  const out = path.join(dir, 'c.pem')
+  execFileSync('/usr/bin/openssl', ['req', '-x509', '-new', '-key', keyPath, '-sha256', '-days', '3650', '-out', out, '-config', cfg], { stdio: 'ignore' })
+  const pem = fs.readFileSync(out, 'utf8')
+  fs.rmSync(dir, { recursive: true, force: true })
+  return pem
 }
 
 function finish() {

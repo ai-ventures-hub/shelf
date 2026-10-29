@@ -120,3 +120,6 @@ a { color: var(--brand-strong); }
 .c-field { display: flex; flex-direction: column; gap: .35rem; font-size: .9rem; color: var(--muted); }
 .c-field input { letter-spacing: .04em; }
 .c-fingerprint { font-size: .85rem; color: var(--muted); margin: 0; word-break: break-all; }
+
+.c-preview { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin: .75rem 0; }
+.c-preview a.c-btn { text-decoration: none; display: inline-block; }

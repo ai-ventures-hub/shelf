@@ -255,9 +255,17 @@ export function CompanionSettings() {
         <div className="panel-body stack">
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             The Companion is served over HTTPS with a certificate this Mac made for itself. Safari warns
-            the first time; the warning goes away once the phone trusts the certificate. Save it here,
-            AirDrop it to the phone, install the profile, then turn on full trust under Settings → General →
-            About → Certificate Trust Settings.
+            the first time; the warning goes away once the phone trusts the certificate.
+          </p>
+          <ol className="shortcut-list" style={{ paddingLeft: '1.25rem', listStyle: 'decimal' }}>
+            <li>Save certificate… below, then AirDrop the file to the phone.</li>
+            <li>If it lands in Files, tap it there. iPhone Settings then shows <em>Profile Downloaded</em> at the top; open it and Install.</li>
+            <li>Settings → General → About → Certificate Trust Settings: turn on full trust for Shelf Companion.</li>
+            <li>Close and reopen the Companion. Every preview port is trusted too.</li>
+          </ol>
+          <p className="field-hint" style={{ margin: 0 }}>
+            If Shelf replaces its certificate (it does once, for older ones iOS could not trust), the fingerprint
+            below changes and the phone needs the new file.
           </p>
           {status?.certFingerprint ? (
             <p className="field-hint" style={{ margin: 0 }}>

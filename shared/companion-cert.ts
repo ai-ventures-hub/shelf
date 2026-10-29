@@ -26,7 +26,14 @@ export interface CompanionCertificate {
   fingerprintDisplay: string
 }
 
-const CERT_DAYS = 3650
+/**
+ * iOS (13+) refuses TLS server certificates valid for more than 825 days,
+ * and its Certificate Trust Settings only list certificates that are
+ * authorities, so a self-signed server certificate must be both short-lived
+ * and CA:TRUE to ever be trusted on a phone.
+ */
+const CERT_DAYS = 800
+const IOS_MAX_DAYS = 825
 
 export function fingerprintOf(certPem: string): string {
   return new X509Certificate(certPem).fingerprint256.replace(/:/g, '').toLowerCase()
@@ -58,17 +65,33 @@ export function ensureCompanionCertificate(
   const key = fs.readFileSync(keyPath, 'utf8')
   const cert = fs.readFileSync(certPath, 'utf8')
   let fingerprint: string
+  let reason: string | null
   try {
     fingerprint = fingerprintOf(cert)
+    reason = certificateProblem(cert)
   } catch {
-    // Unreadable material: set it aside and mint a fresh pair.
+    fingerprint = ''
+    reason = 'unreadable'
+  }
+  if (reason) {
+    // Set the old pair aside (a phone may still trust it) and mint one iOS accepts.
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    fs.renameSync(certPath, `${certPath}.corrupt-${stamp}`)
-    if (fs.existsSync(keyPath)) fs.renameSync(keyPath, `${keyPath}.corrupt-${stamp}`)
+    fs.renameSync(certPath, `${certPath}.${reason}-${stamp}`)
+    if (fs.existsSync(keyPath)) fs.renameSync(keyPath, `${keyPath}.${reason}-${stamp}`)
     generate(keyPath, certPath, sanAddresses, opensslPath)
     return ensureCompanionCertificate(root, sanAddresses, opensslPath)
   }
   return { keyPath, certPath, key, cert, fingerprint, fingerprintDisplay: displayFingerprint(fingerprint) }
+}
+
+/** Why a stored certificate must be replaced, or null when a phone can trust it. */
+export function certificateProblem(certPem: string): string | null {
+  const parsed = new X509Certificate(certPem)
+  const days = (Date.parse(parsed.validTo) - Date.parse(parsed.validFrom)) / 86_400_000
+  if (days > IOS_MAX_DAYS) return 'too-long'
+  if (!parsed.ca) return 'not-ca'
+  if (Date.parse(parsed.validTo) < Date.now() + 7 * 86_400_000) return 'expiring'
+  return null
 }
 
 function generate(keyPath: string, certPath: string, sanAddresses: string[], opensslPath: string): void {
@@ -86,9 +109,12 @@ function generate(keyPath: string, certPath: string, sanAddresses: string[], ope
     'CN = Shelf Companion',
     'O = Shelf',
     '[v3]',
-    'basicConstraints = CA:FALSE',
-    'keyUsage = digitalSignature, keyEncipherment',
+    // CA:TRUE on a self-signed server certificate is what lets iOS list it
+    // under Certificate Trust Settings; keyCertSign goes with it.
+    'basicConstraints = critical, CA:TRUE',
+    'keyUsage = critical, digitalSignature, keyEncipherment, keyCertSign',
     'extendedKeyUsage = serverAuth',
+    'subjectKeyIdentifier = hash',
     'subjectAltName = @alt',
     '[alt]',
     ...alt,
