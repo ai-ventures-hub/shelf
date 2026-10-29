@@ -123,6 +123,13 @@ const api = {
   getPrefs: () => invoke('prefs:get'),
   updatePrefs: (patch) => invoke('prefs:update', patch),
   getShortcutStatus: () => invoke('desktop:shortcutStatus'),
+  getCompanionStatus: () => invoke('companion:status'),
+  beginCompanionPairing: () => invoke('companion:beginPairing'),
+  cancelCompanionPairing: () => invoke('companion:cancelPairing'),
+  revokeCompanionDevice: (id) => invoke('companion:revokeDevice', id),
+  renameCompanionDevice: (id, name) => invoke('companion:renameDevice', id, name),
+  exportCompanionCertificate: () => invoke('companion:exportCertificate'),
+  onCompanionStatus: (cb) => on('companion:status', cb),
   submitOnboarding: (input) => invoke('onboarding:submit', input),
 
   getDesignMd: (opts) => invoke('designMd:get', opts),

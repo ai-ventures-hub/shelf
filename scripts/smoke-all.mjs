@@ -78,6 +78,7 @@ async function main() {
   await run('mcp new-tool prompt', 'node', ['scripts/smoke-mcp-new-tool.mjs'])
   await run('tool sharing', 'node', ['scripts/smoke-sharing.mjs'])
   await run('team catalog', 'node', ['scripts/smoke-catalog.mjs'])
+  await run('companion server', 'node', ['scripts/smoke-companion.mjs'])
   await run('design engine stress', 'node', ['scripts/smoke-design-stress.mjs'])
   console.log('\nOK: smoke:all passed')
 }

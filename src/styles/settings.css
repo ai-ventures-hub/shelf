@@ -60,3 +60,46 @@
   color:var(--ink);
   font:.78rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
+
+/* Settings → Companion */
+.companion-pairing {
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  gap:1.25rem;
+  align-items:start;
+}
+.companion-pairing img,
+.companion-qr-placeholder {
+  width:240px;
+  height:240px;
+  border-radius:var(--radius-control);
+  background:#fff;
+  padding:.4rem;
+  box-sizing:border-box;
+}
+.companion-qr-placeholder {
+  background:var(--input);
+  border:1px solid var(--line);
+}
+@media (max-width: 720px) {
+  .companion-pairing { grid-template-columns:1fr; }
+}
+.companion-devices {
+  margin:0;
+  padding:0;
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:.6rem;
+}
+.companion-devices li {
+  display:grid;
+  grid-template-columns:minmax(0,14rem) minmax(0,1fr) auto;
+  gap:.75rem;
+  align-items:center;
+  padding:.6rem .75rem;
+  border:1px solid var(--line);
+  border-radius:var(--radius-control);
+  background:var(--input);
+}
+.companion-device-name { max-width:14rem; }

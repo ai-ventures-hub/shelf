@@ -65,6 +65,7 @@ import type {
   ToolStarterRequest,
   UpdateCheck,
 } from './contracts'
+import type { CompanionStatus } from './companion-contracts'
 import type { MorningEvent } from './morning-board'
 
 export interface ShelfApi {
@@ -173,6 +174,14 @@ export interface ShelfApi {
     patch: Partial<UiPrefs>,
   ) => Promise<{ prefs: UiPrefs; shortcutStatus: ShortcutStatus }>
   getShortcutStatus: () => Promise<ShortcutStatus>
+  /** Companion (2.4): the paired-phone server. Settings is its only surface. */
+  getCompanionStatus: () => Promise<CompanionStatus>
+  beginCompanionPairing: () => Promise<CompanionStatus>
+  cancelCompanionPairing: () => Promise<CompanionStatus>
+  revokeCompanionDevice: (id: string) => Promise<CompanionStatus>
+  renameCompanionDevice: (id: string, name: string) => Promise<CompanionStatus>
+  exportCompanionCertificate: () => Promise<{ saved: boolean; path?: string }>
+  onCompanionStatus: (cb: (status: CompanionStatus) => void) => () => void
   submitOnboarding: (input: OnboardingSubmissionInput) => Promise<{ appVersion: string }>
   getDesignMd: (opts: { id?: string; projectPath?: string }) => Promise<DesignMdResult>
   checkToolReadiness: (id: string) => Promise<ToolReadiness>

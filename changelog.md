@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.4.0 - unreleased
+
+- Companion, Phase A: see, start, stop, restart, and read the logs of your
+  tools from your phone. Settings → Companion turns on a small HTTPS server
+  on this Mac bound to your Tailscale address (recommended) or one network,
+  never loopback or every interface. Pair a phone by scanning a QR code
+  (one-time code, two minutes, single use); the phone gets a Home Screen web
+  app with Home, Tools, tool detail with live log tail and error report, and
+  Stacks. Paired devices are listed with Revoke, which takes effect at once.
+  "Stay awake while a phone is connected" holds off app sleep while the
+  Companion is open. Off by default; no relay, no account, nothing leaves the
+  Mac except to the phone you paired over your own network. Launches from a
+  phone are recorded as such in receipts and the tray. Preview from the
+  phone is not in this release.
+- Save the Companion certificate from Settings to install and trust it on the
+  phone, which removes Safari's self-signed warning.
+
 ## 2.3.1 - unreleased
 
 - Internal: the desktop IPC handlers moved out of `electron/main.ts` into

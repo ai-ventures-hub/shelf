@@ -7,6 +7,7 @@ import type { ReceiptStore } from '../../shared/receipt-store'
 import type { TeamCatalogStore } from '../../shared/team-catalog-store'
 import type { ToolDraftStore } from '../../shared/tool-draft-store'
 import type { VerificationRunner } from '../../shared/verification-runner'
+import type { CompanionManager } from '../companion'
 import type { DesktopIntegrationHost } from '../desktop-integration'
 import type { LibraryStore } from '../library-store'
 import type { ProcessManager } from '../process-manager'
@@ -27,6 +28,8 @@ export interface IpcContext {
   designProfiles: DesignProfileStore
   teamCatalogs: TeamCatalogStore
   toolDrafts: ToolDraftStore
+  /** Companion (2.4): the paired-phone server's lifetime and status. */
+  companion: CompanionManager
   /** The window dialogs attach to; null while hidden to the menu bar. */
   getMainWindow: () => BrowserWindow | null
   getDesktopHost: () => DesktopIntegrationHost

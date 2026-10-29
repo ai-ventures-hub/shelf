@@ -1,5 +1,6 @@
 /** Renderer contracts come from the same definitions as the desktop services. */
 export type * from '../shared/contracts'
+export type * from '../shared/companion-contracts'
 export type { ShelfApi } from '../shared/desktop-api'
 import type { ShelfApi } from '../shared/desktop-api'
 

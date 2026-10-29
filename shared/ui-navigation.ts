@@ -13,6 +13,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'shortcuts', label: 'Shortcuts' },
+  { id: 'companion', label: 'Companion' },
   { id: 'updates', label: 'Updates & About' },
   { id: 'advanced', label: 'Advanced' },
 ] as const

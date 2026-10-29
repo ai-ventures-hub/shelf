@@ -1,3 +1,4 @@
+import { prefsPatchAffectsCompanion } from '../companion'
 import {
   applyGlobalShortcut,
   getShortcutStatus,
@@ -24,6 +25,8 @@ export function registerPrefsIpc(ctx: IpcContext): void {
       publishShortcutStatus(ctx.getDesktopHost(), shortcutStatus, { notify: false })
     }
     if ('launchAtLogin' in patch) ctx.applyLaunchAtLogin(next.launchAtLogin)
+    // The server follows the saved prefs; errors surface on companion:status, not here.
+    if (prefsPatchAffectsCompanion(patch)) void ctx.companion.applyPrefs()
     return { prefs: next, shortcutStatus }
   })
   handle('desktop:shortcutStatus', () => getShortcutStatus())

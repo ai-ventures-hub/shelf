@@ -16,6 +16,7 @@
  *
  * Push channels (main → renderer) are listed separately with their payloads.
  */
+import type { CompanionStatus } from './companion-contracts'
 import type { ShelfApi } from './desktop-api'
 import type {
   AppUpdateState,
@@ -135,6 +136,13 @@ export interface IpcInvokeMap {
   'app:updateState': ShelfApi['getAppUpdateState']
   'app:checkUpdates': ShelfApi['checkAppUpdates']
   'app:installUpdate': ShelfApi['installUpdate']
+  // Companion (2.4)
+  'companion:status': ShelfApi['getCompanionStatus']
+  'companion:beginPairing': ShelfApi['beginCompanionPairing']
+  'companion:cancelPairing': ShelfApi['cancelCompanionPairing']
+  'companion:revokeDevice': ShelfApi['revokeCompanionDevice']
+  'companion:renameDevice': ShelfApi['renameCompanionDevice']
+  'companion:exportCertificate': ShelfApi['exportCompanionCertificate']
   // One-click MCP client connects
   'mcpClients:detect': ShelfApi['detectMcpClients']
   'claude:status': ShelfApi['getClaudeDesktopStatus']
@@ -176,6 +184,7 @@ export interface IpcEventMap {
   'app:history': [direction: 'back' | 'forward']
   'app:add-folder': [projectPath: string]
   'app:add-shared': [info: { repo: string }]
+  'companion:status': [status: CompanionStatus]
 }
 
 export type IpcEventChannel = keyof IpcEventMap

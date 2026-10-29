@@ -43,6 +43,7 @@
     "smoke:mcp": "npm run mcp:build && node scripts/smoke-mcp.mjs",
     "smoke:sharing": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-sharing.mjs",
     "smoke:catalog": "tsc -p tsconfig.electron.json && node scripts/smoke-catalog.mjs",
+    "smoke:companion": "tsc -p tsconfig.electron.json && node scripts/smoke-companion.mjs",
     "smoke:all": "node scripts/smoke-all.mjs",
     "icon": "python3 scripts/generate-icon.py",
     "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",
@@ -54,15 +55,19 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.26.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.18.2",
+    "ws": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
     "electron": "^44.3.0",
@@ -89,6 +94,10 @@
       {
         "from": "dist-mcp",
         "to": "mcp"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "companion-icon.png"
       },
       {
         "from": "build/TrayIconTemplate.png",

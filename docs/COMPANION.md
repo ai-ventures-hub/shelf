@@ -237,7 +237,38 @@ to paired devices on the chosen interface while the tool runs.
 
 ## Phases
 
-### Phase A — Control (the useful 80%)
+### Phase A — Control (the useful 80%) — shipped 2026-10-28 (2.4.0, unreleased)
+
+Built as specified, with these deviations recorded:
+
+- **Dependencies:** `ws` (WebSocket server) and `qrcode` (QR rendering in
+  the Settings pane) were added rather than hand-rolling either. Both are
+  small, widely used, and the smoke suite exercises the server end to end.
+- **Certificate generation** shells out to the system `openssl` (LibreSSL)
+  with a config file, since Node cannot mint certificates. The certificate
+  is generated once into `<dataRoot>/companion/` and never regenerated.
+  Browsers cannot pin a fingerprint, so the QR's fingerprint is shown on the
+  phone's pairing screen for the user to compare, and Settings offers
+  **Save certificate…** so the phone can install and trust it, which is what
+  actually removes Safari's warning and makes Home Screen install clean.
+- **The WebSocket token** travels as a second subprotocol
+  (`Sec-WebSocket-Protocol: shelf-companion, <token>`) rather than a URL
+  parameter, so it never lands in a log line.
+- **Launch provenance:** a new `LaunchOrigin.kind = 'companion'` with the
+  device name as `client`, so receipts, the tray, and the Activity board say
+  a phone did it.
+- **Phone-side unpair:** `DELETE /api/me` lets the phone revoke itself from
+  its More screen.
+- **Serving the web app** needs the built bundle (`dist/companion`); in
+  `electron:dev` the Companion serves the last `npm run build`.
+- **Pairing codes** are 8 characters from an unambiguous alphabet and can be
+  typed on the phone when the camera is not handy.
+- `smoke:companion` runs the live server on the Mac's first non-loopback
+  interface on an ephemeral port (loopback is refused by design); on a
+  machine with no such interface it runs the policy checks only and says so.
+
+Original scope follows.
+
 
 Companion server, pairing store, QR pairing, Settings section, web app
 with Home / Tools / Tool detail / Collections, live state over WebSocket,

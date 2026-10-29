@@ -17,5 +17,12 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        // The phone-facing Companion app; served by electron/companion.ts from dist/companion.
+        companion: path.resolve(__dirname, 'companion/index.html'),
+      },
+    },
   },
 })

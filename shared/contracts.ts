@@ -167,7 +167,8 @@ export type RemedyKind =
  * 'mcp' is an agent client, identified by the (self-reported) name from the
  * MCP initialize handshake, e.g. "claude-code" or "cursor".
  */
-export type LaunchOriginKind = 'gui' | 'tray' | 'mcp'
+/** 'companion' = a paired phone over the Companion server; client carries the device name. */
+export type LaunchOriginKind = 'gui' | 'tray' | 'mcp' | 'companion'
 
 export interface LaunchOrigin {
   kind: LaunchOriginKind
@@ -235,6 +236,13 @@ export interface UiPrefs {
   globalShortcutEnabled: boolean
   /** Electron accelerator, e.g. Command+Shift+Space. */
   globalShortcut: string
+  /** Companion (2.4): serve the paired-phone control surface. Off by default. */
+  companionEnabled: boolean
+  /** 'tailscale' = the detected Tailscale interface; otherwise an explicit IPv4 address. */
+  companionBindAddress: string
+  companionPort: number
+  /** Hold a power-save blocker while a paired device is connected. */
+  companionKeepAwake: boolean
   windowBounds?: {
     width: number
     height: number

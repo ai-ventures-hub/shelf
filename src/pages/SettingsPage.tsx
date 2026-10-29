@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { SETTINGS_SECTIONS, settingsSection } from '../../shared/ui-navigation'
 import { AppUpdatePanel } from '../components/AppUpdatePanel'
+import { CompanionSettings } from '../components/CompanionSettings'
 import { GLOBAL_SHORTCUT_PRESETS } from '../../shared/global-shortcut'
 import { useEffect, useState } from 'react'
 import { ColorField } from '../components/ColorField'
@@ -342,6 +343,7 @@ export function SettingsPage() {
           </div>
         </section>
       </div>}
+      {section === 'companion' && <CompanionSettings />}
       {section === 'updates' && <div className="settings-group" aria-label="Updates settings">
         <AppUpdatePanel />
         <section className="panel">

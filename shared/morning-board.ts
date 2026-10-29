@@ -59,7 +59,7 @@ export function normalizeClientName(name: string | undefined): string | undefine
 
 function clientFromOrigin(origin: LaunchOrigin | undefined): string | undefined {
   if (!origin) return undefined
-  if (origin.kind === 'gui' || origin.kind === 'tray') return 'shelf'
+  if (origin.kind === 'gui' || origin.kind === 'tray' || origin.kind === 'companion') return 'shelf'
   return normalizeClientName(origin.client) || 'mcp'
 }
 

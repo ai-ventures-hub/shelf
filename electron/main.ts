@@ -37,6 +37,7 @@ import {
   toggleWindow,
   type DesktopIntegrationHost,
 } from './desktop-integration'
+import { CompanionManager } from './companion'
 import { registerIpc, type IpcContext } from './ipc'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { flushPendingOnboarding } from './onboarding-relay'
@@ -56,6 +57,7 @@ let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let teamCatalogs: TeamCatalogStore
 let toolDrafts: ToolDraftStore
+let companion: CompanionManager
 let isQuitting = false
 let quitDiscardApproved = false
 let quitPreparing = false
@@ -520,6 +522,7 @@ function buildIpcContext(): IpcContext {
     designProfiles,
     teamCatalogs,
     toolDrafts,
+    companion,
     getMainWindow: () => mainWindow,
     getDesktopHost,
     resolveMcpServerPath,
@@ -601,6 +604,7 @@ if (gotLock) {
       onReadyUrl: (url) => system.openUrl(url),
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
+        companion?.broadcast(channel, payload)
         if (channel === 'process:update') {
           noteToolState(getDesktopHost(), payload as ToolRuntimeState)
           const states = processes.peekStates()
@@ -608,6 +612,15 @@ if (gotLock) {
           refreshDockBadge(states)
         }
       },
+    })
+    companion = new CompanionManager({
+      prefs, store, processes, receipts, verification, capabilityGaps, designProfiles, toolDrafts,
+      sendToRenderer,
+      dataRoot: store.getRoot(),
+      staticRoot: path.join(__dirname, '../../dist'),
+      iconPngPath: app.isPackaged
+        ? path.join(process.resourcesPath, 'companion-icon.png')
+        : path.join(__dirname, '../../build/icon.png'),
     })
     registerIpc(buildIpcContext())
     buildMenu()
@@ -627,6 +640,8 @@ if (gotLock) {
     applyLaunchAtLogin(prefs.get().launchAtLogin)
     // Background update checks (packaged builds only).
     initAutoUpdate(sendToRenderer)
+    // Companion server follows prefs.json; off by default.
+    void companion.applyPrefs()
 
     // Cold-start argv may include a shelf:// link (Windows/Linux; mac uses open-url).
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))
@@ -685,7 +700,10 @@ if (gotLock) {
           setTimeout(() => {
             changeDebounce.delete(filename)
             sendToRenderer('data:external-change', filename)
-            if (filename === 'library.json') refreshTray(getDesktopHost())
+            if (filename === 'library.json') {
+              refreshTray(getDesktopHost())
+              companion.notifyLibraryChanged()
+            }
           }, 400),
         )
       })
@@ -719,6 +737,7 @@ if (gotLock) {
 
   app.on('will-quit', () => {
     reconcileExternalsNow = null
+    void companion?.shutdown()
     if (externalReconcileTimer) {
       clearTimeout(externalReconcileTimer)
       externalReconcileTimer = null

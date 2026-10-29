@@ -118,6 +118,10 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   launchAtLogin: false,
   globalShortcutEnabled: true,
   globalShortcut: DEFAULT_GLOBAL_SHORTCUT,
+  companionEnabled: false,
+  companionBindAddress: 'tailscale',
+  companionPort: 48620,
+  companionKeepAwake: false,
 }
 
 /**
@@ -143,6 +147,7 @@ export function launchOriginLabel(
 ): string | null {
   if (!origin) return opts.externalUnknown ? 'Another agent' : null
   if (origin.kind === 'gui' || origin.kind === 'tray') return 'You'
+  if (origin.kind === 'companion') return origin.client?.trim() ? `${origin.client.trim()} (Companion)` : 'Your phone'
   const raw = (origin.client || '').trim()
   if (!raw) return 'Agent'
   const key = raw.toLowerCase()
@@ -160,6 +165,7 @@ export function launchOriginLabel(
 export function adoptedRunNote(startedBy?: LaunchOrigin): string {
   if (!startedBy) return '(started by another Shelf process)'
   if (startedBy.kind === 'gui' || startedBy.kind === 'tray') return '(started in Shelf)'
+  if (startedBy.kind === 'companion') return '(started from your phone)'
   return `(started by ${launchOriginLabel(startedBy)})`
 }
 

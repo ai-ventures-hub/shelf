@@ -7,6 +7,7 @@
 import { registerActivityIpc } from './activity'
 import { registerCapabilityGapsIpc } from './capability-gaps'
 import { registerCollectionsIpc } from './collections'
+import { registerCompanionIpc } from './companion'
 import type { IpcContext } from './context'
 import { registerDesignProfilesIpc } from './design-profiles'
 import { registerMcpConnectIpc } from './mcp-connect'
@@ -33,4 +34,5 @@ export function registerIpc(ctx: IpcContext): void {
   registerShareIpc(ctx)
   registerSystemIpc(ctx)
   registerMcpConnectIpc(ctx)
+  registerCompanionIpc(ctx)
 }
