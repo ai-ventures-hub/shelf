@@ -97,10 +97,19 @@ function PairScreen({ onPaired }: { onPaired: () => void }) {
   return (
     <main className="c-pair">
       <h1>Shelf Companion</h1>
-      <p className="c-muted">
-        Pair this phone with the Shelf on your Mac. Open Settings → Companion there and scan the QR
-        code, or type the code it shows.
-      </p>
+      {isStandalone() ? (
+        <p className="c-muted">
+          The Home Screen app keeps its own pairing, separate from Safari, so it pairs once more. On the
+          Mac open Settings → Companion, press <strong>Pair a device</strong>, and type the 8-character
+          code shown under the QR. The Safari pairing stays valid; revoke it on the Mac if you like.
+        </p>
+      ) : (
+        <p className="c-muted">
+          Pair this phone with the Shelf on your Mac. Open Settings → Companion there and scan the QR
+          code, or type the code it shows. If you later add this page to the Home Screen, that copy will
+          ask to pair once more.
+        </p>
+      )}
       {fromQr?.fingerprint ? (
         <p className="c-fingerprint">
           Certificate fingerprint from the QR: <code>{formatFingerprint(fromQr.fingerprint)}</code>. It should match
@@ -130,12 +139,16 @@ function PairScreen({ onPaired }: { onPaired: () => void }) {
   )
 }
 
+/** True when launched from the Home Screen: its storage is separate from Safari's. */
+function isStandalone(): boolean {
+  const nav = navigator as Navigator & { standalone?: boolean }
+  return nav.standalone === true || window.matchMedia('(display-mode: standalone)').matches
+}
+
 function guessDeviceName(): string {
   const ua = navigator.userAgent
-  if (/iPhone/.test(ua)) return 'iPhone'
-  if (/iPad/.test(ua)) return 'iPad'
-  if (/Android/.test(ua)) return 'Android phone'
-  return 'Phone'
+  const base = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android phone' : 'Phone'
+  return isStandalone() ? `${base} (Home Screen)` : base
 }
 
 // ---- shell -------------------------------------------------------------------

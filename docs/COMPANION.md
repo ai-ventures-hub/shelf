@@ -263,6 +263,13 @@ Built as specified, with these deviations recorded:
   `electron:dev` the Companion serves the last `npm run build`.
 - **Pairing codes** are 8 characters from an unambiguous alphabet and can be
   typed on the phone when the camera is not handy.
+- **Home Screen apps pair twice.** iOS gives a Home Screen web app its own
+  storage, separate from Safari, so the token from the Safari pairing is
+  not there. Found in Carlos's first real test (2026-10-28, over LTE on
+  Tailscale). The pairing screen now says so when running standalone, the
+  device is named "iPhone (Home Screen)", and the Mac's QR copy warns about
+  the second pairing. A single-pairing install would need the token in the
+  start URL, which would persist a secret in the manifest; not done.
 - `smoke:companion` runs the live server on the Mac's first non-loopback
   interface on an ephemeral port (loopback is refused by design); on a
   machine with no such interface it runs the policy checks only and says so.

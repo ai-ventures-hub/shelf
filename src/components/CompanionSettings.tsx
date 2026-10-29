@@ -176,7 +176,8 @@ export function CompanionSettings() {
                 <strong>Scan with your phone’s camera.</strong>
                 <p style={{ margin: 0, color: 'var(--muted)' }}>
                   Safari opens the Companion and pairs in one tap. Then use Share → <em>Add to Home Screen</em> so
-                  it opens like an app.
+                  it opens like an app. The Home Screen copy keeps its own pairing, so press Pair a device once
+                  more and type the code into it.
                 </p>
                 <p style={{ margin: 0, color: 'var(--muted)' }}>
                   Or open <code className="mono">{status.url}</code> on the phone and type the code{' '}
