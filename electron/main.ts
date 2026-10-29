@@ -620,7 +620,7 @@ if (gotLock) {
       staticRoot: path.join(__dirname, '../../dist'),
       iconPngPath: app.isPackaged
         ? path.join(process.resourcesPath, 'companion-icon.png')
-        : path.join(__dirname, '../../build/icon.png'),
+        : path.join(__dirname, '../../build/companion-touch-icon.png'),
     })
     registerIpc(buildIpcContext())
     buildMenu()

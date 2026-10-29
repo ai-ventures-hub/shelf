@@ -175,9 +175,9 @@ export function CompanionSettings() {
               <div className="stack" style={{ gap: '.5rem' }}>
                 <strong>Scan with your phone’s camera.</strong>
                 <p style={{ margin: 0, color: 'var(--muted)' }}>
-                  Safari opens the Companion and pairs in one tap. Then use Share → <em>Add to Home Screen</em> so
-                  it opens like an app. The Home Screen copy keeps its own pairing, so press Pair a device once
-                  more and type the code into it.
+                  Safari opens the Companion and pairs in one tap. Trust the certificate on the phone (below), then
+                  use Share → <em>Add to Home Screen</em> so it opens like an app with the Shelf icon. The Home
+                  Screen copy keeps its own pairing, so press Pair a device once more and type the code into it.
                 </p>
                 <p style={{ margin: 0, color: 'var(--muted)' }}>
                   Or open <code className="mono companion-fingerprint">{status.url}</code> on the phone and type the code{' '}
@@ -262,6 +262,7 @@ export function CompanionSettings() {
             <li>If it lands in Files, tap it there. iPhone Settings then shows <em>Profile Downloaded</em> at the top; open it and Install.</li>
             <li>Settings → General → About → Certificate Trust Settings: turn on full trust for Shelf Companion.</li>
             <li>Close and reopen the Companion. Every preview port is trusted too.</li>
+            <li>Add to the Home Screen only after this step: an icon added earlier shows a letter instead of the Shelf mark. Remove it and add it again.</li>
           </ol>
           <p className="field-hint" style={{ margin: 0 }}>
             If Shelf replaces its certificate (it does once, for older ones iOS could not trust), the fingerprint

@@ -619,6 +619,14 @@ function MoreScreen({ overview, onUnpaired }: { overview: CompanionOverview | nu
             </small>
           </div>
         </li>
+        {!isStandalone() ? (
+          <li className="card">
+            <div className="row-main">
+              <strong>Add to the Home Screen</strong>
+              <small>In Safari: Share → Add to Home Screen. Trust the Mac’s certificate first (Settings → Companion on the Mac explains how) so the Shelf icon comes through; otherwise iOS shows a letter.</small>
+            </div>
+          </li>
+        ) : null}
         <li className="card">
           <div className="row-main">
             <strong>Everything lives on the Mac</strong>

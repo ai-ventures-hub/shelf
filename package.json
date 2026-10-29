@@ -46,7 +46,7 @@
     "smoke:companion": "tsc -p tsconfig.electron.json && node scripts/smoke-companion.mjs",
     "smoke:companion-preview": "npm run mcp:build && tsc -p tsconfig.electron.json && node scripts/smoke-companion-preview.mjs",
     "smoke:all": "node scripts/smoke-all.mjs",
-    "icon": "python3 scripts/generate-icon.py",
+    "icon": "python3 scripts/generate-icon.py && python3 scripts/generate-companion-icon.py",
     "package:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir --publish never",
     "dist:mac": "npm run icon && npm run build && env -u ELECTRON_RUN_AS_NODE electron-builder --mac --publish never",
     "dmg:background": "python3 scripts/generate-dmg-background.py",
@@ -97,7 +97,7 @@
         "to": "mcp"
       },
       {
-        "from": "build/icon.png",
+        "from": "build/companion-touch-icon.png",
         "to": "companion-icon.png"
       },
       {

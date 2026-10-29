@@ -487,7 +487,7 @@ export class CompanionServer {
         display: 'standalone',
         background_color: '#090d16',
         theme_color: '#090d16',
-        icons: [{ src: '/apple-touch-icon.png', sizes: '512x512', type: 'image/png' }],
+        icons: [{ src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
       }))
       return
     }
