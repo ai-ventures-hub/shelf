@@ -156,13 +156,16 @@ selected MCP tools. A universal child-MCP gateway remains out of scope.
   drafts. Capability gaps offer Start a new tool as their primary action,
   which closes the gap → build loop.
 
-## Proposed: v2.4 — Companion
+## v2.4 — Companion (released 2026-10-28, `v2.4.0`)
 
 Remote control and preview from a phone over the user's own network
-(Tailscale or LAN), with no Shelf-operated relay or account. Status,
-start/stop/restart, log tail, collections, and opt-in per-tool preview
-through a port-for-port proxy. Drafted 2026-10-28, not approved or
-built. See [`COMPANION.md`](COMPANION.md).
+(Tailscale recommended, or one LAN interface), with no Shelf-operated
+relay or account: a paired HTTPS server in the main process, QR pairing
+with hashed device tokens, a Home Screen web app (tools with real icons,
+list or grid, start/stop/restart, favorites, search), and opt-in per-tool
+preview through a proxy on its own port with a per-device grant. The
+desktop's IPC handlers moved into domain modules behind one typed channel
+map first. See [`COMPANION.md`](COMPANION.md).
 
 ## Later Community enhancements
 
