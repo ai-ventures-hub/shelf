@@ -684,7 +684,7 @@ export function LibraryPage({
               onStop={onStop}
               onOpenUrl={tool.url ? onOpenUrl : undefined}
               onToggleFavorite={onToggleFavorite}
-              onTogglePreview={onTogglePreview}
+              onTogglePreview={prefs.companionEnabled ? onTogglePreview : undefined}
             />
           ))}
           {prefs.viewMode === 'compact' && mode === 'all' && !query.trim() && !activeFilters.length && (

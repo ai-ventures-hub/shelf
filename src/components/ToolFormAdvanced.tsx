@@ -331,7 +331,7 @@ export function ToolFormAdvanced({
             </p>
           </div>
 
-          <div className="field span-2">
+          {prefs.companionEnabled || form.remotePreview ? <div className="field span-2">
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -345,7 +345,7 @@ export function ToolFormAdvanced({
               {remotePreviewBlocker(form) ||
                 'While this tool runs, Shelf opens its port to phones paired in Settings → Companion, on the Companion address only (Tailscale or the chosen network). A phone still needs a grant from the Companion to get in. A tool that already listens on every interface is reachable on your network regardless.'}
             </p>
-          </div>
+          </div> : null}
 
           <div className="field span-2">
             <label className="field-label" htmlFor="notes">

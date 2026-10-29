@@ -9,17 +9,18 @@ import fs from 'node:fs'
 import { buildActivityBoard } from '../shared/activity-board'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
 import { ensureCompanionCertificate, type CompanionCertificate } from '../shared/companion-cert'
-import type { CompanionStatus, PairedDeviceView } from '../shared/companion-contracts'
+import type { CompanionStatus, CompanionToolIcon, PairedDeviceView } from '../shared/companion-contracts'
 import {
   listCompanionInterfaces,
   resolveBindAddress,
   validateCompanionPort,
 } from '../shared/companion-net'
-import { previewBlocker, PreviewProxy, toolUrlHost, type PreviewTarget } from '../shared/companion-preview'
-import { CompanionServer, type CompanionHost } from '../shared/companion-server'
-import { CompanionDeviceStore } from '../shared/companion-store'
-import { companionToolIcon } from './companion-icons'
-import type { UiPrefs } from '../shared/contracts'
+import { previewBlocker, toolUrlHost } from '../shared/companion-preview-policy'
+import type { PreviewProxy, PreviewTarget } from '../shared/companion-preview'
+import type { CompanionHost, CompanionServer } from '../shared/companion-server'
+import { CompanionDeviceStore, companionDir } from '../shared/companion-store'
+import path from 'node:path'
+import type { Tool, UiPrefs } from '../shared/contracts'
 import type { DesignProfileStore } from '../shared/design-profile-store'
 import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
 import type { LibraryStore } from '../shared/library-store'
@@ -65,19 +66,31 @@ export class CompanionManager {
   private preview: PreviewProxy | null = null
   private previewSync: Promise<void> = Promise.resolve()
   private previewErrors = new Map<string, string>()
-  private readonly devices: CompanionDeviceStore
+  /** Created on first use so a Mac with Companion off never gets a companion/ folder. */
+  private deviceStore: CompanionDeviceStore | null = null
   private cert: CompanionCertificate | null = null
   private error: string | null = null
   private blockerId: number | null = null
   private releaseTimer: ReturnType<typeof setTimeout> | null = null
   private clientCount = 0
+  private iconFor: (tool: Tool) => CompanionToolIcon | null = () => null
   /** Serializes start/stop so two quick pref flips cannot interleave. */
   private pending: Promise<void> = Promise.resolve()
   /** What the running server was started with, to know when a pref change needs a restart. */
   private running: { address: string; port: number } | null = null
 
-  constructor(private readonly deps: CompanionManagerDeps) {
-    this.devices = new CompanionDeviceStore(deps.dataRoot)
+  constructor(private readonly deps: CompanionManagerDeps) {}
+
+  private get devices(): CompanionDeviceStore {
+    if (!this.deviceStore) this.deviceStore = new CompanionDeviceStore(this.deps.dataRoot)
+    return this.deviceStore
+  }
+
+  /** Paired devices without creating the store: none until a file exists. */
+  private listDevices(): PairedDeviceView[] {
+    if (this.deviceStore) return this.deviceStore.list()
+    if (!fs.existsSync(path.join(companionDir(this.deps.dataRoot), 'devices.json'))) return []
+    return this.devices.list()
   }
 
   /** Bring the server in line with prefs.json. Safe to call on every prefs change. */
@@ -121,6 +134,11 @@ export class CompanionManager {
     await this.stopServer()
     try {
       this.cert = this.cert || ensureCompanionCertificate(this.deps.dataRoot, interfaces.map((item) => item.address))
+      // The server (ws) and proxy modules load only when Companion is on.
+      const { CompanionServer } = await import('../shared/companion-server')
+      const { PreviewProxy } = await import('../shared/companion-preview')
+      const { companionToolIcon } = await import('./companion-icons')
+      this.iconFor = (tool) => companionToolIcon(tool, this.deps.store.getIconsDir())
       const server = new CompanionServer({
         host: this.host(),
         devices: this.devices,
@@ -231,7 +249,7 @@ export class CompanionManager {
       keepAwakeActive: this.blockerId !== null,
       connectedClients: this.clientCount,
       error: this.error,
-      devices: this.devices.list(),
+      devices: this.listDevices(),
       pairing: this.server?.pairingState() || null,
     }
   }
@@ -359,7 +377,7 @@ export class CompanionManager {
       startCollection: (collectionId, device) => startCollection(collectionId, { store, processes }, originFor(device)),
       stopCollection: (collectionId) => stopCollection(collectionId, { store, processes }),
       keepAwakeActive: () => this.blockerId !== null,
-      toolIcon: (tool) => companionToolIcon(tool, store.getIconsDir()),
+      toolIcon: (tool) => this.iconFor(tool),
       previewReady: (toolId) => Boolean(this.preview?.listening(toolId)),
       previewGrant: async (toolId, device) => {
         const tool = store.get(toolId)
