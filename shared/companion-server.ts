@@ -282,7 +282,7 @@ export class CompanionServer {
         return
       }
       if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'Method not allowed')
-      this.serveStatic(url.pathname, res)
+      await this.serveStatic(url.pathname, res)
     } catch (err) {
       if (res.headersSent) { res.end(); return }
       if (err instanceof HttpError) {
@@ -507,7 +507,28 @@ export class CompanionServer {
 
   // ---- static web app ---------------------------------------------------
 
-  private serveStatic(pathname: string, res: ServerResponse): void {
+  /**
+   * Whole-file reads, never streams. In a packaged Shelf the bundle lives in
+   * app.asar, and Electron's fs.open/createReadStream on an asar path copies
+   * the file to a temp file (.org.cjm.shelf.XXXXXX) that is cached for the
+   * life of the process. macOS purges temp files unused for three days, after
+   * which the cached copy is gone and the stream fails with ENOENT. readFile
+   * reads straight out of the archive. The files are small.
+   */
+  private async sendFile(res: ServerResponse, file: string, headers: Record<string, string>): Promise<void> {
+    let body: Buffer
+    try {
+      body = await fs.promises.readFile(file)
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === 'ENOENT' || code === 'EISDIR') throw new HttpError(404, 'Not found')
+      throw err
+    }
+    res.writeHead(200, { ...headers, 'content-length': String(body.length) })
+    res.end(body)
+  }
+
+  private async serveStatic(pathname: string, res: ServerResponse): Promise<void> {
     const root = this.options.staticRoot
     if (pathname === '/manifest.webmanifest') {
       res.writeHead(200, { 'content-type': 'application/manifest+json', 'cache-control': 'no-store' })
@@ -525,8 +546,7 @@ export class CompanionServer {
     if (pathname === '/apple-touch-icon.png' || pathname === '/icon.png') {
       const icon = this.options.iconPngPath
       if (icon && fs.existsSync(icon)) {
-        res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' })
-        fs.createReadStream(icon).pipe(res)
+        await this.sendFile(res, icon, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' })
         return
       }
       throw new HttpError(404, 'Not found')
@@ -543,14 +563,12 @@ export class CompanionServer {
       let real: string
       try { real = fs.realpathSync(candidate) } catch { throw new HttpError(404, 'Not found') }
       if (!real.startsWith(assetsDir + path.sep) || !fs.statSync(real).isFile()) throw new HttpError(404, 'Not found')
-      res.writeHead(200, { 'content-type': contentTypeFor(real), 'cache-control': 'public, max-age=31536000, immutable' })
-      fs.createReadStream(real).pipe(res)
+      await this.sendFile(res, real, { 'content-type': contentTypeFor(real), 'cache-control': 'public, max-age=31536000, immutable' })
       return
     }
     const index = path.join(root, 'companion', 'index.html')
     if (!fs.existsSync(index)) throw new HttpError(404, 'The companion web app is not built. Run npm run build.')
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
-    fs.createReadStream(index).pipe(res)
+    await this.sendFile(res, index, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
   }
 
   // ---- WebSocket ----------------------------------------------------------

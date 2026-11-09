@@ -375,6 +375,45 @@ async function live(iface) {
   assert.equal(manifest.status, 200)
   assert.equal(manifest.body.display, 'standalone')
 
+  // Static files are read whole, never streamed: in a packaged Shelf the
+  // bundle is inside app.asar, where fs.createReadStream extracts to a temp
+  // file that macOS purges after three days (ENOENT on the next phone load,
+  // reported from 2.4.1). The source check is the regression guard; the
+  // second server proves the whole-file path serves, 404s, and contains.
+  const serverSource = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '../shared/companion-server.ts'), 'utf8')
+  assert.equal(serverSource.includes('createReadStream('), false, 'companion-server must not stream files (asar temp-copy trap)')
+  const staticRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-companion-static-'))
+  fs.mkdirSync(path.join(staticRoot, 'companion'))
+  fs.mkdirSync(path.join(staticRoot, 'assets'))
+  fs.writeFileSync(path.join(staticRoot, 'companion', 'index.html'), '<!doctype html><title>Shelf Companion</title>')
+  fs.writeFileSync(path.join(staticRoot, 'assets', 'app.js'), 'console.log("phone")')
+  fs.writeFileSync(path.join(staticRoot, 'icon.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+  const served = new CompanionServer({ host, devices, tls: { key: cert.key, cert: cert.cert, fingerprint: cert.fingerprint }, staticRoot, iconPngPath: path.join(staticRoot, 'icon.png') })
+  const servedInfo = await served.listen(address, 0)
+  const raw = (route) => new Promise((resolve, reject) => {
+    https.get({ host: address, port: servedInfo.port, path: route, rejectUnauthorized: false }, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
+    }).on('error', reject)
+  })
+  const index = await raw('/')
+  assert.equal(index.status, 200)
+  assert.equal(index.headers['content-length'], String(index.body.length), 'whole-file response carries its length')
+  assert.match(index.body.toString(), /Shelf Companion/)
+  assert.equal((await raw('/tools/abc')).status, 200, 'every app route serves the index')
+  const asset = await raw('/assets/app.js')
+  assert.equal(asset.status, 200)
+  assert.match(asset.headers['content-type'], /javascript/)
+  assert.equal((await raw('/assets/missing.js')).status, 404)
+  assert.equal((await raw('/assets/..%2Fcompanion/index.html')).status, 404, 'no escape from assets')
+  const png = await raw('/apple-touch-icon.png')
+  assert.equal(png.status, 200)
+  assert.equal(png.body.length, 4)
+  await served.close()
+  fs.rmSync(staticRoot, { recursive: true, force: true })
+  console.log('OK: the phone bundle is served by whole-file reads with 404s for anything outside it')
+
   await server.close()
   assert.equal(server.listening, null)
   console.log('OK: companion server smoke passed')

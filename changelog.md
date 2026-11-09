@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: after Shelf had been running for a few days, opening the Companion
+  on the phone could stop with "A JavaScript error occurred in the main
+  process" naming a temp file. The phone bundle lives inside the app archive,
+  and streaming a file from there makes Electron copy it to a temp file that
+  macOS purges after three days of disuse. The Companion now reads its files
+  whole, straight from the archive.
+- Uncaught main-process errors are written with their stack to
+  ~/Library/Logs/Shelf/main-errors.log; Shelf keeps running and the dialog
+  names the log, once per distinct message.
+
 ## 2.4.1 - 2026-10-29
 
 - Companion: agent registrations reach the phone. When an agent (Codex,
