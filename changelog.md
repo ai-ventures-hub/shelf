@@ -1,6 +1,12 @@
 # Changelog
 
-## 2.4.2 - 2026-11-08
+## 2.4.3 - 2026-11-08
+
+2.4.2 was tagged but never built: its release run failed the dependency
+audit on a new advisory against joi, a dev-only dependency reached through
+wait-on. 2.4.3 is the same code with joi bumped to 18.3.2.
+
+### 2.4.2 (not released)
 
 - Fixed: after Shelf had been running for a few days, opening the Companion
   on the phone could stop with "A JavaScript error occurred in the main
