@@ -21,6 +21,7 @@ import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
 import { cleanStagingRoot } from '../shared/tool-share'
 import { placeWindow } from '../shared/window-placement'
 import { getAppUpdateState, initAutoUpdate, installDownloadedUpdate } from './auto-update'
+import { installMainErrorLog } from './main-errors'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -586,6 +587,9 @@ async function confirmPendingChanges(action: string): Promise<boolean> {
 }
 
 if (gotLock) {
+  // Before anything else runs: every uncaught error gets a stack in
+  // ~/Library/Logs/Shelf/main-errors.log instead of a message-only dialog.
+  installMainErrorLog()
   app.whenReady().then(() => {
     prefs = new PrefsStore()
     store = new LibraryStore()

@@ -38,6 +38,7 @@ async function main() {
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
   await run('phase 3 workflows', 'node', ['scripts/smoke-phase3.mjs'])
+  await run('main error log', 'node', ['scripts/smoke-main-errors.mjs'])
   await run('desktop UI state and navigation', 'node', ['scripts/smoke-desktop-ui.mjs'])
   await run('renderer classes and contrast', 'node', ['scripts/smoke-css-classes.mjs'])
   await run('phase 2 boundaries', 'node', ['scripts/smoke-phase2.mjs'])
