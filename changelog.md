@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.2 - 2026-11-08
 
 - Fixed: after Shelf had been running for a few days, opening the Companion
   on the phone could stop with "A JavaScript error occurred in the main
