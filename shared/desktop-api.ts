@@ -181,6 +181,7 @@ export interface ShelfApi {
   revokeCompanionDevice: (id: string) => Promise<CompanionStatus>
   renameCompanionDevice: (id: string, name: string) => Promise<CompanionStatus>
   exportCompanionCertificate: () => Promise<{ saved: boolean; path?: string }>
+  replaceCompanionCertificate: () => Promise<CompanionStatus>
   onCompanionStatus: (cb: (status: CompanionStatus) => void) => () => void
   submitOnboarding: (input: OnboardingSubmissionInput) => Promise<{ appVersion: string }>
   getDesignMd: (opts: { id?: string; projectPath?: string }) => Promise<DesignMdResult>

@@ -72,5 +72,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Onboarding route checks
+        run: npm run smoke:onboarding
+        env:
+          SHELF_REQUIRE_PG: '1'
+
       - name: Build
         run: npm run build

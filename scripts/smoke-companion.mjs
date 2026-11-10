@@ -27,7 +27,7 @@ const {
 } = require('../dist-electron/shared/companion-net.js')
 const { CompanionDeviceStore, hashDeviceToken } = require('../dist-electron/shared/companion-store.js')
 const { CompanionServer, toCompanionTool, mintPairingCode } = require('../dist-electron/shared/companion-server.js')
-const { ensureCompanionCertificate, certificateProblem } = require('../dist-electron/shared/companion-cert.js')
+const { ensureCompanionCertificate, certificateProblem, certificateCoversAddress, replaceCompanionCertificate } = require('../dist-electron/shared/companion-cert.js')
 const { LibraryStore } = require('../dist-electron/shared/library-store.js')
 const { ProcessManager } = require('../dist-electron/shared/process-manager.js')
 const { ReceiptStore } = require('../dist-electron/shared/receipt-store.js')
@@ -126,6 +126,25 @@ async function live(iface) {
   assert.equal(fs.statSync(cert.keyPath).mode & 0o777, 0o600, 'private key is 0600')
   const again = ensureCompanionCertificate(root, [address])
   assert.equal(again.fingerprint, cert.fingerprint, 'a good certificate is never regenerated')
+  assert.equal(certificateCoversAddress(cert.cert, address), true)
+  assert.equal(certificateCoversAddress(cert.cert, '192.0.2.123'), false)
+  const staleAddressRoot = fs.mkdtempSync(path.join(root, 'address-change-'))
+  const original = ensureCompanionCertificate(staleAddressRoot, ['192.0.2.123'])
+  const retained = ensureCompanionCertificate(staleAddressRoot, [address])
+  assert.equal(retained.fingerprint, original.fingerprint, 'address changes do not silently replace trusted certificates')
+  assert.equal(certificateCoversAddress(retained.cert, address), false)
+  const renewed = replaceCompanionCertificate(staleAddressRoot, [address])
+  assert.notEqual(renewed.fingerprint, original.fingerprint)
+  assert.equal(certificateCoversAddress(renewed.cert, address), true)
+  const backups = fs.readdirSync(path.dirname(renewed.certPath)).filter((name) => name.includes('.replaced-'))
+  assert.equal(backups.length, 2, 'explicit replacement preserves the old key and certificate')
+  assert.equal(fs.statSync(renewed.keyPath).mode & 0o777, 0o600)
+  // A crash between the key and certificate renames must recover a usable pair.
+  fs.writeFileSync(renewed.keyPath, cert.key)
+  const repaired = ensureCompanionCertificate(staleAddressRoot, [address])
+  const { createPrivateKey, X509Certificate } = require('node:crypto')
+  assert.equal(new X509Certificate(repaired.cert).checkPrivateKey(createPrivateKey(repaired.key)), true)
+  assert.ok(fs.readdirSync(path.dirname(repaired.certPath)).some((name) => name.includes('.key-mismatch-')))
   {
     const { X509Certificate } = await import('node:crypto')
     const parsed = new X509Certificate(cert.cert)
@@ -240,6 +259,7 @@ async function live(iface) {
 
   // No token → 401 with a fixed body; the same body for a wrong token.
   const anon = await request('GET', '/api/overview')
+  assert.equal((await request('GET', '//[', { headers: { connection: 'Upgrade', upgrade: 'websocket' } })).status, 400, 'malformed upgrade is rejected before authentication')
   assert.equal(anon.status, 401)
   const wrong = await request('GET', '/api/overview', { token: 'x'.repeat(43) })
   assert.equal(wrong.status, 401)
@@ -256,6 +276,7 @@ async function live(iface) {
   const code = pairing.url.split('#')[1].split('.')[0]
   assert.equal(code.length, 8)
   assert.equal((await request('POST', '/api/pair', { body: { code: 'ZZZZZZZZ' } })).status, 400, 'wrong code refused')
+  assert.equal((await request('POST', '/api/pair', { body: { code: 'é'.repeat(8) } })).status, 400, 'non-ASCII code is rejected without a byte-length exception')
   assert.ok(server.pairingState(), 'a wrong guess does not consume the code')
   const paired = await request('POST', '/api/pair', { body: { code: code.toLowerCase(), name: 'Smoke iPhone' } })
   assert.equal(paired.status, 200)
@@ -353,8 +374,7 @@ async function live(iface) {
 
   // Revoke: next request 401 and the live socket drops now.
   const closed = new Promise((resolve) => ws.on('close', (codeNum) => resolve(codeNum)))
-  assert.equal(devices.revoke(paired.body.device.id), true)
-  server.dropClientsOf(paired.body.device.id)
+  server.revokeDevice(paired.body.device.id)
   assert.equal(await closed, 4001, 'revoked phone loses its stream at once')
   assert.equal((await request('GET', '/api/overview', { token })).status, 401, 'revoked token is refused on the next request')
   assert.equal(clientCount, 0)
@@ -398,6 +418,7 @@ async function live(iface) {
     }).on('error', reject)
   })
   const index = await raw('/')
+  assert.equal((await raw('//[')).status, 400, 'malformed target returns a controlled response')
   assert.equal(index.status, 200)
   assert.equal(index.headers['content-length'], String(index.body.length), 'whole-file response carries its length')
   assert.match(index.body.toString(), /Shelf Companion/)

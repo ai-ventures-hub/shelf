@@ -63,6 +63,8 @@ export interface CompanionStatus {
   interfaces: CompanionInterface[]
   tailscaleDetected: boolean
   certFingerprint: string | null
+  /** A trusted certificate may need explicit replacement after an address change. */
+  certificateWarning?: string | null
   keepAwakeActive: boolean
   connectedClients: number
   /** Why the server is not running although enabled, in plain words. */

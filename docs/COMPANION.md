@@ -173,7 +173,7 @@ the grant cookie.
   tool sees an ordinary request on its own port and needs no change.
 - Access control: the proxy accepts a request only if it carries a
   Companion session cookie set by `/api/preview-grant/<toolId>` (which
-  itself requires the device token). The cookie is scoped to that port,
+  itself requires the device token). Each tool uses a distinct cookie name,
   short-lived (proposal: 8 hours), and revoked when the tool is stopped or
   the toggle is turned off. A bare browser hitting the port gets `401`.
 - Lifetime: the proxy listener exists only while the tool is running
@@ -182,8 +182,8 @@ the grant cookie.
   the proxy subscribes to it rather than polling.
 - Tool flag: `remotePreview?: boolean` on the tool schema in
   `shared/tool-validation.ts`. Additive and optional; no library
-  migration. Agents cannot set it over MCP (`shelf_upsert_tool` strips
-  it). It defaults off for every existing tool and every imported or
+  migration. Agents may request it over MCP (`shelf_upsert_tool`); new
+  folders still require draft acceptance. It defaults off for every existing tool and every imported or
   shared tool, and the import/consent sheet never offers it.
 
 **Known limits, stated in the UI, not hidden:**
@@ -224,9 +224,9 @@ to paired devices on the chosen interface while the tool runs.
 
 - Threat model: an attacker on the same tailnet or LAN. Mitigations:
   TLS with pinned fingerprint, bearer tokens hashed at rest, 2-minute
-  single-use pairing codes, per-port scoped preview cookies, no loopback
-  or `0.0.0.0` binding, rate limiting, Revoke that works on the next
-  request.
+  single-use pairing codes, distinct per-tool preview cookies, no loopback
+  or `0.0.0.0` binding, rate limiting, and revocation that closes active
+  preview connections and rejects subsequent requests.
 - Logs sent to the phone pass through the same masking the desktop uses;
   env values are never sent (the Companion has no tool editor).
 - Error reports (`buildErrorReport`) are available on the phone as text to
@@ -309,18 +309,29 @@ Built as specified, with these deviations and findings recorded:
 - **Grant flow:** the phone calls `POST /api/tools/:id/preview-grant`
   (device auth) and receives a one-time ticket URL on the proxy port
   (`/__shelf_grant?t=…`, 60 s, single use); opening it sets an
-  `HttpOnly; Secure; SameSite=Lax` cookie scoped to that port and redirects
+  `HttpOnly; Secure; SameSite=Lax` cookie named for that tool and redirects
   to `/`. Grants last 8 hours, die with the listener (tool stopped, toggle
-  off, Companion off) and with a revoked device.
+  off, Companion off) and with a revoked device. Desktop revocation and phone
+  self-unpair also close that device's active preview HTTP and WebSocket
+  connections. Cookies are shared across ports, so every tool uses a distinct
+  cookie name, and all Shelf preview cookies are stripped before forwarding.
+  Other host cookies are forwarded only when that backend issued the same
+  name and value to that device, with matching path/domain scope and valid
+  expiry. Cookies created only by browser scripts are
+  omitted, since the proxy cannot distinguish them from another service's cookies.
+  Cookie provenance lasts for the listener's lifetime; restarting a tool,
+  Companion, or Shelf may require signing into the previewed tool again.
 - **Lifecycle** follows `process:update` events through
   `CompanionManager.broadcast` plus the tools IPC save/delete and the data
   watcher, serialized so a quick stop/start cannot interleave.
-- **`remotePreview` is carried through, never set, by every non-GUI write
-  path.** `shelf_upsert_tool` passes the stored value explicitly; drafts,
-  shared-tool import, update, and catalog install build tools from explicit
-  fields. The library's write normalizer had to learn the field: it rebuilds
-  every stored tool field by field and was silently dropping the flag — the
-  preview smoke caught it.
+- **`remotePreview` survives library writes.** Agents may set or clear it
+  with `shelf_upsert_tool`; an omitted value preserves the stored flag.
+  New folders carry the request in a draft for the user to accept. Shared
+  imports, updates, and catalog installs keep their existing consent rules.
+- **Certificate address changes need explicit recovery.** Settings warns
+  when the saved certificate does not cover the selected address. Replace
+  certificate asks for confirmation, preserves the old pair, and restarts
+  Companion. Save and trust the new certificate on each phone afterward.
 - **0.0.0.0 detection is not attempted.** Shelf cannot know what a tool
   binds; the editor copy says a tool that already listens on every
   interface is reachable regardless. With the proxy on its own port, such a

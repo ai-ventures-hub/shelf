@@ -2,7 +2,7 @@
  * Companion Phase B: port-for-port preview proxy.
  *
  * For a running tool the user marked "Allow remote preview", Shelf listens on
- * `<companion bind address>:<tool.port>` and forwards to
+ * a dedicated port of the Companion interface and forwards to
  * `127.0.0.1:<tool.port>`, WebSocket upgrades included, so a dev server with
  * absolute asset URLs and an HMR socket works unchanged. The proxy terminates
  * TLS with the Companion certificate; the tool keeps serving plain HTTP on
@@ -10,20 +10,22 @@
  *
  * Access: a paired phone asks the Companion API for a ticket, opens
  * `/__shelf_grant?t=<ticket>` on the proxy port, and receives a cookie scoped
- * to that port. Tickets are single use and short lived; grants last eight
+ * to that tool. Tickets are single use and short lived; grants last eight
  * hours and die with the listener (tool stopped, toggle off, Companion off)
  * or with the device (revoked). A request without a valid grant gets 401 and
  * never a byte of the tool.
  *
  * Pure Node: the smoke suite runs it against a throwaway backend.
  */
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type { CompanionPreviewGrant } from './companion-contracts'
 import { isLoopbackAddress, isUnspecifiedAddress } from './companion-net'
+import { companionRequestUrl } from './companion-http'
+import { PREVIEW_COOKIE, forwardToolCookies, rememberToolCookies, type IssuedCookie } from './companion-cookies'
 
 export interface PreviewTarget {
   toolId: string
@@ -49,7 +51,7 @@ export interface PreviewProxyOptions {
   log?: (message: string) => void
 }
 
-export const PREVIEW_COOKIE = 'shelf_preview'
+export { PREVIEW_COOKIE } from './companion-cookies'
 export const PREVIEW_GRANT_PATH = '/__shelf_grant'
 const DEFAULT_TICKET_TTL_MS = 60_000
 const DEFAULT_GRANT_TTL_MS = 8 * 60 * 60 * 1000
@@ -68,6 +70,9 @@ interface Listener {
   tickets: Map<string, Credential>
   grants: Map<string, Credential>
   sockets: Set<Duplex>
+  connections: Map<string, Set<() => void>>
+  /** Only cookies issued by this backend to this device may return to it. */
+  cookies: Map<string, Map<string, IssuedCookie>>
 }
 
 const REFUSED_HTML = [
@@ -93,16 +98,16 @@ function parseCookies(header: string | undefined): Map<string, string> {
   return cookies
 }
 
-/** The forwarded Cookie header without Shelf's own grant; the tool never sees it. */
-function stripOwnCookie(header: string | undefined): string | undefined {
-  if (!header) return undefined
-  const kept = header.split(';').map((part) => part.trim()).filter((part) => part && !part.startsWith(`${PREVIEW_COOKIE}=`))
-  return kept.length ? kept.join('; ') : undefined
+function sameToken(a: string, b: string): boolean {
+  if (!/^[A-Za-z0-9_-]+$/.test(b)) return false
+  const left = Buffer.from(a, 'utf8')
+  const right = Buffer.from(b, 'utf8')
+  return left.length === right.length && timingSafeEqual(left, right)
 }
 
-function sameToken(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'))
+/** Cookies are shared across ports, so each tool needs a distinct cookie name. */
+export function previewCookieName(toolId: string): string {
+  return `${PREVIEW_COOKIE}_${createHash('sha256').update(toolId).digest('hex')}`
 }
 
 function lookup(map: Map<string, Credential>, offered: string): [string, Credential] | null {
@@ -170,6 +175,8 @@ export class PreviewProxy {
       tickets: new Map(),
       grants: new Map(),
       sockets: new Set(),
+      connections: new Map(),
+      cookies: new Map(),
     }
     server.on('request', (req, res) => this.handle(listener, req, res))
     server.on('upgrade', (req, socket, head) => this.upgrade(listener, req, socket, head))
@@ -215,6 +222,8 @@ export class PreviewProxy {
     this.listeners.delete(toolId)
     listener.tickets.clear()
     listener.grants.clear()
+    listener.cookies.clear()
+    for (const connections of listener.connections.values()) for (const close of [...connections]) close()
     for (const socket of listener.sockets) socket.destroy()
     listener.sockets.clear()
     await new Promise<void>((resolve) => listener.server.close(() => resolve()))
@@ -225,7 +234,7 @@ export class PreviewProxy {
     await Promise.all(this.activeToolIds().map((toolId) => this.release(toolId)))
   }
 
-  /** A one-time URL the phone opens to receive its grant cookie for the tool's port. */
+  /** A one-time URL the phone opens to receive the tool's grant cookie. */
   issueTicket(toolId: string, deviceId: string): CompanionPreviewGrant {
     const listener = this.listeners.get(toolId)
     if (!listener) throw new Error('Preview is not available for this tool right now.')
@@ -240,19 +249,35 @@ export class PreviewProxy {
     for (const listener of this.listeners.values()) {
       for (const [key, credential] of listener.tickets) if (credential.deviceId === deviceId) listener.tickets.delete(key)
       for (const [key, credential] of listener.grants) if (credential.deviceId === deviceId) listener.grants.delete(key)
+      for (const close of [...(listener.connections.get(deviceId) || [])]) close()
+      listener.cookies.delete(deviceId)
     }
   }
 
   // ---- requests ---------------------------------------------------------------
 
-  private authorized(listener: Listener, req: IncomingMessage): boolean {
-    const offered = parseCookies(req.headers.cookie).get(PREVIEW_COOKIE)
-    if (!offered) return false
-    return lookup(listener.grants, offered) !== null
+  private authorized(listener: Listener, req: IncomingMessage): Credential | null {
+    const offered = parseCookies(req.headers.cookie).get(previewCookieName(listener.target.toolId))
+    return offered ? lookup(listener.grants, offered)?.[1] || null : null
+  }
+
+  private track(listener: Listener, deviceId: string, close: () => void): () => void {
+    const connections = listener.connections.get(deviceId) || new Set<() => void>()
+    connections.add(close)
+    listener.connections.set(deviceId, connections)
+    return () => {
+      connections.delete(close)
+      if (!connections.size) listener.connections.delete(deviceId)
+    }
   }
 
   private handle(listener: Listener, req: IncomingMessage, res: ServerResponse): void {
-    const url = new URL(req.url || '/', listener.origin)
+    const url = companionRequestUrl(req.url, listener.origin)
+    if (!url) {
+      res.writeHead(400, { 'cache-control': 'no-store' })
+      res.end()
+      return
+    }
     if (url.pathname === PREVIEW_GRANT_PATH) {
       const offered = url.searchParams.get('t') || ''
       const found = offered ? lookup(listener.tickets, offered) : null
@@ -266,16 +291,17 @@ export class PreviewProxy {
       res.writeHead(302, {
         location: '/',
         'cache-control': 'no-store',
-        'set-cookie': `${PREVIEW_COOKIE}=${grant}; Path=/; Max-Age=${Math.floor(this.grantTtl / 1000)}; Secure; HttpOnly; SameSite=Lax`,
+        'set-cookie': `${previewCookieName(listener.target.toolId)}=${grant}; Path=/; Max-Age=${Math.floor(this.grantTtl / 1000)}; Secure; HttpOnly; SameSite=Lax`,
       })
       res.end()
       return
     }
-    if (!this.authorized(listener, req)) {
+    const credential = this.authorized(listener, req)
+    if (!credential) {
       this.refuse(res)
       return
     }
-    this.forward(listener, req, res)
+    this.forward(listener, req, res, credential.deviceId)
   }
 
   private refuse(res: ServerResponse): void {
@@ -283,13 +309,20 @@ export class PreviewProxy {
     res.end(REFUSED_HTML)
   }
 
-  private backendHeaders(listener: Listener, req: IncomingMessage): http.OutgoingHttpHeaders {
+  private rememberCookies(listener: Listener, deviceId: string, req: IncomingMessage, values: string[] | undefined): void {
+    if (!values?.length) return
+    const issued = listener.cookies.get(deviceId) || new Map<string, IssuedCookie>()
+    rememberToolCookies(issued, new URL(req.url!, listener.origin), values)
+    listener.cookies.set(deviceId, issued)
+  }
+
+  private backendHeaders(listener: Listener, req: IncomingMessage, deviceId: string): http.OutgoingHttpHeaders {
     const headers: http.OutgoingHttpHeaders = { ...req.headers }
     headers.host = `127.0.0.1:${listener.target.port}`
     headers['x-forwarded-host'] = req.headers.host || listener.origin.replace('https://', '')
     headers['x-forwarded-proto'] = 'https'
     headers['x-forwarded-for'] = req.socket.remoteAddress || ''
-    const cookie = stripOwnCookie(req.headers.cookie)
+    const cookie = forwardToolCookies(req.headers.cookie, listener.cookies.get(deviceId), new URL(req.url!, listener.origin))
     if (cookie) headers.cookie = cookie
     else delete headers.cookie
     return headers
@@ -302,24 +335,31 @@ export class PreviewProxy {
     return value.replace(loopback, listener.origin)
   }
 
-  private forward(listener: Listener, req: IncomingMessage, res: ServerResponse): void {
+  private forward(listener: Listener, req: IncomingMessage, res: ServerResponse, deviceId: string): void {
     const client = listener.target.backend === 'https' ? https : http
+    let response: IncomingMessage | undefined
     const upstream = client.request(
       {
         host: '127.0.0.1',
         port: listener.target.port,
         method: req.method,
         path: req.url,
-        headers: this.backendHeaders(listener, req),
+        headers: this.backendHeaders(listener, req, deviceId),
         rejectUnauthorized: false,
       },
       (backendRes) => {
+        response = backendRes
+        if (res.destroyed) { backendRes.destroy(); return }
+        this.rememberCookies(listener, deviceId, req, backendRes.headers['set-cookie'])
         const headers = { ...backendRes.headers }
         if (headers.location) headers.location = this.rewriteLocation(listener, headers.location)
         res.writeHead(backendRes.statusCode || 502, headers)
         backendRes.pipe(res)
       },
     )
+    const close = () => { upstream.destroy(); response?.destroy(); res.destroy() }
+    const untrack = this.track(listener, deviceId, close)
+    res.once('close', () => { untrack(); close() })
     upstream.on('error', (err) => {
       if (res.headersSent) { res.destroy(); return }
       res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
@@ -329,8 +369,10 @@ export class PreviewProxy {
   }
 
   private upgrade(listener: Listener, req: IncomingMessage, socket: Duplex, head: Buffer): void {
-    if (!this.authorized(listener, req)) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+    const url = companionRequestUrl(req.url, listener.origin)
+    const credential = url ? this.authorized(listener, req) : null
+    if (!credential) {
+      socket.write(`HTTP/1.1 ${url ? '401 Unauthorized' : '400 Bad Request'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
       socket.destroy()
       return
     }
@@ -340,10 +382,18 @@ export class PreviewProxy {
       port: listener.target.port,
       method: req.method,
       path: req.url,
-      headers: this.backendHeaders(listener, req),
+      headers: this.backendHeaders(listener, req, credential.deviceId),
       rejectUnauthorized: false,
     })
+    let backend: Duplex | undefined
+    const close = () => { upstream.destroy(); backend?.destroy(); socket.destroy() }
+    const untrack = this.track(listener, credential.deviceId, close)
+    socket.once('close', () => { untrack(); close() })
     upstream.on('upgrade', (backendRes, backendSocket, backendHead) => {
+      backend = backendSocket
+      if (socket.destroyed) { backendSocket.destroy(); return }
+      this.rememberCookies(listener, credential.deviceId, req, backendRes.headers['set-cookie'])
+      backendSocket.once('close', () => socket.destroy())
       const lines = [`HTTP/1.1 ${backendRes.statusCode} ${backendRes.statusMessage || 'Switching Protocols'}`]
       for (let i = 0; i < backendRes.rawHeaders.length; i += 2) {
         lines.push(`${backendRes.rawHeaders[i]}: ${backendRes.rawHeaders[i + 1]}`)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { ShelfMark } from '@/components/ShelfMark'
 import {
   APP_TABS,
@@ -130,7 +131,7 @@ export function AppShowcase() {
                       {MCP_CLIENTS.map((client) => (
                         <div className="mcp-client" key={client.id}>
                           <span className="logo-tile">
-                            <img src={client.logo} alt="" width={20} height={20} />
+                            <Image src={client.logo} alt="" width={20} height={20} />
                           </span>
                           <span className="mcp-client-id">
                             <span className="mcp-client-name">{client.name}</span>

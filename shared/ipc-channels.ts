@@ -143,6 +143,7 @@ export interface IpcInvokeMap {
   'companion:revokeDevice': ShelfApi['revokeCompanionDevice']
   'companion:renameDevice': ShelfApi['renameCompanionDevice']
   'companion:exportCertificate': ShelfApi['exportCompanionCertificate']
+  'companion:replaceCertificate': ShelfApi['replaceCompanionCertificate']
   // One-click MCP client connects
   'mcpClients:detect': ShelfApi['detectMcpClients']
   'claude:status': ShelfApi['getClaudeDesktopStatus']

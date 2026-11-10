@@ -37,6 +37,8 @@ async function main() {
   await run('process smoke', 'node', ['scripts/smoke-process.mjs'])
   await run('quick-open ranking', 'node', ['scripts/smoke-quick-open.mjs'])
   await run('electron compile', 'npx', ['tsc', '-p', 'tsconfig.electron.json'])
+  await run('atomic file locks', 'node', ['scripts/smoke-atomic-file.mjs'])
+  await run('renderer navigation boundaries', 'node', ['scripts/run-electron-smoke.mjs', 'scripts/smoke-navigation.cjs'])
   await run('phase 3 workflows', 'node', ['scripts/smoke-phase3.mjs'])
   await run('main error log', 'node', ['scripts/smoke-main-errors.mjs'])
   await run('desktop UI state and navigation', 'node', ['scripts/smoke-desktop-ui.mjs'])

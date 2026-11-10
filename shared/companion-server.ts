@@ -44,6 +44,7 @@ import type {
   ToolRuntimeState,
 } from './contracts'
 import type { MorningEvent } from './morning-board'
+import { companionRequestUrl } from './companion-http'
 
 /** What the server may do to Shelf. main.ts supplies the real thing. */
 export interface CompanionHost {
@@ -86,6 +87,7 @@ export interface CompanionServerOptions {
   iconPngPath?: string
   onClientsChanged?: (count: number) => void
   onDevicesChanged?: () => void
+  onDeviceRevoked?: (deviceId: string) => void
   log?: (message: string) => void
 }
 
@@ -274,9 +276,10 @@ export class CompanionServer {
   // ---- HTTP -----------------------------------------------------------
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url || '/', 'https://companion.invalid')
     const method = req.method || 'GET'
     try {
+      const url = companionRequestUrl(req.url, 'https://companion.invalid')
+      if (!url) throw new HttpError(400, 'Invalid request target')
       if (url.pathname.startsWith('/api/')) {
         await this.api(method, url, req, res)
         return
@@ -336,9 +339,7 @@ export class CompanionServer {
       if (method === 'GET') { this.json(res, 200, device); return }
       if (method === 'DELETE') {
         // The phone unpairs itself; its token dies with this request.
-        this.options.devices.revoke(device.id)
-        this.dropClientsOf(device.id)
-        this.options.onDevicesChanged?.()
+        this.revokeDevice(device.id)
         this.json(res, 200, { ok: true })
         return
       }
@@ -419,8 +420,9 @@ export class CompanionServer {
       return null
     }
     const offered = typeof body.code === 'string' ? body.code.trim().toUpperCase() : ''
-    if (offered.length !== live.code.length) return null
-    if (!timingSafeEqual(Buffer.from(offered, 'utf8'), Buffer.from(live.code, 'utf8'))) return null
+    const offeredBytes = Buffer.from(offered, 'utf8')
+    const expectedBytes = Buffer.from(live.code, 'utf8')
+    if (offeredBytes.length !== expectedBytes.length || !timingSafeEqual(offeredBytes, expectedBytes)) return null
     // Single use: the code dies the moment it matches, before the token exists.
     this.cancelPairing()
     const token = mintDeviceToken()
@@ -575,7 +577,11 @@ export class CompanionServer {
 
   private upgrade(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const remote = req.socket.remoteAddress || 'unknown'
-    const url = new URL(req.url || '/', 'https://companion.invalid')
+    const url = companionRequestUrl(req.url, 'https://companion.invalid')
+    if (!url) {
+      socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+      return
+    }
     const protocols = (req.headers['sec-websocket-protocol'] || '')
       .split(',')
       .map((item) => item.trim())
@@ -618,7 +624,15 @@ export class CompanionServer {
     })
   }
 
-  /** After a revoke: a connected phone loses its stream at once, not at its next request. */
+  /** Shared by desktop revocation and phone self-unpair, including preview access. */
+  revokeDevice(deviceId: string): void {
+    this.options.devices.revoke(deviceId)
+    this.dropClientsOf(deviceId)
+    this.options.onDeviceRevoked?.(deviceId)
+    this.options.onDevicesChanged?.()
+  }
+
+  /** A connected phone loses its stream at once, not at its next request. */
   dropClientsOf(deviceId: string): void {
     for (const [ws, device] of this.clients) {
       if (device.id !== deviceId) continue

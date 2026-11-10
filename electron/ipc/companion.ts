@@ -11,4 +11,5 @@ export function registerCompanionIpc(ctx: IpcContext): void {
   handle('companion:revokeDevice', (_e, id) => companion.revokeDevice(id))
   handle('companion:renameDevice', (_e, id, name) => companion.renameDevice(id, name))
   handle('companion:exportCertificate', () => companion.exportCertificate(ctx.getMainWindow()))
+  handle('companion:replaceCertificate', () => companion.replaceCertificate())
 }
