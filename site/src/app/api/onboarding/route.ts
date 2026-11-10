@@ -19,8 +19,8 @@ const RATE_LIMIT_PER_HOUR = 5
 
 async function hashClientIp(request: Request): Promise<string> {
   const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
+    // Vercel's canonical client IP, without interpreting a forwarding chain.
+    request.headers.get('x-real-ip')?.trim() ||
     'unknown'
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip))
   return Array.from(new Uint8Array(digest))
@@ -38,12 +38,21 @@ async function isRateLimited(ipHash: string): Promise<boolean> {
         submitted_at timestamptz NOT NULL DEFAULT now()
       )
     `
-    const rows = (await sql`
-      SELECT count(*)::int AS n FROM onboarding_throttle
-      WHERE ip_hash = ${ipHash} AND submitted_at > now() - interval '1 hour'
-    `) as Array<{ n: number }>
-    if ((rows[0]?.n ?? 0) >= RATE_LIMIT_PER_HOUR) return true
-    await sql`INSERT INTO onboarding_throttle (ip_hash) VALUES (${ipHash})`
+    // Each statement gets a fresh snapshot at READ COMMITTED. Acquire the
+    // per-IP transaction lock before the count/insert statement starts.
+    const [, rows] = await sql.transaction([
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${ipHash}, 0))`,
+      sql`
+        INSERT INTO onboarding_throttle (ip_hash)
+        SELECT ${ipHash}
+        WHERE (
+          SELECT count(*) FROM onboarding_throttle
+          WHERE ip_hash = ${ipHash} AND submitted_at > now() - interval '1 hour'
+        ) < ${RATE_LIMIT_PER_HOUR}
+        RETURNING ip_hash
+      `,
+    ], { isolationLevel: 'ReadCommitted' })
+    if (rows.length === 0) return true
     // Opportunistic pruning keeps the table tiny without a scheduled job.
     await sql`DELETE FROM onboarding_throttle WHERE submitted_at < now() - interval '7 days'`
     return false
@@ -70,7 +79,24 @@ export async function POST(request: Request) {
 
   let raw: string
   try {
-    raw = await request.text()
+    if (!request.body) return Response.json({ ok: false }, { status: 400 })
+    const reader = request.body.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel()
+        return Response.json({ ok: false }, { status: 413 })
+      }
+      chunks.push(value)
+    }
+    const bytes = new Uint8Array(size)
+    let offset = 0
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+    raw = new TextDecoder().decode(bytes)
   } catch {
     return Response.json({ ok: false }, { status: 400 })
   }

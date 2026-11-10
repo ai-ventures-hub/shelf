@@ -22,6 +22,7 @@ import { cleanStagingRoot } from '../shared/tool-share'
 import { placeWindow } from '../shared/window-placement'
 import { getAppUpdateState, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { installMainErrorLog } from './main-errors'
+import { installRendererNavigationGuard, SHELF_DEV_ORIGIN } from './navigation-policy'
 import {
   applyGlobalShortcut,
   destroyTray,
@@ -99,16 +100,9 @@ if (!gotLock) {
 // local file, dev is the Vite origin. Deny everything else at the source —
 // external links go through the validated shell.openExternal IPC instead.
 app.on('web-contents-created', (_event, contents) => {
-  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  contents.on('will-navigate', (event, url) => {
-    const isDevOrigin =
-      process.env.SHELF_DEV === '1' && url.startsWith('http://127.0.0.1:5173')
-    // Only the app's own bundle may load — any other file:// would carry the
-    // preload API into attacker-authored local HTML.
-    const ownBundle = url.startsWith(
-      `file://${path.join(__dirname, '../../dist/index.html')}`,
-    )
-    if (!isDevOrigin && !ownBundle) event.preventDefault()
+  installRendererNavigationGuard(contents, {
+    bundlePath: path.join(__dirname, '../../dist/index.html'),
+    devOrigin: isDev ? SHELF_DEV_ORIGIN : undefined,
   })
 })
 
@@ -316,7 +310,7 @@ function createWindow(): void {
 
 function loadRenderer(win: BrowserWindow): void {
   if (isDev) {
-    void win.loadURL('http://127.0.0.1:5173')
+    void win.loadURL(SHELF_DEV_ORIGIN)
   } else {
     // Packaged: …/app.asar/dist-electron/electron → ../../dist
     void win.loadFile(path.join(__dirname, '../../dist/index.html'))

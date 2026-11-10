@@ -7,13 +7,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke:onboarding": "node tests/smoke-onboarding.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/analytics": "^2.0.1",
     "lucide-react": "^1.27.0",
-    "next": "^16.3.4",
+    "next": "^16.4.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -22,7 +23,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "^16.3.4",
+    "eslint-config-next": "^16.4.6",
     "typescript": "^5"
+  },
+  "overrides": {
+    "minimatch@>=7 <11.0.1": "^11.0.5"
   }
 }

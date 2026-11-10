@@ -30,11 +30,40 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-smoke-preview-'))
 process.env.SHELF_DATA_ROOT = root
 
 const { listCompanionInterfaces } = require('../dist-electron/shared/companion-net.js')
-const { PreviewProxy, previewBlocker, PREVIEW_COOKIE } = require('../dist-electron/shared/companion-preview.js')
+const { PreviewProxy, previewBlocker, PREVIEW_COOKIE, previewCookieName } = require('../dist-electron/shared/companion-preview.js')
+const { CompanionServer } = require('../dist-electron/shared/companion-server.js')
+const { CompanionDeviceStore } = require('../dist-electron/shared/companion-store.js')
+const { rememberToolCookies, forwardToolCookies } = require('../dist-electron/shared/companion-cookies.js')
 const { ensureCompanionCertificate } = require('../dist-electron/shared/companion-cert.js')
 const { toolSchema } = require('../dist-electron/shared/tool-validation.js')
 const { LibraryStore } = require('../dist-electron/shared/library-store.js')
 const { WebSocketServer, WebSocket } = require('ws')
+
+// Duplicate cookie names retain their path identity, deletion, and expiry.
+{
+  const issued = new Map()
+  const at = Date.UTC(2026, 0, 1)
+  const url = new URL('https://192.0.2.10/nested/login')
+  rememberToolCookies(issued, url, [
+    'session=admin-value; Path=/admin',
+    'session=root-value; Path=/',
+    'spaced = abc ; Path=/',
+    'short=lived; Max-Age=1; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    'foreign=secret; Domain=another.invalid; Path=/',
+    `${PREVIEW_COOKIE}=never-forward; Path=/`,
+  ], at)
+  const header = 'session=admin-value; session=root-value; foreign=secret; admin=unrelated'
+  assert.equal(forwardToolCookies('spaced=abc', issued, url, at), 'spaced=abc', 'Set-Cookie whitespace is normalized like the browser')
+  assert.equal(forwardToolCookies(header, issued, new URL('https://192.0.2.10/admin/profile'), at), 'session=admin-value; session=root-value')
+  assert.equal(forwardToolCookies(header, issued, new URL('https://192.0.2.10/administrator'), at), 'session=root-value')
+  assert.equal(forwardToolCookies('short=lived', issued, new URL('https://192.0.2.10/nested/page'), at + 999), 'short=lived', 'default path and Max-Age precedence are retained')
+  assert.equal(forwardToolCookies('short=lived', issued, new URL('https://192.0.2.10/nested/page'), at + 1001), undefined)
+  rememberToolCookies(issued, url, ['session=deleted; Path=/admin; Max-Age=0'], at)
+  assert.equal(forwardToolCookies(header, issued, new URL('https://192.0.2.10/admin'), at), 'session=root-value', 'deletion affects only the matching cookie identity')
+  rememberToolCookies(issued, url, ['session=gone; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT'], at)
+  assert.equal(forwardToolCookies(header, issued, url, at), undefined)
+  console.log('OK: duplicate cookie names, path boundaries, expiry, deletion, default path, and foreign domain rejection')
+}
 
 // ---- static policy ---------------------------------------------------------------
 {
@@ -114,6 +143,7 @@ if (interfaces.length === 0) {
 async function live(address) {
   // Backend "tool" on loopback: echoes what it saw, redirects to itself, and echoes WebSocket frames.
   const seen = []
+  let backendStreamClosed
   const backend = http.createServer((req, res) => {
     seen.push({ url: req.url, host: req.headers.host, cookie: req.headers.cookie, forwardedHost: req.headers['x-forwarded-host'] })
     if (req.url === '/redirect') {
@@ -121,6 +151,14 @@ async function live(address) {
       res.end()
       return
     }
+    if (req.url === '/stream') {
+      backendStreamClosed = new Promise((resolve) => res.once('close', resolve))
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.write('stream started')
+      return
+    }
+    if (req.url === '/set-cookie') res.setHeader('set-cookie', 'tool_session=own-tool-value; Path=/; Secure; HttpOnly')
+    if (req.url === '/set-path-cookies') res.setHeader('set-cookie', ['session=admin-value; Path=/admin; Secure; HttpOnly', 'session=root-value; Path=/; Secure; HttpOnly'])
     res.writeHead(200, { 'content-type': 'text/plain' })
     res.end(`tool saw ${req.method} ${req.url}`)
   })
@@ -146,8 +184,8 @@ async function live(address) {
   assert.equal(await proxy.ensure({ toolId: 'tool', port, backend: 'http' }), origin, 'ensure is idempotent')
   console.log(`OK: proxy listening on ${origin} → 127.0.0.1:${port} (own port, not the tool’s)`)
 
-  const request = (p, { cookie, method = 'GET', headers = {} } = {}) => new Promise((resolve, reject) => {
-    const req = https.request({ host: address, port: lport, method, path: p, rejectUnauthorized: false, headers: { ...(cookie ? { cookie } : {}), ...headers } }, (res) => {
+  const request = (p, { cookie, method = 'GET', headers = {}, proxyPort = lport } = {}) => new Promise((resolve, reject) => {
+    const req = https.request({ host: address, port: proxyPort, method, path: p, rejectUnauthorized: false, headers: { ...(cookie ? { cookie } : {}), ...headers } }, (res) => {
       let text = ''
       res.on('data', (c) => { text += c })
       res.on('end', () => resolve({ status: res.statusCode, body: text, headers: res.headers }))
@@ -185,7 +223,7 @@ async function live(address) {
   assert.equal(granted.status, 302)
   assert.equal(granted.headers.location, '/')
   const setCookie = String(granted.headers['set-cookie'])
-  assert.match(setCookie, new RegExp(`^${PREVIEW_COOKIE}=[A-Za-z0-9_-]+; Path=/; Max-Age=\\d+; Secure; HttpOnly; SameSite=Lax$`))
+  assert.match(setCookie, new RegExp(`^${previewCookieName('tool')}=[A-Za-z0-9_-]+; Path=/; Max-Age=\\d+; Secure; HttpOnly; SameSite=Lax$`))
   const cookie = setCookie.split(';')[0]
   const reused = await request(new URL(ticket.url).pathname + new URL(ticket.url).search)
   assert.equal(reused.status, 401, 'a ticket is single use')
@@ -194,18 +232,51 @@ async function live(address) {
   assert.equal((await request(new URL(expiring.url).pathname + new URL(expiring.url).search)).status, 401, 'a ticket expires')
   console.log('OK: a ticket becomes a cookie once, then expires')
 
+  // Malformed request targets and non-ASCII credentials stay request-local.
+  assert.equal((await request('//[')).status, 400)
+  assert.equal((await request('/', { cookie: `${previewCookieName('tool')}=${'é'.repeat(43)}` })).status, 401)
+  assert.equal((await request('/__shelf_grant?t=' + encodeURIComponent('é'.repeat(32)))).status, 401)
+  assert.equal((await request('//[', { headers: { connection: 'Upgrade', upgrade: 'websocket' } })).status, 400)
+  console.log('OK: malformed targets and credentials are rejected without escaping the handler')
+
+  // A browser cookie jar shares a host across ports. Both tool cookies must survive.
+  await proxy.ensure({ toolId: 'other-tool', port, backend: 'http' })
+  const otherTicket = proxy.issueTicket('other-tool', 'device-1')
+  const otherGrant = await request(new URL(otherTicket.url).pathname + new URL(otherTicket.url).search, { proxyPort: proxy.listenPort('other-tool') })
+  const otherCookie = String(otherGrant.headers['set-cookie']).split(';')[0]
+  assert.notEqual(otherCookie.split('=')[0], cookie.split('=')[0])
+  const jar = `${cookie}; ${otherCookie}; ${PREVIEW_COOKIE}=legacy; other=1`
+  assert.equal((await request('/', { cookie: jar })).status, 200)
+  assert.equal((await request('/', { cookie: jar, proxyPort: proxy.listenPort('other-tool') })).status, 200)
+  assert.equal(seen.at(-1).cookie, undefined, 'Shelf and unrelated host cookies are stripped')
+  await proxy.release('other-tool')
+  console.log('OK: two previews coexist in a host cookie jar without leaking grants to tools')
+
   // With the cookie: proxied, cookie stripped, host rewritten, forwarded headers present.
   const ok = await request('/hello?x=1', { cookie: `other=1; ${cookie}` })
   assert.equal(ok.status, 200)
   assert.equal(ok.body, 'tool saw GET /hello?x=1')
   const last = seen.at(-1)
   assert.equal(last.host, `127.0.0.1:${port}`, 'Host is rewritten to loopback so dev servers accept it')
-  assert.equal(last.cookie, 'other=1', 'the grant cookie never reaches the tool; other cookies do')
+  assert.equal(last.cookie, undefined, 'neither grant cookies nor unrelated host cookies reach the tool')
   assert.equal(last.forwardedHost, `${address}:${lport}`)
   const redirected = await request('/redirect', { cookie })
   assert.equal(redirected.status, 302)
   assert.equal(redirected.headers.location, `${origin}/after`, 'loopback redirects land back on the proxy')
   console.log('OK: granted requests are proxied with Host rewritten and the grant stripped')
+
+  await request('/set-cookie', { cookie })
+  assert.equal((await request('/', { cookie: `${cookie}; tool_session=own-tool-value; admin=foreign-secret` })).status, 200)
+  assert.equal(seen.at(-1).cookie, 'tool_session=own-tool-value', 'the tool receives only its own issued cookie')
+  await request('/', { cookie: `${cookie}; tool_session=another-admin-secret` })
+  assert.equal(seen.at(-1).cookie, undefined, 'a same-name foreign cookie is not disclosed')
+  console.log('OK: backend-issued cookies round-trip without disclosing other services’ cookies')
+  await request('/set-path-cookies', { cookie })
+  const scopedCookies = `${cookie}; session=admin-value; session=root-value; foreign=secret`
+  await request('/admin', { cookie: scopedCookies })
+  assert.equal(seen.at(-1).cookie, 'session=admin-value; session=root-value', 'both server-issued path cookies reach the backend in browser order')
+  await request('/administrator', { cookie: scopedCookies })
+  assert.equal(seen.at(-1).cookie, 'session=root-value', 'a path prefix alone is insufficient')
 
   // WebSocket upgrade reaches the tool; without the cookie it is refused.
   const echoed = await new Promise((resolve, reject) => {
@@ -224,15 +295,52 @@ async function live(address) {
   })
   console.log('OK: WebSocket upgrades reach the tool only with a grant')
 
-  // Revoke the device: its cookie dies.
-  proxy.revokeDevice('device-1')
-  assert.equal((await request('/', { cookie })).status, 401, 'revoked device loses its grant')
   // A second device keeps its own grant.
   const t2 = proxy.issueTicket('tool', 'device-2')
   const g2 = await request(new URL(t2.url).pathname + new URL(t2.url).search)
   const cookie2 = String(g2.headers['set-cookie']).split(';')[0]
   assert.equal((await request('/', { cookie: cookie2 })).status, 200)
+  await request('/', { cookie: `${cookie2}; tool_session=own-tool-value` })
+  assert.equal(seen.at(-1).cookie, undefined, 'cookie provenance is per device')
+
+  // Revoke during an established WebSocket and streaming HTTP response.
+  const backendConnection = new Promise((resolve) => wss.once('connection', resolve))
+  const active = new WebSocket(`wss://${address}:${lport}/ws`, { rejectUnauthorized: false, headers: { cookie } })
+  await new Promise((resolve, reject) => { active.once('open', resolve); active.once('error', reject) })
+  const backendSocket = await backendConnection
+  const backendWsClosed = new Promise((resolve) => backendSocket.once('close', resolve))
+  const stream = await new Promise((resolve, reject) => {
+    https.get({ host: address, port: lport, path: '/stream', rejectUnauthorized: false, headers: { cookie } }, (res) => {
+      res.once('data', () => resolve(res))
+      res.on('error', () => {})
+    }).on('error', reject)
+  })
+  const timeout = setTimeout(() => { throw new Error('revocation left an active preview connection open') }, 3000)
+  const wsClosed = new Promise((resolve) => active.once('close', resolve))
+  const streamClosed = new Promise((resolve) => stream.once('close', resolve))
+  proxy.revokeDevice('device-1')
+  await Promise.all([wsClosed, streamClosed, backendWsClosed, backendStreamClosed])
+  clearTimeout(timeout)
+  assert.equal((await request('/', { cookie })).status, 401, 'revoked device loses its grant')
+  assert.equal((await request('/', { cookie: cookie2 })).status, 200, 'other devices stay authorized')
   console.log('OK: revoking one device leaves the other device’s grant intact')
+
+  // Self-unpair uses exactly the same server revocation operation as the Mac.
+  const devices = new CompanionDeviceStore(root)
+  const token = 'p'.repeat(43)
+  const device = devices.create('Self-unpair fixture', token)
+  const pendingTicket = proxy.issueTicket('tool', device.id)
+  const selfTicket = proxy.issueTicket('tool', device.id)
+  const selfGrant = await request(new URL(selfTicket.url).pathname + new URL(selfTicket.url).search)
+  const selfCookie = String(selfGrant.headers['set-cookie']).split(';')[0]
+  const companion = new CompanionServer({ host: {}, devices, tls: cert, onDeviceRevoked: (id) => proxy.revokeDevice(id) })
+  const companionInfo = await companion.listen(address, 0)
+  assert.equal((await request('/api/me', { proxyPort: companionInfo.port, method: 'DELETE', headers: { authorization: `Bearer ${token}` } })).status, 200)
+  assert.equal(devices.authenticate(token), null)
+  assert.equal((await request('/', { cookie: selfCookie })).status, 401)
+  assert.equal((await request(new URL(pendingTicket.url).pathname + new URL(pendingTicket.url).search)).status, 401)
+  await companion.close()
+  console.log('OK: self-unpair revokes device tokens, preview tickets, and preview grants')
 
   // Release: the port closes and grants are gone.
   await proxy.release('tool')

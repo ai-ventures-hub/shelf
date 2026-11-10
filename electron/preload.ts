@@ -129,6 +129,7 @@ const api = {
   revokeCompanionDevice: (id) => invoke('companion:revokeDevice', id),
   renameCompanionDevice: (id, name) => invoke('companion:renameDevice', id, name),
   exportCompanionCertificate: () => invoke('companion:exportCertificate'),
+  replaceCompanionCertificate: () => invoke('companion:replaceCertificate'),
   onCompanionStatus: (cb) => on('companion:status', cb),
   submitOnboarding: (input) => invoke('onboarding:submit', input),
 

@@ -26,6 +26,12 @@ let drafts = [{ id: 'draft-1', name: 'Delta Draft', projectPath: root, launchCom
 let boardFails = true
 const counts = { logs: 0, gaps: 0, suggestions: 0, receipts: 0 }
 const calls = []
+let companionStatus = {
+  enabled: false, running: false, url: null, bindAddress: null, port: 48620,
+  interfaces: [], tailscaleDetected: false, certFingerprint: 'fixture',
+  certificateWarning: 'The saved certificate does not cover this address. Replace it and trust the new certificate on your phone.',
+  keepAwakeActive: false, connectedClients: 0, error: null, devices: [], pairing: null,
+}
 const errors = []
 const fixtureLines = Array.from({ length: 30 }, (_, i) => ({ id: `l${i}`, toolId: 'ux-0', stream: 'stdout', text: `boot line ${i}`, at: new Date().toISOString() }))
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -197,6 +203,23 @@ async function run(win) {
   await until(`document.documentElement.dataset.theme==='light' && document.querySelectorAll('.tool-card').length===2`)
   await capture('library-light')
 
+  // Address-change recovery requires explicit confirmation and updates status.
+  await js(`location.hash='#/settings?section=companion'`)
+  await until(`!!document.querySelector('.warning-card[role=alert] button')`, 'certificate warning action')
+  win.setSize(900, 600)
+  await pause(150)
+  assert.equal(await js(`document.documentElement.scrollWidth<=innerWidth`), true, 'certificate recovery fits the minimum window')
+  await click('.warning-card[role=alert] button')
+  await until(`!!document.querySelector('dialog[open]')`)
+  await js(`[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Keep certificate').click()`)
+  await until(`!document.querySelector('dialog[open]')`)
+  assert.equal(calls.some(c => c[0] === 'replace-certificate'), false)
+  await click('.warning-card[role=alert] button')
+  await until(`!!document.querySelector('dialog[open]')`)
+  await js(`[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Replace certificate').click()`)
+  await until(`!document.querySelector('.warning-card[role=alert]')`, 'replacement clears the warning')
+  assert.equal(calls.filter(c => c[0] === 'replace-certificate').length, 1)
+
   assert.equal(errors.length, 0, errors.join('\n'))
   console.log('OK: route focus and titles, filter and menu keyboard access, clean views, card failures, finished scripts, push refresh, shared drafts, activity errors, streamed output, confirm dialog, Quick Open actions and toasts')
 }
@@ -230,6 +253,12 @@ app.whenReady().then(() => {
     },
     'process:stop': (_e, id) => { calls.push(['stop', id]); return { toolId: id, status: 'stopped' } },
     'system:openUrl': (_e, url) => { calls.push(['open', url]) },
+    'companion:status': () => companionStatus,
+    'companion:replaceCertificate': () => {
+      calls.push(['replace-certificate'])
+      companionStatus = { ...companionStatus, certificateWarning: null, certFingerprint: 'replacement-fixture' }
+      return companionStatus
+    },
   }
   for (const [channel, handler] of Object.entries(handlers)) { ipcMain.removeHandler(channel); ipcMain.handle(channel, handler) }
 })

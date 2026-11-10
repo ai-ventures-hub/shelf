@@ -84,6 +84,27 @@ export function CompanionSettings() {
           {status?.running ? <span className="muted mono" style={{ fontSize: '.8rem' }}>On · {status.url}</span> : null}
         </div>
         <div className="panel-body stack">
+          {status?.certificateWarning ? (
+            <div className="warning-card" role="alert">
+              <p>{status.certificateWarning}</p>
+              <button
+                type="button"
+                className="btn btn-quiet"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Replace Companion certificate?',
+                    message: 'Connected phones will disconnect. Save the new certificate and install and trust it on each phone before reconnecting.',
+                    confirmLabel: 'Replace certificate',
+                    cancelLabel: 'Keep certificate',
+                  })
+                  if (ok) void run(() => window.shelf.replaceCompanionCertificate(), 'Could not replace the certificate.')
+                }}
+              >
+                Replace certificate…
+              </button>
+            </div>
+          ) : null}
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             See, start, stop, and read the logs of your tools from your phone. Shelf serves a small
             web app on this Mac over your own network — <strong>Tailscale is the recommended way</strong> to

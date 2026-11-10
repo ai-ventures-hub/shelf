@@ -8,7 +8,7 @@
  * it is talking to this Mac; Settings can also save the certificate so the
  * user installs and trusts it on the phone.
  */
-import { X509Certificate } from 'node:crypto'
+import { createPrivateKey, X509Certificate } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -43,6 +43,37 @@ export function displayFingerprint(hex: string): string {
   return (hex.match(/.{1,2}/g) || []).join(':').toUpperCase()
 }
 
+export function certificateCoversAddress(certPem: string, address: string): boolean {
+  try {
+    return new X509Certificate(certPem).checkIP(address) !== undefined
+  } catch {
+    return false
+  }
+}
+
+/** Explicit replacement only. Generate first and preserve the previous trusted pair. */
+export function replaceCompanionCertificate(root: string, sanAddresses: string[]): CompanionCertificate {
+  const dir = companionDir(root)
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const candidate = fs.mkdtempSync(path.join(dir, 'replacement-'))
+  try {
+    const keyPath = path.join(dir, 'companion-key.pem')
+    const certPath = path.join(dir, 'companion-cert.pem')
+    const newKey = path.join(candidate, 'key.pem')
+    const newCert = path.join(candidate, 'cert.pem')
+    generate(newKey, newCert, sanAddresses, '/usr/bin/openssl')
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    for (const file of [keyPath, certPath]) {
+      if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.replaced-${stamp}`, fs.constants.COPYFILE_EXCL)
+    }
+    fs.renameSync(newKey, keyPath)
+    fs.renameSync(newCert, certPath)
+    return ensureCompanionCertificate(root, sanAddresses)
+  } finally {
+    fs.rmSync(candidate, { recursive: true, force: true })
+  }
+}
+
 /**
  * Load the certificate, generating it on first use. `sanAddresses` are the
  * IPv4 addresses baked into subjectAltName at generation time only; an
@@ -69,6 +100,7 @@ export function ensureCompanionCertificate(
   try {
     fingerprint = fingerprintOf(cert)
     reason = certificateProblem(cert)
+    if (!reason && !new X509Certificate(cert).checkPrivateKey(createPrivateKey(key))) reason = 'key-mismatch'
   } catch {
     fingerprint = ''
     reason = 'unreadable'

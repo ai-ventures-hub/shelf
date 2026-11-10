@@ -192,6 +192,15 @@ commands and notes — agents see which keys exist, never the values.
 
 Requires macOS and Node.js 22.12 or newer.
 
+The temporary minimatch overrides in both package manifests patch the packaging and lint
+dependency trees. Remove them when those upstream dependencies adopt a fixed minimatch
+range, then rerun both dependency audits and the packaging and lint checks.
+
+Store writes use owner-marked lock directories. Crash recovery preserves live
+owners even when a lock is old. Legacy file locks are preserved and time out;
+an orphaned lock from an older build needs manual recovery after all older
+Shelf and MCP processes have stopped.
+
 ```bash
 npm install
 npm run electron:dev

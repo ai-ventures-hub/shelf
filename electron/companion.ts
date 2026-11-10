@@ -8,7 +8,7 @@ import { app, dialog, powerSaveBlocker, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import { buildActivityBoard } from '../shared/activity-board'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
-import { ensureCompanionCertificate, type CompanionCertificate } from '../shared/companion-cert'
+import { certificateCoversAddress, ensureCompanionCertificate, replaceCompanionCertificate, type CompanionCertificate } from '../shared/companion-cert'
 import type { CompanionDraft, CompanionStatus, CompanionToolIcon, PairedDeviceView } from '../shared/companion-contracts'
 import {
   listCompanionInterfaces,
@@ -157,6 +157,7 @@ export class CompanionManager {
         iconPngPath: this.deps.iconPngPath,
         onClientsChanged: (count) => this.onClientsChanged(count),
         onDevicesChanged: () => this.publish(),
+        onDeviceRevoked: (id) => this.preview?.revokeDevice(id),
         log: (message) => console.log(`[shelf] ${message}`),
       })
       await server.listen(bind.address, port)
@@ -247,6 +248,7 @@ export class CompanionManager {
     const prefs = this.deps.prefs.get()
     const interfaces = listCompanionInterfaces()
     const listening = this.server?.listening || null
+    const bind = resolveBindAddress(prefs.companionBindAddress, interfaces)
     return {
       enabled: prefs.companionEnabled,
       running: Boolean(listening),
@@ -256,6 +258,9 @@ export class CompanionManager {
       interfaces,
       tailscaleDetected: interfaces.some((item) => item.tailscale),
       certFingerprint: this.cert?.fingerprintDisplay || null,
+      certificateWarning: this.cert && bind.ok && !certificateCoversAddress(this.cert.cert, bind.address)
+        ? `The saved certificate does not cover ${bind.address}. Replace it and trust the new certificate on your phone.`
+        : null,
       keepAwakeActive: this.blockerId !== null,
       connectedClients: this.clientCount,
       error: this.error,
@@ -278,9 +283,8 @@ export class CompanionManager {
   }
 
   revokeDevice(id: string): CompanionStatus {
-    this.devices.revoke(id)
-    this.server?.dropClientsOf(id)
-    this.preview?.revokeDevice(id)
+    if (this.server) this.server.revokeDevice(id)
+    else this.devices.revoke(id)
     this.publish()
     return this.status()
   }
@@ -289,6 +293,22 @@ export class CompanionManager {
     this.devices.rename(id, name)
     this.publish()
     return this.status()
+  }
+
+  /** Explicit replacement after an address change; phones must trust the new pair. */
+  replaceCertificate(): Promise<CompanionStatus> {
+    const operation = this.pending.then(async () => {
+      const interfaces = listCompanionInterfaces()
+      const bind = resolveBindAddress(this.deps.prefs.get().companionBindAddress, interfaces)
+      if (!bind.ok) throw new Error(bind.reason)
+      const cert = replaceCompanionCertificate(this.deps.dataRoot, interfaces.map((item) => item.address))
+      await this.stopServer()
+      this.cert = cert
+      await this.reconcile()
+      return this.status()
+    })
+    this.pending = operation.then(() => undefined, () => undefined)
+    return operation
   }
 
   /** Save the certificate so the phone can install and trust it. */
@@ -426,6 +446,7 @@ export class CompanionManager {
         }
         const failure = this.previewErrors.get(toolId)
         if (failure) throw new Error(failure)
+        if (!this.devices.list().some((item) => item.id === device.id)) throw new Error('This device is no longer paired.')
         return this.preview.issueTicket(toolId, device.id)
       },
       listDrafts,

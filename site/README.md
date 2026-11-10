@@ -13,6 +13,13 @@ npm run dev
 
 ## Deploy
 
+`npm run smoke:onboarding` checks request validation and the throttle policy.
+When PostgreSQL's `pg_config`, `initdb`, and `pg_ctl` are installed, it also
+starts a throwaway database on a private Unix socket and verifies concurrent
+admission, expiry, and pruning. No configured Neon database is used. Set
+`SHELF_TEST_PG_BIN_DIR` to select another local PostgreSQL installation.
+CI sets `SHELF_REQUIRE_PG=1` so missing PostgreSQL fails the check.
+
 Vercel project: **shelf-site** on team [carlos-projects-882b0b3c](https://vercel.com/carlos-projects-882b0b3c/shelf-site) (AI Ventures).
 
 Git integration is connected to `ai-ventures-hub/shelf` with **Root Directory** = `site` — pushes to `main` that touch `site/` deploy to production automatically.
