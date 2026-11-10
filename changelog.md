@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.4.4 - 2026-11-09
+
+- Revoking or unpairing a phone now closes its active previews and invalidates
+  every preview ticket and grant immediately.
+- Multiple previews keep separate access cookies. Only cookies issued by the
+  previewed tool return to it, with their path, domain, and expiry preserved.
+  Restarting a preview may require signing into that tool again; cookies
+  created only by browser scripts are omitted.
+- Companion settings diagnose certificate address changes and offer confirmed
+  replacement. Previous certificates are preserved, and interrupted key/cert
+  replacement recovers a usable pair.
+- Store writes recover stale directory locks without removing a live writer's
+  lock. Legacy file-lock orphans remain preserved for manual recovery after
+  older Shelf and MCP processes stop.
+- Malformed Companion requests are rejected safely. Renderer navigation and
+  redirects accept only the app's exact bundle or development origin.
+- Onboarding submissions enforce the hourly cap under concurrent requests and
+  stop reading oversized streamed bodies. CI requires its PostgreSQL regression.
+- Updated Next.js and affected minimatch dependencies to clear known advisories,
+  and removed the marketing site's image lint warning.
+
 ## 2.4.3 - 2026-11-08
 
 2.4.2 was tagged but never built: its release run failed the dependency
