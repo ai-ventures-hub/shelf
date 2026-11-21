@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.5 - 2026-11-21
 
 - Fixed Companion preview proxy bugs: previews now support IPv6-only (`::1`)
   dev servers in addition to `127.0.0.1`, never bind on a tool's own port or
