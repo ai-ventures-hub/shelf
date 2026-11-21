@@ -19,6 +19,7 @@ import { ReceiptStore } from '../shared/receipt-store'
 import { TeamCatalogStore } from '../shared/team-catalog-store'
 import { saveUpdateResume, takeUpdateResume } from '../shared/update-resume'
 import { cleanStagingRoot } from '../shared/tool-share'
+import { cleanStaleOperations } from '../shared/process-operation'
 import { placeWindow } from '../shared/window-placement'
 import { getAppUpdateState, initAutoUpdate, installDownloadedUpdate } from './auto-update'
 import { installMainErrorLog } from './main-errors'
@@ -148,12 +149,28 @@ app.on('second-instance', (_event, argv) => {
   showOrCreateWindow(getDesktopHost())
 })
 
+/**
+ * Channels that carry explicit user-initiated navigation or dialogs and should
+ * still be queued while a window is being created/reloaded. Live telemetry
+ * (logs/process/receipts) is fetched fresh on window mount and must not replay
+ * stale bursts hours later when the window reopens.
+ */
+const QUEUEABLE_WITHOUT_WINDOW = new Set([
+  'app:navigate',
+  'app:quick-open',
+  'app:add-folder',
+  'app:add-shared',
+  'app:shortcut-status',
+])
+
 function sendToRenderer(channel: string, ...args: unknown[]): void {
-  if (
-    !mainWindow ||
-    mainWindow.isDestroyed() ||
-    mainWindow.webContents.isLoadingMainFrame()
-  ) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (!QUEUEABLE_WITHOUT_WINDOW.has(channel)) return
+    pendingRendererMessages.push({ channel, args })
+    if (pendingRendererMessages.length > 50) pendingRendererMessages.shift()
+    return
+  }
+  if (mainWindow.webContents.isLoadingMainFrame()) {
     pendingRendererMessages.push({ channel, args })
     // Prevent a long-hidden or failed window from growing this queue forever.
     if (pendingRendererMessages.length > 200) pendingRendererMessages.shift()
@@ -594,8 +611,9 @@ if (gotLock) {
     designProfiles = new DesignProfileStore()
     teamCatalogs = new TeamCatalogStore()
     toolDrafts = new ToolDraftStore()
-    // Scratch clones from adds that never reached approve/cancel.
+    // Scratch clones from adds that never reached approve/cancel, plus old operation files.
     cleanStagingRoot(store.getRoot())
+    cleanStaleOperations(store.getRoot())
     processes = new ProcessManager(store, {
       receipts,
       defaultOrigin: () => ({ kind: 'gui' }),

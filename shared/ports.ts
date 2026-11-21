@@ -18,6 +18,8 @@ export interface FreePortOptions {
   to?: number
   /** How many free candidates to return (default 5). */
   count?: number
+  /** Ports reserved elsewhere (e.g. stopped library tools, Companion) to skip. */
+  exclude?: Iterable<number>
 }
 
 export interface FreePortResult {
@@ -204,16 +206,18 @@ export async function findFreePort(
   const from = options.from ?? 3000
   const to = options.to ?? 3999
   const count = Math.max(1, options.count ?? 5)
+  const excluded = new Set<number>(options.exclude ?? [])
   const candidates: number[] = []
 
   let preferredFree = false
-  if (preferred && preferred >= 1 && preferred <= 65535) {
+  if (preferred && preferred >= 1 && preferred <= 65535 && !excluded.has(preferred)) {
     preferredFree = await isPortFree(preferred)
     if (preferredFree) candidates.push(preferred)
   }
 
   for (let port = from; port <= to && candidates.length < count; port++) {
     if (preferred && port === preferred) continue
+    if (excluded.has(port)) continue
     if (await isPortFree(port)) candidates.push(port)
   }
 

@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+- Fixed Companion preview proxy bugs: previews now support IPv6-only (`::1`)
+  dev servers in addition to `127.0.0.1`, never bind on a tool's own port or
+  other reserved library/Companion ports (preventing 5-second running/error
+  oscillation and port-65535 collisions), rewrite `Origin`/`Referer` headers
+  for CSRF-checked local frameworks, block backend `Set-Cookie` headers from
+  targeting Shelf's `shelf_preview*` grant cookies, and strip loopback
+  `Domain=` attributes so Safari keeps backend session cookies.
+- Added a 30-second WebSocket ping/pong heartbeat and send-buffer cap to the
+  Companion server so suspended mobile sockets are cleaned up and
+  `powerSaveBlocker` releases reliably; malformed URL percent-encoding now
+  returns HTTP 400 instead of 500.
+- Fixed Companion phone UI bugs and improved log debugging: `ToolLog` no
+  longer re-fetches on every status update and keeps auto-scrolling past 300
+  lines, `Stop` can now cancel a tool while it is still `starting`, removed
+  tools no longer linger in the running count or app badge, and the log pane
+  adds an Errors toggle and text filter.
+- Hardened tool URL validation: `LibraryStore` now enforces `http://` and
+  `https://` URLs on write, and the menu bar tray routes **Open URL** through
+  `system.openUrl()` instead of `shell.openExternal()`.
+- Fixed MCP server bugs and expanded `shelf_get_logs`: `shelf_upsert_tool`
+  now merges partial `env` updates onto stored secrets (with explicit
+  `unsetEnvKeys` for deletion), excludes reserved library/draft ports during
+  `autoFixPort`, and returns structured errors on save failures;
+  `shelf_get_logs` accepts `stream` and `query` filters;
+  `CapabilityGapStore.update()` enforces closed-gap refusal atomically inside
+  the file lock.
+- Hardened process supervision and storage: `reconcileExternals()` prunes
+  stale states for tools deleted via MCP, deduplicates concurrent `ps` table
+  snapshots, and avoids falsely flagging freshly started tools; `ReceiptStore`
+  verifies `processStartedAt` on orphan cleanup to survive macOS PID reuse;
+  `RunLogStore` uses hysteresis truncation to avoid rewriting 2 MB on every
+  line; `ProcessManager` decodes stdout/stderr with `StringDecoder('utf8')`;
+  `resolvePortConflict` masks inline env vars in failure receipts and avoids
+  stealing stopped tools' ports; ordered stacks now stop in reverse order;
+  bundle exports resolve Git without triggering the Xcode CLT dialog; stale
+  operation files are cleaned up on startup; deleting a design profile clears
+  dangling collection references; and secret-masking regexes are precompiled.
+- Desktop UI fixes and upgrades: Quick Open (`⌘K`) arrow navigation now
+  follows visual group order, omits receipts for deleted tools, and adds
+  **Stop all running tools** and per-tool **Restart** actions; `LogPanel` adds
+  stream filter chips (`All`, `stderr`, `stdout`, `system`) and live text
+  search; `ToolDetailPage` resets transient state when navigating directly
+  between tools; and main-process window queuing no longer replays stale
+  telemetry bursts after a window is closed and reopened.
+
 ## 2.4.4 - 2026-11-09
 
 - Revoking or unpairing a phone now closes its active previews and invalidates

@@ -67,9 +67,11 @@ export function registerToolsIpc(ctx: IpcContext): void {
   })
 
   handle('tools:pickFolder', async () => {
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       properties: ['openDirectory', 'createDirectory'],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : result.filePaths[0] || null
   })
 
@@ -96,12 +98,14 @@ export function registerToolsIpc(ctx: IpcContext): void {
   })
 
   handle('tools:pickIcon', async () => {
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       properties: ['openFile'],
       filters: [
         { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'icns'] },
       ],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
 
     const src = result.filePaths[0]

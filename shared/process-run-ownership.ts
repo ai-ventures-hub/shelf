@@ -54,9 +54,14 @@ export class ProcessRunOwnership {
     }
   }
 
-  async ownsListener(port: number, pid?: number, occupants?: number[]): Promise<boolean> {
+  async ownsListener(
+    port: number,
+    pid?: number,
+    occupants?: number[],
+    refreshSnapshot = true,
+  ): Promise<boolean> {
     if (!pid) return false
-    invalidateProcessSnapshot()
+    if (refreshSnapshot) invalidateProcessSnapshot()
     return verifyOccupantsOwnedBy(occupants ?? await findPortOccupants(port), pid)
   }
 }

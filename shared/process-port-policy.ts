@@ -5,7 +5,7 @@ import type { LibraryStore } from './library-store'
 import { findFreePort, findPortOccupants, urlForPort, withForcedPort } from './ports'
 import type { ExternalOwner } from './process-reconcile'
 import type { ProcessRuntimeSupport } from './process-runtime-support'
-import { adoptedRunNote } from './types'
+import { adoptedRunNote, maskCommandEnvPrefix } from './types'
 
 interface PortPolicyDependencies {
   store: LibraryStore
@@ -52,7 +52,7 @@ export async function resolvePortConflict(
     deps.runtime.emitFailedReceipt({
       toolId,
       toolName: tool.name,
-      launchCommand: tool.launchCommand,
+      launchCommand: maskCommandEnvPrefix(tool.launchCommand),
       port,
       url: tool.url,
       message,
@@ -70,9 +70,18 @@ export async function resolvePortConflict(
     }
   }
 
-  // Pick a free port and persist so GUI + future launches stay aligned.
+  // Pick a free port that no other library tool claims and persist so GUI + future launches stay aligned.
   const previousPort = port
-  const free = await findFreePort({ preferred: previousPort, from: 3000, to: 4999 })
+  const reservedPorts = deps.store
+    .list()
+    .filter((item) => item.id !== toolId && typeof item.port === 'number')
+    .map((item) => item.port as number)
+  const free = await findFreePort({
+    preferred: previousPort,
+    from: 3000,
+    to: 4999,
+    exclude: reservedPorts,
+  })
   const nextPort = free.port
   const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
   const nextUrl = urlForPort(tool.url, nextPort)

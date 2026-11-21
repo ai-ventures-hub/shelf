@@ -6,6 +6,12 @@ import { sanitizeOutput, type LogLine } from './types'
 
 export const MAX_RUN_LOG_LINES = 3000
 const MAX_BYTES = 2 * 1024 * 1024
+/**
+ * Trim back to 75% of the cap when rotating so noisy logs append cheaply for
+ * another ~512 KB instead of reading and rewriting 2 MB on every stdout line.
+ */
+const TRIM_TARGET_BYTES = Math.floor(MAX_BYTES * 0.75)
+const TRIM_TARGET_LINES = Math.floor(MAX_RUN_LOG_LINES * 0.75)
 
 /** Shared, bounded per-run evidence. No environment values are persisted here. */
 export class RunLogStore {
@@ -42,13 +48,13 @@ export class RunLogStore {
       const payload = entries.map((line) => JSON.stringify({ ...line, runId })).join('\n') + '\n'
       const size = fs.existsSync(file) ? fs.statSync(file).size : 0
       if (size + Buffer.byteLength(payload) > MAX_BYTES) {
-        const recent = [...this.read(toolId, [], runId), ...entries].slice(-MAX_RUN_LOG_LINES)
+        const recent = [...this.read(toolId, [], runId), ...entries].slice(-TRIM_TARGET_LINES)
         let bytes = 0
         const kept: string[] = []
         for (let i = recent.length - 1; i >= 0; i--) {
           const line = JSON.stringify({ ...recent[i], runId }) + '\n'
           bytes += Buffer.byteLength(line)
-          if (bytes > MAX_BYTES) break
+          if (bytes > TRIM_TARGET_BYTES) break
           kept.unshift(line)
         }
         atomicWriteFileSync(file, kept.join(''))

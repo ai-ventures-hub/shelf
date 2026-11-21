@@ -249,33 +249,45 @@ export function registerLaunchTools({ server, store, processes }: LaunchHost): v
     'shelf_get_logs',
     {
       description:
-        'Output of a tool\'s current run, or an earlier one by runId (a receipt id; the last 5 are kept), as text: stdout lines start with two spaces, stderr "! ", Shelf\'s own "# ". Secrets are masked.',
+        'Output of a tool\'s current run, or an earlier one by runId (a receipt id; the last 5 are kept), as text: stdout lines start with two spaces, stderr "! ", Shelf\'s own "# ". Optionally filter by stream or text query. Secrets are masked.',
       inputSchema: {
         id: z.string().describe('Tool id'),
         runId: z.string().max(100).optional().describe('Receipt/run id; omit for the current run'),
         limit: z.number().int().positive().max(500).optional().describe('Max lines (default 100)'),
+        stream: z.enum(['stdout', 'stderr', 'system']).optional().describe('Optional stream filter'),
+        query: z.string().max(200).optional().describe('Optional case-insensitive substring filter'),
       },
       annotations: READ_ONLY,
     },
-    async ({ id, runId, limit }) => {
+    async ({ id, runId, limit, stream, query }) => {
       const tool = store.get(id)
       if (!tool) return toolNotFound(id)
-      const lines = processes.getLogs(id, runId || undefined)
-      if (runId && lines.length === 0) {
+      const allLines = processes.getLogs(id, runId || undefined)
+      if (runId && allLines.length === 0) {
         return errorResult(
           `No retained output for run ${runId} of this tool. Shelf keeps the last 5 runs per tool; call shelf_list_receipts with this id for run ids.`,
         )
       }
-      const capped = lines.slice(-(limit || 100))
-      const run = runId || [...lines].reverse().find((line) => line.runId)?.runId
+      const needle = query?.trim().toLowerCase()
+      const filtered = allLines.filter((line) => {
+        if (stream && line.stream !== stream) return false
+        if (needle && !line.text.toLowerCase().includes(needle)) return false
+        return true
+      })
+      const capped = filtered.slice(-(limit || 100))
+      const run = runId || [...allLines].reverse().find((line) => line.runId)?.runId
       const header = [
         `${tool.name} (${id})`,
         run ? `run ${run}` : null,
-        `${capped.length}${lines.length > capped.length ? ` of ${lines.length}` : ''} lines`,
+        stream ? `stream ${stream}` : null,
+        needle ? `query "${query!.trim()}"` : null,
+        `${capped.length}${filtered.length > capped.length ? ` of ${filtered.length}` : ''} lines`,
       ]
         .filter(Boolean)
         .join(' · ')
-      const body = capped.length ? formatLogLines(capped) : '(no output captured)'
+      const body = capped.length
+        ? formatLogLines(capped)
+        : (stream || needle ? '(no matching lines)' : '(no output captured)')
       return plainTextResult(`${header}\n${body}`, toolSecretValues(tool))
     },
   )

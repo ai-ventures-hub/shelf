@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 import type { StartOptions } from './contracts'
 import { classifyLaunchFailure, remedyFor } from './launch-diagnostics'
 import type { LibraryStore } from './library-store'
@@ -16,6 +17,7 @@ import {
   waitForPort,
 } from './process-lifecycle'
 import { ProcessOperations } from './process-operation'
+import { invalidateProcessSnapshot } from './process-ownership'
 import { resolvePortConflict } from './process-port-policy'
 import { listPortOccupants } from './ports'
 import { reconcileExternalTool, type ExternalOwner } from './process-reconcile'
@@ -314,11 +316,13 @@ export class ProcessManager {
       })
       managed.receiptId = receipt?.id
 
+      const stdoutDecoder = new StringDecoder('utf8')
+      const stderrDecoder = new StringDecoder('utf8')
       child.stdout?.on('data', (buf: Buffer) => {
-        this.runtime.appendLog(toolId, 'stdout', buf.toString('utf8'))
+        this.runtime.appendLog(toolId, 'stdout', stdoutDecoder.write(buf))
       })
       child.stderr?.on('data', (buf: Buffer) => {
-        this.runtime.appendLog(toolId, 'stderr', buf.toString('utf8'))
+        this.runtime.appendLog(toolId, 'stderr', stderrDecoder.write(buf))
       })
 
       child.on('error', (err) => {
@@ -340,7 +344,11 @@ export class ProcessManager {
       })
 
       child.on('exit', (code, signal) => {
-        // Commit any held partial log line before classifying the exit.
+        // Flush any multi-byte UTF-8 sequence and partial log line before classifying the exit.
+        const tailOut = stdoutDecoder.end()
+        if (tailOut) this.runtime.appendLog(toolId, 'stdout', tailOut)
+        const tailErr = stderrDecoder.end()
+        if (tailErr) this.runtime.appendLog(toolId, 'stderr', tailErr)
         this.runtime.flushLogs(toolId)
         const open = this.processes.get(toolId)
         const current = this.runtime.peekState(toolId)
@@ -765,8 +773,19 @@ export class ProcessManager {
       this.reconciliation = Promise.resolve()
         .then(async () => {
           const tools = this.store.list()
+          const liveIds = new Set(tools.map((t) => t.id))
+          // Drop stale external states for tools deleted in another host (e.g. MCP
+          // shelf_remove_tool) so ghost "Running" counts cannot linger.
+          for (const known of this.runtime.listKnownStates()) {
+            if (!liveIds.has(known.toolId) && !this.processes.has(known.toolId) && !this.inFlightStarts.has(known.toolId)) {
+              this.runtime.forget(known.toolId)
+            }
+          }
+          // Invalidate ps once per reconciliation pass instead of N times inside Promise.all.
+          invalidateProcessSnapshot()
+          const snapshotTakenAt = Date.now()
           const snapshot = tools.some((tool) => tool.port) ? await listPortOccupants() : null
-          await Promise.all(tools.map((tool) => this.reconcileTool(tool.id, snapshot)))
+          await Promise.all(tools.map((tool) => this.reconcileTool(tool.id, snapshot, snapshotTakenAt)))
         })
         .then(() => undefined)
         .finally(() => { this.reconciliation = null })
@@ -774,14 +793,29 @@ export class ProcessManager {
     return this.reconciliation
   }
 
-  private async reconcileTool(toolId: string, snapshot?: Map<number, number[]> | null): Promise<void> {
+  private async reconcileTool(
+    toolId: string,
+    snapshot?: Map<number, number[]> | null,
+    snapshotTakenAt?: number,
+  ): Promise<void> {
     const managed = this.processes.get(toolId)
     const state = this.runtime.peekState(toolId)
     if (state.status === 'stopping') return
     if (managed) {
       const port = state.port
       if (!port || (state.status !== 'running' && !(state.status === 'error' && state.code === 'port_timeout'))) return
-      const healthy = await this.ownership.ownsListener(port, managed.child.pid, snapshot ? snapshot.get(port) || [] : undefined)
+      // A tool that started after lsof began may not appear in this snapshot;
+      // defer to a fresh probe or the next tick instead of falsely flagging an error.
+      const startedMs = state.startedAt ? Date.parse(state.startedAt) : NaN
+      if (snapshot && snapshotTakenAt && Number.isFinite(startedMs) && startedMs >= snapshotTakenAt - 1000) {
+        return
+      }
+      const healthy = await this.ownership.ownsListener(
+        port,
+        managed.child.pid,
+        snapshot ? snapshot.get(port) || [] : undefined,
+        !snapshot,
+      )
       if (this.processes.get(toolId) !== managed || this.runtime.peekState(toolId) !== state) return
       if (!healthy && state.status === 'running') {
         this.runtime.setState(toolId, { ...state, status: 'error', code: 'port_timeout', remedy: 'copy_ai_report', message: `Process is alive, but its service on port ${port} is unavailable.` })

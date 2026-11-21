@@ -14,6 +14,45 @@ function ownCookie(name: string): boolean {
   return name === PREVIEW_COOKIE || name.startsWith(`${PREVIEW_COOKIE}_`)
 }
 
+/**
+ * Loopback hostnames a local tool may emit in a Set-Cookie `Domain=` attribute.
+ * Because the preview proxy is accessed via the Companion's LAN/Tailscale IP,
+ * keeping a loopback Domain would make Safari drop the cookie entirely.
+ */
+function isLoopbackCookieDomain(domain: string): boolean {
+  const clean = domain.trim().toLowerCase().replace(/^\./, '')
+  return clean === 'localhost' || clean === '127.0.0.1' || clean === '[::1]' || clean === '::1'
+}
+
+/**
+ * Filter backend Set-Cookie headers before sending them to the browser or
+ * recording them for forwarding:
+ * - Drops any cookie targeting Shelf's own `shelf_preview*` namespace so one
+ *   previewed tool cannot overwrite or expire another tool's grant cookie.
+ * - Strips loopback `Domain=` attributes (e.g. `Domain=127.0.0.1` / `localhost`)
+ *   so the browser binds the cookie to the Companion host instead of rejecting it.
+ */
+export function sanitizeBackendSetCookies(values: string[] | undefined): string[] | undefined {
+  if (!values?.length) return undefined
+  const kept: string[] = []
+  for (const raw of values) {
+    const [pair, ...attrs] = raw.split(';')
+    const eq = pair.indexOf('=')
+    if (eq < 1) continue
+    const name = pair.slice(0, eq).trim()
+    if (ownCookie(name)) continue
+    const cleanAttrs = attrs.filter((attr) => {
+      const idx = attr.indexOf('=')
+      if (idx < 0) return true
+      const key = attr.slice(0, idx).trim().toLowerCase()
+      if (key !== 'domain') return true
+      return !isLoopbackCookieDomain(attr.slice(idx + 1))
+    })
+    kept.push(cleanAttrs.length ? `${pair};${cleanAttrs.join(';')}` : pair)
+  }
+  return kept.length ? kept : undefined
+}
+
 function prune(issued: Map<string, IssuedCookie>, now: number): void {
   for (const [key, cookie] of issued) if (cookie.expiresAt <= now) issued.delete(key)
 }

@@ -20,12 +20,13 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
+import net from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type { CompanionPreviewGrant } from './companion-contracts'
 import { isLoopbackAddress, isUnspecifiedAddress } from './companion-net'
 import { companionRequestUrl } from './companion-http'
-import { PREVIEW_COOKIE, forwardToolCookies, rememberToolCookies, type IssuedCookie } from './companion-cookies'
+import { PREVIEW_COOKIE, forwardToolCookies, rememberToolCookies, sanitizeBackendSetCookies, type IssuedCookie } from './companion-cookies'
 
 export interface PreviewTarget {
   toolId: string
@@ -46,6 +47,11 @@ export interface PreviewProxyOptions {
   basePort: number
   /** How many ports above basePort may be tried. */
   portSpan?: number
+  /**
+   * Ports claimed elsewhere (Companion itself, library tools) that the proxy
+   * must never bind even on a different network interface.
+   */
+  reservedPorts?: () => Iterable<number>
   ticketTtlMs?: number
   grantTtlMs?: number
   log?: (message: string) => void
@@ -61,8 +67,37 @@ interface Credential {
   expiresAt: number
 }
 
+type LoopbackHost = '127.0.0.1' | '::1'
+
+/** Quick TCP probe to determine whether a local tool listens on IPv4 or IPv6 loopback. */
+function probeLoopback(host: LoopbackHost, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port })
+    const done = (ok: boolean) => {
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.setTimeout(300)
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
+async function resolveLoopbackHost(port: number): Promise<LoopbackHost> {
+  if (await probeLoopback('127.0.0.1', port)) return '127.0.0.1'
+  if (await probeLoopback('::1', port)) return '::1'
+  return '127.0.0.1'
+}
+
+function formatHostHeader(host: LoopbackHost, port: number): string {
+  return host === '::1' ? `[::1]:${port}` : `${host}:${port}`
+}
+
 interface Listener {
   target: PreviewTarget
+  /** Loopback stack where the tool actually answered (127.0.0.1 or ::1). */
+  backendHost: LoopbackHost
   /** The port this listener holds on the companion interface (never target.port). */
   listenPort: number
   server: https.Server
@@ -166,9 +201,13 @@ export class PreviewProxy {
     if (current && current.target.port === target.port && current.target.backend === target.backend) return current.origin
     if (current) await this.release(target.toolId)
     const server = https.createServer({ key: this.options.tls.key, cert: this.options.tls.cert, minVersion: 'TLSv1.2' })
-    const listenPort = await this.bind(server)
+    const [listenPort, backendHost] = await Promise.all([
+      this.bind(server, target.port),
+      resolveLoopbackHost(target.port),
+    ])
     const listener: Listener = {
       target,
+      backendHost,
       listenPort,
       server,
       origin: previewOrigin(this.options.bindAddress, listenPort),
@@ -187,13 +226,20 @@ export class PreviewProxy {
     server.on('tlsClientError', () => { /* plain HTTP on the TLS port: refused */ })
     server.on('error', (err) => this.options.log?.(`preview proxy ${target.toolId}: ${err.message}`))
     this.listeners.set(target.toolId, listener)
-    this.options.log?.(`preview proxy: ${target.toolId} on ${listener.origin} → ${target.backend}://127.0.0.1:${target.port}`)
+    this.options.log?.(`preview proxy: ${target.toolId} on ${listener.origin} → ${target.backend}://${formatHostHeader(backendHost, target.port)}`)
     return listener.origin
   }
 
-  /** First free port at or above basePort that no listener of ours holds. */
-  private async bind(server: https.Server): Promise<number> {
-    const taken = new Set([...this.listeners.values()].map((item) => item.listenPort))
+  /**
+   * First free port at or above basePort that neither another listener of ours
+   * nor a reserved tool/Companion port holds.
+   */
+  private async bind(server: https.Server, targetPort: number): Promise<number> {
+    const taken = new Set<number>([
+      targetPort,
+      ...[...this.listeners.values()].map((item) => item.listenPort),
+      ...(this.options.reservedPorts ? [...this.options.reservedPorts()] : []),
+    ])
     const last = Math.min(65535, this.options.basePort + this.portSpan)
     for (let port = this.options.basePort; port <= last; port += 1) {
       if (taken.has(port)) continue
@@ -316,12 +362,23 @@ export class PreviewProxy {
     listener.cookies.set(deviceId, issued)
   }
 
-  private backendHeaders(listener: Listener, req: IncomingMessage, deviceId: string): http.OutgoingHttpHeaders {
+  private backendHeaders(listener: Listener, req: IncomingMessage, deviceId: string, host: LoopbackHost): http.OutgoingHttpHeaders {
     const headers: http.OutgoingHttpHeaders = { ...req.headers }
-    headers.host = `127.0.0.1:${listener.target.port}`
+    const targetHost = formatHostHeader(host, listener.target.port)
+    const targetOrigin = `${listener.target.backend}://${targetHost}`
+    headers.host = targetHost
     headers['x-forwarded-host'] = req.headers.host || listener.origin.replace('https://', '')
     headers['x-forwarded-proto'] = 'https'
     headers['x-forwarded-for'] = req.socket.remoteAddress || ''
+    // Rewrite proxy-origin Origin/Referer to loopback so CSRF and WebSocket
+    // origin checks (Next.js Server Actions, SvelteKit, Vite, Rails, Django)
+    // accept requests coming from the paired phone.
+    if (typeof headers.origin === 'string' && headers.origin.toLowerCase() === listener.origin.toLowerCase()) {
+      headers.origin = targetOrigin
+    }
+    if (typeof headers.referer === 'string' && headers.referer.toLowerCase().startsWith(listener.origin.toLowerCase())) {
+      headers.referer = targetOrigin + headers.referer.slice(listener.origin.length)
+    }
     const cookie = forwardToolCookies(req.headers.cookie, listener.cookies.get(deviceId), new URL(req.url!, listener.origin))
     if (cookie) headers.cookie = cookie
     else delete headers.cookie
@@ -335,23 +392,29 @@ export class PreviewProxy {
     return value.replace(loopback, listener.origin)
   }
 
-  private forward(listener: Listener, req: IncomingMessage, res: ServerResponse, deviceId: string): void {
+  private forward(listener: Listener, req: IncomingMessage, res: ServerResponse, deviceId: string, retryHost?: LoopbackHost): void {
     const client = listener.target.backend === 'https' ? https : http
+    const host = retryHost ?? listener.backendHost
     let response: IncomingMessage | undefined
     const upstream = client.request(
       {
-        host: '127.0.0.1',
+        host,
         port: listener.target.port,
         method: req.method,
         path: req.url,
-        headers: this.backendHeaders(listener, req, deviceId),
+        headers: this.backendHeaders(listener, req, deviceId, host),
         rejectUnauthorized: false,
       },
       (backendRes) => {
         response = backendRes
         if (res.destroyed) { backendRes.destroy(); return }
-        this.rememberCookies(listener, deviceId, req, backendRes.headers['set-cookie'])
+        // Sanitize Set-Cookie before storing or forwarding so a tool cannot
+        // overwrite Shelf's grant cookies or emit unusable loopback Domains.
+        const safeCookies = sanitizeBackendSetCookies(backendRes.headers['set-cookie'])
+        this.rememberCookies(listener, deviceId, req, safeCookies)
         const headers = { ...backendRes.headers }
+        if (safeCookies) headers['set-cookie'] = safeCookies
+        else delete headers['set-cookie']
         if (headers.location) headers.location = this.rewriteLocation(listener, headers.location)
         res.writeHead(backendRes.statusCode || 502, headers)
         backendRes.pipe(res)
@@ -359,16 +422,28 @@ export class PreviewProxy {
     )
     const close = () => { upstream.destroy(); response?.destroy(); res.destroy() }
     const untrack = this.track(listener, deviceId, close)
-    res.once('close', () => { untrack(); close() })
-    upstream.on('error', (err) => {
+    const onResClose = () => { untrack(); close() }
+    res.once('close', onResClose)
+    upstream.on('error', (err: NodeJS.ErrnoException) => {
       if (res.headersSent) { res.destroy(); return }
+      // If a dev server restarted on the other loopback stack (IPv4 ↔ IPv6),
+      // retry once for bodyless methods before returning 502.
+      const method = (req.method || 'GET').toUpperCase()
+      if (!retryHost && err.code === 'ECONNREFUSED' && (method === 'GET' || method === 'HEAD' || method === 'OPTIONS')) {
+        const alternate: LoopbackHost = host === '127.0.0.1' ? '::1' : '127.0.0.1'
+        listener.backendHost = alternate
+        res.off('close', onResClose)
+        untrack()
+        this.forward(listener, req, res, deviceId, alternate)
+        return
+      }
       res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
-      res.end(`The tool did not answer on 127.0.0.1:${listener.target.port} (${err.message}).`)
+      res.end(`The tool did not answer on ${formatHostHeader(host, listener.target.port)} (${err.message}).`)
     })
     req.pipe(upstream)
   }
 
-  private upgrade(listener: Listener, req: IncomingMessage, socket: Duplex, head: Buffer): void {
+  private upgrade(listener: Listener, req: IncomingMessage, socket: Duplex, head: Buffer, retryHost?: LoopbackHost): void {
     const url = companionRequestUrl(req.url, listener.origin)
     const credential = url ? this.authorized(listener, req) : null
     if (!credential) {
@@ -377,26 +452,33 @@ export class PreviewProxy {
       return
     }
     const client = listener.target.backend === 'https' ? https : http
+    const host = retryHost ?? listener.backendHost
     const upstream = client.request({
-      host: '127.0.0.1',
+      host,
       port: listener.target.port,
       method: req.method,
       path: req.url,
-      headers: this.backendHeaders(listener, req, credential.deviceId),
+      headers: this.backendHeaders(listener, req, credential.deviceId, host),
       rejectUnauthorized: false,
     })
     let backend: Duplex | undefined
     const close = () => { upstream.destroy(); backend?.destroy(); socket.destroy() }
     const untrack = this.track(listener, credential.deviceId, close)
-    socket.once('close', () => { untrack(); close() })
+    const onSocketClose = () => { untrack(); close() }
+    socket.once('close', onSocketClose)
     upstream.on('upgrade', (backendRes, backendSocket, backendHead) => {
       backend = backendSocket
       if (socket.destroyed) { backendSocket.destroy(); return }
-      this.rememberCookies(listener, credential.deviceId, req, backendRes.headers['set-cookie'])
+      const safeCookies = sanitizeBackendSetCookies(backendRes.headers['set-cookie'])
+      this.rememberCookies(listener, credential.deviceId, req, safeCookies)
       backendSocket.once('close', () => socket.destroy())
       const lines = [`HTTP/1.1 ${backendRes.statusCode} ${backendRes.statusMessage || 'Switching Protocols'}`]
       for (let i = 0; i < backendRes.rawHeaders.length; i += 2) {
+        if (backendRes.rawHeaders[i].toLowerCase() === 'set-cookie') continue
         lines.push(`${backendRes.rawHeaders[i]}: ${backendRes.rawHeaders[i + 1]}`)
+      }
+      if (safeCookies) {
+        for (const cookie of safeCookies) lines.push(`Set-Cookie: ${cookie}`)
       }
       socket.write(lines.join('\r\n') + '\r\n\r\n')
       if (backendHead.length) socket.write(backendHead)
@@ -410,7 +492,17 @@ export class PreviewProxy {
       socket.write(`HTTP/1.1 ${backendRes.statusCode} ${backendRes.statusMessage || ''}\r\nConnection: close\r\n\r\n`)
       socket.destroy()
     })
-    upstream.on('error', () => socket.destroy())
+    upstream.on('error', (err: NodeJS.ErrnoException) => {
+      if (!retryHost && err.code === 'ECONNREFUSED') {
+        const alternate: LoopbackHost = host === '127.0.0.1' ? '::1' : '127.0.0.1'
+        listener.backendHost = alternate
+        socket.off('close', onSocketClose)
+        untrack()
+        this.upgrade(listener, req, socket, head, alternate)
+        return
+      }
+      socket.destroy()
+    })
     upstream.end()
   }
 }

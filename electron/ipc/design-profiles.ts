@@ -11,7 +11,7 @@ import { handle } from './typed'
  * MCP; the GUI is the only write surface.
  */
 export function registerDesignProfilesIpc(ctx: IpcContext): void {
-  const { designProfiles } = ctx
+  const { designProfiles, store } = ctx
 
   handle('designProfiles:list', () => designProfiles.list())
   // Any GUI save transfers ownership to the user: agents may then no longer
@@ -21,10 +21,12 @@ export function registerDesignProfilesIpc(ctx: IpcContext): void {
   )
   handle('designProfiles:delete', (_e, id) => {
     designProfiles.delete(id)
+    // Remove dangling designProfileId references from any collections.
+    store.clearDesignProfile(id)
   })
   handle('designProfiles:setDefault', (_e, id) => designProfiles.setDefault(id))
   handle('designProfiles:pickAsset', async (_e, profileId, kind) => {
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       properties: ['openFile'],
       filters: [
         {
@@ -35,7 +37,9 @@ export function registerDesignProfilesIpc(ctx: IpcContext): void {
           ],
         },
       ],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
     return designProfiles.importAsset(profileId, result.filePaths[0], kind)
   })

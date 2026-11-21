@@ -110,11 +110,13 @@ export function registerShareIpc(ctx: IpcContext): void {
     }
   })
   handle('share:pickBundle', async () => {
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       title: 'Add from bundle',
       properties: ['openFile'],
       filters: [{ name: 'Shelf tool bundle', extensions: ['zip'] }],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : result.filePaths[0] || null
   })
   // The user picks a PARENT folder; the sanitized manifest name is appended.
@@ -123,10 +125,12 @@ export function registerShareIpc(ctx: IpcContext): void {
     if (!stage) {
       return shareFailure(new ShareError('stage_missing', 'The fetched files are gone. Fetch again.'))
     }
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       title: 'Choose where to put this tool',
       properties: ['openDirectory', 'createDirectory'],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return { ok: true as const, destination: null }
     // Re-derive the folder name under the new parent (the proposed one may
     // already carry a "-2" suffix from the default parent).

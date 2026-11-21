@@ -62,12 +62,14 @@ export function registerStarterIpc(ctx: IpcContext): void {
   })
   handle('starter:chooseFolder', async () => {
     const root = defaultToolsRoot()
-    const result = await dialog.showOpenDialog(ctx.getMainWindow()!, {
+    const options: Electron.OpenDialogOptions = {
       title: 'Choose where new tools go',
       buttonLabel: 'Use this folder',
       defaultPath: fs.existsSync(root) ? root : app.getPath('home'),
       properties: ['openDirectory', 'createDirectory'],
-    })
+    }
+    const win = ctx.getMainWindow()
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : result.filePaths[0] || null
   })
   handle('starter:openAgent', async (_e, toolId, agent) => {

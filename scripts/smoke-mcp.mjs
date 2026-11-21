@@ -183,6 +183,37 @@ async function main() {
     }
     console.log('OK: masked read → upsert round-trip restores real values')
 
+    // Partial env update merges onto stored secrets instead of wiping them; unsetEnvKeys removes explicitly.
+    await callTool(client, 'shelf_upsert_tool', {
+      id: upserted.tool.id,
+      env: { FEATURE_FLAG: 'enabled' },
+    })
+    const afterMerge = rawStore.get(upserted.tool.id)
+    if (
+      afterMerge.env?.SMOKE_SECRET_TOKEN !== 'should-be-masked' ||
+      afterMerge.env?.DATABASE_URL !== 'postgres://user:hunter2@localhost/db' ||
+      afterMerge.env?.FEATURE_FLAG !== 'enabled'
+    ) {
+      throw new Error('Partial env upsert must merge onto existing secrets without wiping them')
+    }
+    await callTool(client, 'shelf_upsert_tool', {
+      id: upserted.tool.id,
+      unsetEnvKeys: ['FEATURE_FLAG'],
+    })
+    const afterUnset = rawStore.get(upserted.tool.id)
+    if ('FEATURE_FLAG' in (afterUnset.env || {}) || afterUnset.env?.SMOKE_SECRET_TOKEN !== 'should-be-masked') {
+      throw new Error('unsetEnvKeys must remove only the specified key')
+    }
+    // Non-http(s) URLs return a clean MCP error result (never an unhandled rejection).
+    const badUrlRes = await client.callTool({
+      name: 'shelf_upsert_tool',
+      arguments: { id: upserted.tool.id, url: 'file:///etc/passwd' },
+    })
+    if (!badUrlRes.isError) {
+      throw new Error('shelf_upsert_tool must return an error result for non-http(s) URLs')
+    }
+    console.log('OK: partial env merge, unsetEnvKeys, and non-http(s) URL refusal')
+
     const free = await callTool(client, 'shelf_find_free_port', {
       preferred: fixturePort,
       from: 8700,
@@ -984,7 +1015,15 @@ async function main() {
       throw new Error('Expected ready log line missing from the text log block')
     }
     if (/"toolId"|"stream"/.test(logs)) throw new Error('logs must be plain text, not per-line JSON')
-    console.log('OK: logs (plain text)')
+    const filteredLogs = await callText(client, 'shelf_get_logs', { id: toolId, stream: 'stdout', query: 'sample tool listening' })
+    if (!filteredLogs.includes('Sample tool listening') || !filteredLogs.includes('stream stdout')) {
+      throw new Error(`filtered shelf_get_logs missing expected line: ${filteredLogs}`)
+    }
+    const emptyFiltered = await callText(client, 'shelf_get_logs', { id: toolId, stream: 'stderr', query: 'definitely-not-present' })
+    if (!emptyFiltered.includes('(no matching lines)')) {
+      throw new Error(`filtered shelf_get_logs should report no matching lines: ${emptyFiltered}`)
+    }
+    console.log('OK: logs (plain text + stream/query filters)')
 
     const stopped = await callTool(client, 'shelf_stop_tool', { id: toolId })
     if (stopped.state.status !== 'stopped') {

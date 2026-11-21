@@ -10,7 +10,6 @@ import {
   dialog,
   globalShortcut,
   nativeImage,
-  shell,
   type BrowserWindow,
 } from 'electron'
 import path from 'node:path'
@@ -22,8 +21,10 @@ import {
 import type { PrefsStore } from '../shared/prefs-store'
 import { parseShelfUrl } from '../shared/shelf-url'
 import { dockBadgeText, toolFailureNotice } from '../shared/desktop-status'
+import { isHttpUrl } from '../shared/tool-validation'
 import type { LibraryStore } from './library-store'
 import type { ProcessManager } from './process-manager'
+import * as system from './system-bridge'
 import type { ToolRuntimeState, ToolStatus, UiPrefs } from './types'
 import { launchOriginLabel } from './types'
 
@@ -207,12 +208,13 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost, snapshot?: ToolRunt
                   host.navigate(`/tools/${tool.id}`)
                 },
               },
-              ...(url
+              ...(url && isHttpUrl(url)
                 ? [
                     {
                       label: 'Open URL',
                       click: () => {
-                        void shell.openExternal(url)
+                        // Enforce http(s)-only URL handling matching the renderer bridge.
+                        void system.openUrl(url).catch(() => undefined)
                       },
                     } satisfies Electron.MenuItemConstructorOptions,
                   ]

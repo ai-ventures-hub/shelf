@@ -236,7 +236,12 @@ server.registerTool(
       stopCommand: toolSchema.shape.stopCommand,
       url: toolSchema.shape.url,
       port: portSchema.optional(),
-      env: toolSchema.shape.env,
+      env: toolSchema.shape.env.describe('Environment variables to merge onto the stored record ("***" keeps stored values)'),
+      unsetEnvKeys: z
+        .array(z.string().min(1).max(120))
+        .max(100)
+        .optional()
+        .describe('Environment variable key names to remove from the stored record'),
       notes: toolSchema.shape.notes,
       iconPath: toolSchema.shape.iconPath,
       iconLucide: toolSchema.shape.iconLucide
@@ -377,16 +382,25 @@ server.registerTool(
     // KEY=*** command prefixes). The routine get_tool → tweak → upsert-back
     // pattern must restore the stored values instead of persisting the
     // placeholders — otherwise the next launch exports DATABASE_URL=*** .
+    // Partial updates merge onto existing.env so adding one variable never
+    // silently wipes stored secrets; use unsetEnvKeys to delete keys explicitly.
     const maskedExisting = existing ? sanitizeToolForOutput(existing) : undefined
-    const incomingEnv = args.env
-      ? Object.fromEntries(
-          Object.entries(args.env).flatMap(([key, value]) => {
-            if (value !== '***') return [[key, value]]
-            const real = existing?.env?.[key]
-            return real !== undefined ? [[key, real]] : [] // placeholder with no original: drop
-          }),
-        )
-      : undefined
+    let mergedEnv: Record<string, string> | undefined = existing?.env ? { ...existing.env } : undefined
+    if (args.env) {
+      mergedEnv = mergedEnv ? { ...mergedEnv } : {}
+      for (const [key, value] of Object.entries(args.env)) {
+        if (value !== '***') {
+          mergedEnv[key] = value
+        } else if (existing?.env?.[key] !== undefined) {
+          mergedEnv[key] = existing.env[key]
+        }
+        // Placeholder '***' with no original value is dropped.
+      }
+    }
+    if (args.unsetEnvKeys?.length && mergedEnv) {
+      for (const key of args.unsetEnvKeys) delete mergedEnv[key]
+      if (Object.keys(mergedEnv).length === 0) mergedEnv = undefined
+    }
     const incomingStopCommand =
       existing && args.stopCommand === maskedExisting?.stopCommand
         ? existing.stopCommand
@@ -410,9 +424,9 @@ server.registerTool(
 
     if (port && checkPort) {
       const toolId = existing?.id || args.id
-      const libraryConflicts = store
-        .list()
-        .filter((t) => t.port === port && t.id !== toolId)
+      const otherLibraryTools = store.list().filter((t) => t.id !== toolId)
+      const libraryConflicts = otherLibraryTools
+        .filter((t) => t.port === port)
         .map((t) => ({ id: t.id, name: t.name }))
 
       const occupantPid = await findPortOccupant(port)
@@ -429,7 +443,20 @@ server.registerTool(
 
       if (warnings.length > 0) {
         try {
-          const free = await findFreePort({ preferred: port, from: 3000, to: 4999, count: 5 })
+          // Exclude ports claimed by other library tools (even when stopped)
+          // and pending drafts so suggestedPort / autoFixPort never picks a
+          // port already assigned to another tool.
+          const reservedPorts = [
+            ...otherLibraryTools.map((t) => t.port).filter((p): p is number => typeof p === 'number'),
+            ...drafts.list().map((d) => d.port).filter((p): p is number => typeof p === 'number'),
+          ]
+          const free = await findFreePort({
+            preferred: port,
+            from: 3000,
+            to: 4999,
+            count: 5,
+            exclude: reservedPorts,
+          })
           suggestedPort = free.port
           freeCandidates = free.candidates
         } catch {
@@ -452,42 +479,47 @@ server.registerTool(
       }
     }
 
-    const tool = store.save({
-      id: existing?.id || args.id || randomUUID(),
-      name,
-      description: args.description ?? existing?.description,
-      tags: args.tags || existing?.tags || [],
-      capabilities: args.capabilities ?? existing?.capabilities ?? [],
-      agentAccess: (args.agentAccess ?? existing?.agentAccess ?? []).map((access) => ({
-        ...access,
-        id: access.id || randomUUID(),
-        setupRequired: Boolean(access.setupRequired),
-      })) as AgentAccess[],
-      favorite: args.favorite ?? existing?.favorite ?? false,
-      projectPath,
-      launchCommand,
-      stopCommand: incomingStopCommand ?? existing?.stopCommand,
-      url,
-      port,
-      env:
-        portFixed && port
-          ? { ...(incomingEnv ?? existing?.env ?? {}), PORT: String(port) }
-          : (incomingEnv ?? existing?.env),
-      notes: incomingNotes ?? existing?.notes,
-      // Reaches only phones the user paired; an agent may ask for it so the
-      // user can preview from the phone without a trip to the Mac.
-      remotePreview: (args.remotePreview ?? existing?.remotePreview) ? true : undefined,
-      iconPath: args.iconPath ?? existing?.iconPath,
-      iconLucide: args.iconLucide ?? existing?.iconLucide,
-      iconColor: args.iconColor ?? existing?.iconColor,
-      iconBackground: args.iconBackground ?? existing?.iconBackground,
-      lastLaunchedAt: existing?.lastLaunchedAt,
-      // Provenance is not an agent-editable field; carry it or an agent
-      // tweak would silently un-share the tool (save literal rule).
-      source: existing?.source,
-      createdAt: existing?.createdAt || now,
-      updatedAt: existing?.updatedAt || now,
-    })
+    let tool: Tool
+    try {
+      tool = store.save({
+        id: existing?.id || args.id || randomUUID(),
+        name,
+        description: args.description ?? existing?.description,
+        tags: args.tags || existing?.tags || [],
+        capabilities: args.capabilities ?? existing?.capabilities ?? [],
+        agentAccess: (args.agentAccess ?? existing?.agentAccess ?? []).map((access) => ({
+          ...access,
+          id: access.id || randomUUID(),
+          setupRequired: Boolean(access.setupRequired),
+        })) as AgentAccess[],
+        favorite: args.favorite ?? existing?.favorite ?? false,
+        projectPath,
+        launchCommand,
+        stopCommand: incomingStopCommand ?? existing?.stopCommand,
+        url,
+        port,
+        env:
+          portFixed && port
+            ? { ...(mergedEnv ?? {}), PORT: String(port) }
+            : mergedEnv,
+        notes: incomingNotes ?? existing?.notes,
+        // Reaches only phones the user paired; an agent may ask for it so the
+        // user can preview from the phone without a trip to the Mac.
+        remotePreview: (args.remotePreview ?? existing?.remotePreview) ? true : undefined,
+        iconPath: args.iconPath ?? existing?.iconPath,
+        iconLucide: args.iconLucide ?? existing?.iconLucide,
+        iconColor: args.iconColor ?? existing?.iconColor,
+        iconBackground: args.iconBackground ?? existing?.iconBackground,
+        lastLaunchedAt: existing?.lastLaunchedAt,
+        // Provenance is not an agent-editable field; carry it or an agent
+        // tweak would silently un-share the tool (save literal rule).
+        source: existing?.source,
+        createdAt: existing?.createdAt || now,
+        updatedAt: existing?.updatedAt || now,
+      })
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err))
+    }
 
     return textResult({
       action: existing ? 'updated' : 'created',

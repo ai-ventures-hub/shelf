@@ -49,7 +49,7 @@ export function QuickOpen({
 }: QuickOpenProps = {}) {
   const navigate = useNavigate()
   const { isDeveloper } = useUiMode()
-  const { tools, collections, states, startTool, stopTool } = useLibrary()
+  const { tools, collections, states, startTool, stopTool, restartTool } = useLibrary()
   const { profiles: designProfiles } = useDesignProfiles()
   const [open, setOpen] = useState(false)
   // Recent receipts for relaunch / jump-to-tool, read only while open.
@@ -135,6 +135,10 @@ export function QuickOpen({
     })
 
     // Running tools with a URL can be opened straight from the palette.
+    const runningTools = tools.filter((tool) => {
+      const status = states[tool.id]?.status
+      return status === 'running' || status === 'starting'
+    })
     const openItems: Runnable[] = tools
       .filter((tool) => tool.url && states[tool.id]?.status === 'running')
       .map((tool) => ({
@@ -149,6 +153,20 @@ export function QuickOpen({
         run: () => window.shelf.openUrl(tool.url!),
       }))
 
+    // Quick restart actions for live tools.
+    const restartItems: Runnable[] = tools
+      .filter((tool) => states[tool.id]?.status === 'running')
+      .map((tool) => ({
+        id: `restart:${tool.id}`,
+        kind: 'action',
+        title: `Restart ${tool.name}`,
+        subtitle: tool.port ? `:${tool.port}` : 'Running',
+        keywords: [tool.name, 'restart', 'reload', 'bounce'],
+        boost: 16,
+        failure: `Could not restart ${tool.name}.`,
+        run: () => restartTool(tool.id),
+      }))
+
     const collectionItems: Runnable[] = collections.map((c) => ({
       id: `collection:${c.id}`,
       kind: 'collection',
@@ -159,10 +177,12 @@ export function QuickOpen({
       run: () => navigate(`/collections/${c.id}`),
     }))
 
-    // Deduplicate by tool — keep the newest receipt per tool for relaunch.
+    // Deduplicate by tool — keep the newest receipt per tool that still exists.
+    const liveToolIds = new Set(tools.map((t) => t.id))
     const seenTools = new Set<string>()
     const receiptItems: Runnable[] = []
     for (const receipt of receipts) {
+      if (!liveToolIds.has(receipt.toolId)) continue
       if (seenTools.has(receipt.toolId)) continue
       seenTools.add(receipt.toolId)
       const status = states[receipt.toolId]?.status || 'stopped'
@@ -209,6 +229,22 @@ export function QuickOpen({
     }))
 
     const actions: Runnable[] = [
+      ...(runningTools.length > 0
+        ? [
+            {
+              id: 'action:stop-all',
+              kind: 'action' as const,
+              title: `Stop all running tools (${runningTools.length})`,
+              subtitle: runningTools.map((t) => t.name).slice(0, 3).join(', '),
+              keywords: ['stop all', 'kill', 'shutdown', 'halt', 'running'],
+              boost: 22,
+              failure: 'Could not stop all running tools.',
+              run: async () => {
+                await Promise.all(runningTools.map((t) => stopTool(t.id)))
+              },
+            },
+          ]
+        : []),
       {
         id: 'action:add-tool',
         kind: 'action',
@@ -326,7 +362,7 @@ export function QuickOpen({
       },
     ]
 
-    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...openItems, ...actions]
+    return [...toolItems, ...collectionItems, ...designItems, ...receiptItems, ...openItems, ...restartItems, ...actions]
   }, [
     tools,
     collections,
@@ -336,6 +372,7 @@ export function QuickOpen({
     navigate,
     startTool,
     stopTool,
+    restartTool,
     onRequestNewCollection,
     onRequestNewDesignProfile,
     isDeveloper,
@@ -347,8 +384,11 @@ export function QuickOpen({
   )
   const groups = useMemo(() => groupQuickOpenItems(ranked), [ranked])
 
-  // Flat index map for keyboard navigation across grouped rows.
-  const flat = ranked
+  // Visual row order so ArrowDown/ArrowUp move through groups top-to-bottom.
+  const flat = useMemo(
+    () => groups.flatMap((group) => group.items as Runnable[]),
+    [groups],
+  )
 
   useEffect(() => {
     setActiveIndex(0)

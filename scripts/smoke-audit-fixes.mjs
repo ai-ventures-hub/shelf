@@ -4,10 +4,13 @@
  */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import http from 'node:http'
+import https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { WebSocket } from 'ws'
 
 const require = createRequire(import.meta.url)
 const dist = (name) => require(`../dist-electron/shared/${name}.js`)
@@ -16,8 +19,17 @@ const { ReceiptStore } = dist('receipt-store')
 const { ProjectMemoryStore } = dist('project-memory-store')
 const { DesignProfileStore } = dist('design-profile-store')
 const { VerificationStore } = dist('verification-store')
+const { CapabilityGapStore } = dist('capability-gap-store')
 const { ProcessOperations } = dist('process-operation')
-const { startCollection } = dist('collection-launch')
+const { startCollection, stopCollection } = dist('collection-launch')
+const { findFreePort } = dist('ports')
+const { sanitizeBackendSetCookies, PREVIEW_COOKIE } = dist('companion-cookies')
+const { PreviewProxy, previewCookieName } = dist('companion-preview')
+const { COMPANION_WS_PROTOCOL } = dist('companion-contracts')
+const { CompanionServer } = dist('companion-server')
+const { CompanionDeviceStore, mintDeviceToken } = dist('companion-store')
+const { ensureCompanionCertificate } = dist('companion-cert')
+const { listCompanionInterfaces } = dist('companion-net')
 const { validateCatalogStarter } = dist('catalog-starter')
 const { prepareProjectHandoff } = dist('project-handoff')
 const { adoptedRunNote, maskCommandEnvPrefix } = dist('types')
@@ -168,6 +180,225 @@ try {
     assert.equal(containedDataUrl(dir, path.join(dir, 'notes.txt'), ICON_MIME_TYPES), null, 'unlisted types are never read')
     assert.equal(containedDataUrl(dir, 42, ICON_MIME_TYPES), null)
     console.log('OK: preview data URLs stay contained')
+  }
+
+  // Non-http(s) tool URLs are refused on save; deleting a design profile clears collection refs.
+  {
+    const dataRoot = fs.mkdtempSync(path.join(root, 'url-and-design-'))
+    const library = new LibraryStore(dataRoot)
+    assert.throws(() => tool(library, { name: 'BadFile', launchCommand: 'true', url: 'file:///etc/passwd' }), /http:\/\/ or https:\/\//)
+    assert.throws(() => tool(library, { name: 'BadJs', launchCommand: 'true', url: 'javascript:alert(1)' }), /http:\/\/ or https:\/\//)
+    const ok = tool(library, { name: 'GoodWeb', launchCommand: 'true', url: 'http://127.0.0.1:4123/' })
+    assert.equal(ok.url, 'http://127.0.0.1:4123/')
+    const col = library.saveCollection({ id: '', name: 'Branded', toolIds: [ok.id], designProfileId: 'prof-1', origin: 'user' })
+    assert.equal(library.getCollection(col.id).designProfileId, 'prof-1')
+    library.clearDesignProfile('prof-1')
+    assert.equal(library.getCollection(col.id).designProfileId, undefined)
+    console.log('OK: tool URLs require http(s) and deleted design profiles unlink from collections')
+  }
+
+  // Ordered stack teardown stops dependents in reverse order.
+  {
+    const dataRoot = fs.mkdtempSync(path.join(root, 'stack-stop-'))
+    const library = new LibraryStore(dataRoot)
+    const db = tool(library, { name: 'db', launchCommand: 'node db.js', port: 50011 })
+    const api = tool(library, { name: 'api', launchCommand: 'node api.js', port: 50012 })
+    const web = tool(library, { name: 'web', launchCommand: 'node web.js', port: 50013 })
+    const col = library.saveCollection({ id: '', name: 'Ordered', toolIds: [db.id, api.id, web.id], stack: { ordered: true, steps: [] }, origin: 'user' })
+    const stopped = []
+    const processes = {
+      async getState(id) { return { toolId: id, status: 'running' } },
+      async stop(id) { stopped.push(id); return { toolId: id, status: 'stopped' } },
+    }
+    await stopCollection(col.id, { store: library, processes })
+    assert.deepEqual(stopped, [web.id, api.id, db.id], 'ordered stacks must stop in reverse order')
+    console.log('OK: ordered stacks stop in reverse dependency order')
+  }
+
+  // Reused PIDs (alive PID with mismatched processStartedAt) are closed as orphans.
+  {
+    const dataRoot = fs.mkdtempSync(path.join(root, 'pid-reuse-'))
+    fs.writeFileSync(path.join(dataRoot, 'receipts.json'), JSON.stringify({
+      version: 1,
+      receipts: [{
+        id: 'reused-1',
+        toolId: 't-reuse',
+        toolName: 'Reused',
+        launchCommand: 'node app.js',
+        pid: process.pid,
+        processStartedAt: 'Thu Jan  1 00:00:00 1970',
+        startedAt: new Date(Date.now() - 5_000).toISOString(),
+        outcome: 'running',
+        message: 'Running · port 5100',
+      }],
+    }))
+    const receipts = new ReceiptStore(dataRoot)
+    const row = receipts.list().find((r) => r.id === 'reused-1')
+    assert.equal(row.outcome, 'interrupted', 'receipt with mismatched processStartedAt must close even if PID is alive')
+    console.log('OK: PID reuse closes stale receipts instead of keeping them running forever')
+  }
+
+  // findFreePort honors exclude set for preferred and scanned ports.
+  {
+    const res = await findFreePort({ preferred: 46100, from: 46100, to: 46110, count: 2, exclude: [46100, 46101] })
+    assert.equal(res.preferredFree, false)
+    assert.ok(!res.candidates.includes(46100) && !res.candidates.includes(46101), 'excluded ports must be skipped')
+    console.log('OK: findFreePort excludes reserved library/companion ports')
+  }
+
+  // CapabilityGapStore.update({ refuseIfClosed: true }) enforces user decisions inside the lock.
+  {
+    const dataRoot = fs.mkdtempSync(path.join(root, 'gaps-'))
+    const gaps = new CapabilityGapStore(dataRoot)
+    const { gap } = gaps.record({ task: 'OCR PDFs', reason: 'No local OCR tool', capabilities: ['pdf-ocr'] })
+    gaps.updateStatus(gap.id, 'resolved')
+    assert.throws(() => gaps.update(gap.id, { status: 'planned', refuseIfClosed: true }), /resolved/)
+    console.log('OK: CapabilityGapStore enforces closed-gap refusal inside the file lock')
+  }
+
+  // sanitizeBackendSetCookies blocks grant cookie tossing and strips loopback Domains.
+  {
+    const cleaned = sanitizeBackendSetCookies([
+      `${PREVIEW_COOKIE}_deadbeef=evil; Path=/`,
+      `${PREVIEW_COOKIE}=evil; Path=/`,
+      'sid=ok123; Domain=127.0.0.1; Path=/; HttpOnly',
+      'prefs=dark; Domain=localhost; Path=/',
+      'foreign=keep; Domain=other.example; Path=/',
+    ])
+    assert.deepEqual(cleaned, [
+      'sid=ok123; Path=/; HttpOnly',
+      'prefs=dark; Path=/',
+      'foreign=keep; Domain=other.example; Path=/',
+    ])
+    console.log('OK: sanitizeBackendSetCookies blocks shelf_preview* tossing and strips loopback domains')
+  }
+
+  // PreviewProxy: avoids target/reserved ports, proxies IPv6-only (::1) backends, rewrites Origin/Referer, strips shelf_preview* Set-Cookie.
+  const ifaces = listCompanionInterfaces()
+  if (ifaces.length > 0) {
+    const bindAddress = ifaces[0].address
+    const dataRoot = fs.mkdtempSync(path.join(root, 'proxy-v6-'))
+    const cert = ensureCompanionCertificate(dataRoot, [bindAddress])
+    let seenHeaders = null
+    const v6Backend = http.createServer((req, res) => {
+      seenHeaders = req.headers
+      res.writeHead(200, {
+        'content-type': 'text/plain',
+        'set-cookie': [
+          `${previewCookieName('other-tool')}=clobber; Path=/`,
+          'app_sess=v6ok; Domain=localhost; Path=/',
+        ],
+      })
+      res.end('ipv6-ok')
+    })
+    await new Promise((resolve) => v6Backend.listen(0, '::1', resolve))
+    const v6Port = v6Backend.address().port
+    const proxy = new PreviewProxy({
+      bindAddress,
+      tls: { key: cert.key, cert: cert.cert },
+      basePort: v6Port, // intentionally equal to target.port to verify exclusion
+      reservedPorts: () => [v6Port + 1],
+    })
+    try {
+      const origin = await proxy.ensure({ toolId: 'v6-tool', port: v6Port, backend: 'http' })
+      const listenPort = proxy.listenPort('v6-tool')
+      assert.notEqual(listenPort, v6Port, 'proxy must never bind the tool port itself')
+      assert.notEqual(listenPort, v6Port + 1, 'proxy must skip reservedPorts')
+      const ticket = proxy.issueTicket('v6-tool', 'dev-1')
+      const grantRes = await new Promise((resolve, reject) => {
+        https.get(ticket.url, { rejectUnauthorized: false }, (res) => {
+          res.resume()
+          resolve(res)
+        }).on('error', reject)
+      })
+      const grantCookie = (grantRes.headers['set-cookie'] || [])[0].split(';')[0]
+      const proxied = await new Promise((resolve, reject) => {
+        https.get(`${origin}/check`, {
+          rejectUnauthorized: false,
+          headers: { cookie: grantCookie, origin, referer: `${origin}/page` },
+        }, (res) => {
+          let body = ''
+          res.setEncoding('utf8')
+          res.on('data', (chunk) => { body += chunk })
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }))
+        }).on('error', reject)
+      })
+      assert.equal(proxied.status, 200)
+      assert.equal(proxied.body, 'ipv6-ok')
+      assert.equal(seenHeaders.origin, `http://[::1]:${v6Port}`)
+      assert.equal(seenHeaders.referer, `http://[::1]:${v6Port}/page`)
+      const outCookies = proxied.headers['set-cookie'] || []
+      assert.ok(!outCookies.some((c) => c.includes(PREVIEW_COOKIE)), 'backend must not inject shelf_preview* Set-Cookie')
+      assert.ok(outCookies.some((c) => c.startsWith('app_sess=v6ok') && !/Domain=/i.test(c)), 'loopback Domain must be stripped')
+      console.log('OK: PreviewProxy handles IPv6-only backends, port exclusions, Origin/Referer, and cookie sanitization')
+    } finally {
+      await proxy.releaseAll()
+      await new Promise((resolve) => v6Backend.close(resolve))
+    }
+
+    // CompanionServer: malformed percent-encoding returns 400 (not 500) and heartbeat drops dead clients.
+    const devices = new CompanionDeviceStore(dataRoot)
+    const token = mintDeviceToken()
+    devices.create('Phone', token)
+    let clientCounts = []
+    const server = new CompanionServer({
+      host: {
+        appVersion: '2.4.4',
+        listTools: () => [],
+        listCollections: () => [],
+        getStates: async () => [],
+        peekStates: () => [],
+        health: async () => [],
+        board: () => [],
+        start: async () => ({ toolId: '', status: 'stopped' }),
+        stop: async () => ({ toolId: '', status: 'stopped' }),
+        restart: async () => ({ toolId: '', status: 'stopped' }),
+        logs: () => [],
+        errorReport: async () => null,
+        receipts: () => [],
+        startCollection: async () => ({ collectionId: '', name: '', results: [] }),
+        stopCollection: async () => ({ collectionId: '', name: '', results: [] }),
+        keepAwakeActive: () => false,
+        toolIcon: () => null,
+        previewReady: () => false,
+        previewGrant: async () => { throw new Error('off') },
+        listDrafts: () => [],
+        acceptDraft: async () => ({ outcome: 'saved', message: 'ok' }),
+        rejectDraft: () => ({ outcome: 'rejected', message: 'ok' }),
+      },
+      devices,
+      tls: { key: cert.key, cert: cert.cert, fingerprint: cert.fingerprint },
+      heartbeatIntervalMs: 80,
+      onClientsChanged: (count) => clientCounts.push(count),
+    })
+    const info = await server.listen(bindAddress, 0)
+    try {
+      const bad = await new Promise((resolve, reject) => {
+        https.get(`${info.url}/api/tools/%E0%A4%A/logs`, {
+          rejectUnauthorized: false,
+          headers: { authorization: `Bearer ${token}` },
+        }, (res) => {
+          res.resume()
+          resolve(res.statusCode)
+        }).on('error', reject)
+      })
+      assert.equal(bad, 400, 'malformed percent-encoding must return 400, not 500')
+
+      // Simulate a suspended mobile socket that stops answering pings.
+      const ws = new WebSocket(`wss://${info.address}:${info.port}/ws`, [COMPANION_WS_PROTOCOL, token], { rejectUnauthorized: false })
+      await new Promise((resolve, reject) => {
+        ws.once('open', resolve)
+        ws.once('error', reject)
+      })
+      // Pause the underlying socket so ws never replies with pong frames.
+      ws._socket.pause()
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      assert.equal(server.clientCount, 0, 'heartbeat sweep must terminate unresponsive mobile sockets')
+      assert.ok(clientCounts.includes(1) && clientCounts[clientCounts.length - 1] === 0)
+      console.log('OK: CompanionServer returns 400 on bad encoding and drops silent dead WebSockets via heartbeat')
+    } finally {
+      await server.close()
+    }
   }
 
   console.log('OK: audit fixes smoke passed')

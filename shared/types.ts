@@ -239,6 +239,16 @@ export function foldDisplayName(name: string): string {
 /** Env keys whose values are operational, not secret. */
 const SAFE_ENV_KEYS = /^(PORT|HOST|HOSTNAME|NODE_ENV|DEBUG|CI|TZ|LANG|LC_ALL|FORCE_COLOR)$/i
 const ASSIGNMENT_VALUE = `(?:"(?:\\\\.|[^"\\\\])*"|'[^']*'|[^\\s]+)`
+// Precompiled regexes avoid recompiling patterns on every receipt/log line.
+const UPPER_ENV_ASSIGNMENT_RE = new RegExp(`\\b([A-Z][A-Z0-9_]{2,})\\s*=\\s*${ASSIGNMENT_VALUE}`, 'g')
+const SECRET_ENV_ASSIGNMENT_RE = new RegExp(`\\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*)\\s*=\\s*${ASSIGNMENT_VALUE}`, 'gi')
+const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi
+const QUERY_SECRET_RE = /([?&](?:token|key|api_key|access_token|password|secret|signature|sig)=)[^&#\s]*/gi
+const BEARER_TOKEN_RE = /\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi
+const BARE_SECRET_RE = new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g')
+const COMMAND_ENV_PREFIX_RE = new RegExp(`^(?:\\s*(?:env\\s+)?[A-Za-z_][A-Za-z0-9_]*=${ASSIGNMENT_VALUE})+`)
+const COMMAND_ENV_ENTRY_RE = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)=${ASSIGNMENT_VALUE}`, 'g')
+const INLINE_UPPER_ENV_RE = new RegExp(`\\b([A-Z][A-Z0-9_]{2,})=${ASSIGNMENT_VALUE}`, 'g')
 
 /**
  * Values too short or too ordinary to be a credential. Substring-replacing
@@ -276,19 +286,19 @@ export function maskSecrets(text: string, knownValues: readonly string[] = []): 
     safe = safe.split(value).join('***')
   }
   return safe
-    .replace(new RegExp(`\\b([A-Z][A-Z0-9_]{2,})\\s*=\\s*${ASSIGNMENT_VALUE}`, 'g'),
+    .replace(UPPER_ENV_ASSIGNMENT_RE,
       (whole, key: string) => SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`)
-    .replace(new RegExp(`\\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*)\\s*=\\s*${ASSIGNMENT_VALUE}`, 'gi'), '$1=***')
-    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
-    .replace(/([?&](?:token|key|api_key|access_token|password|secret|signature|sig)=)[^&#\s]*/gi, '$1***')
-    .replace(/\b(Bearer)\s+[A-Za-z0-9\-._~+/]+=*/gi, '$1 ***')
-    .replace(new RegExp(`${BARE_SECRET_BOUNDARY}(?:${BARE_SECRET_SOURCE})`, 'g'), '***')
+    .replace(SECRET_ENV_ASSIGNMENT_RE, '$1=***')
+    .replace(URL_CREDENTIALS_RE, '$1***@')
+    .replace(QUERY_SECRET_RE, '$1***')
+    .replace(BEARER_TOKEN_RE, '$1 ***')
+    .replace(BARE_SECRET_RE, '***')
 }
 
 /** Includes unknown env names and quoted values in the command prefix. */
 export function maskCommandEnvPrefix(command: string): string {
-  return command.replace(new RegExp(`^(?:\\s*(?:env\\s+)?[A-Za-z_][A-Za-z0-9_]*=${ASSIGNMENT_VALUE})+`),
-    (prefix) => prefix.replace(new RegExp(`([A-Za-z_][A-Za-z0-9_]*)=${ASSIGNMENT_VALUE}`, 'g'),
+  return command.replace(COMMAND_ENV_PREFIX_RE,
+    (prefix) => prefix.replace(COMMAND_ENV_ENTRY_RE,
       (whole, key: string) => SAFE_ENV_KEYS.test(key) ? whole : `${key}=***`))
 }
 
@@ -298,7 +308,7 @@ export function toolSecretValues(tool?: Pick<Tool, 'env' | 'launchCommand' | 'st
     .filter(([key, value]) => !SAFE_ENV_KEYS.test(key) && isMaskableSecretValue(value, key))
     .map(([, value]) => value)
   for (const command of [tool.launchCommand, tool.stopCommand || '']) {
-    for (const match of command.matchAll(new RegExp(`\\b([A-Z][A-Z0-9_]{2,})=${ASSIGNMENT_VALUE}`, 'g'))) {
+    for (const match of command.matchAll(INLINE_UPPER_ENV_RE)) {
       if (SAFE_ENV_KEYS.test(match[1])) continue
       const raw = match[0].slice(match[0].indexOf('=') + 1)
       const value = /^["']/.test(raw) ? raw.slice(1, -1) : raw

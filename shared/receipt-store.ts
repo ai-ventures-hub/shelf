@@ -230,7 +230,7 @@ export class ReceiptStore {
       let dirty = false
       const now = new Date().toISOString()
       data.receipts = data.receipts.map((r) => {
-        if (r.endedAt || (r.pid && isProcessOrGroupAlive(r.pid))) return r
+        if (r.endedAt || isActiveReceipt(r)) return r
         dirty = true
         const started = Date.parse(r.startedAt)
         const ended = Date.parse(now)
@@ -297,5 +297,9 @@ function isProcessOrGroupAlive(pid: number): boolean {
 }
 
 function isActiveReceipt(receipt: RunReceipt): boolean {
-  return Boolean(!receipt.endedAt && receipt.pid && isProcessOrGroupAlive(receipt.pid))
+  if (receipt.endedAt || !receipt.pid || !isProcessOrGroupAlive(receipt.pid)) return false
+  // Guard against macOS PID reuse: if we recorded the process start identity,
+  // require it to match so a reused PID never keeps a dead receipt open forever.
+  if (receipt.processStartedAt && processIdentity(receipt.pid) !== receipt.processStartedAt) return false
+  return true
 }

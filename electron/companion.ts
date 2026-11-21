@@ -167,8 +167,16 @@ export class CompanionManager {
       this.preview = new PreviewProxy({
         bindAddress: bind.address,
         tls: { key: this.cert.key, cert: this.cert.cert },
-        // Previews live right above the Companion port, never on a tool's own port.
-        basePort: Math.min(65535, port + 1),
+        // Previews live right above the Companion port (wrapping safely if
+        // Companion itself is at 65535) and never collide with a tool's own port.
+        basePort: port < 65535 ? port + 1 : 48621,
+        reservedPorts: () => {
+          const ports = [port]
+          for (const tool of this.deps.store.list()) {
+            if (tool.port) ports.push(tool.port)
+          }
+          return ports
+        },
         log: (message) => console.log(`[shelf] ${message}`),
       })
       this.syncPreviews()

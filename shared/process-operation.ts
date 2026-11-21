@@ -79,3 +79,28 @@ export class ProcessOperations {
     }
   }
 }
+
+const STALE_OPERATION_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Best-effort startup cleanup for unleased operation files older than 24h
+ * (e.g. finished `import:<stageId>` imports or deleted tools).
+ */
+export function cleanStaleOperations(root: string): void {
+  const dir = path.join(root, 'operations')
+  if (!fs.existsSync(dir)) return
+  const cutoff = Date.now() - STALE_OPERATION_MAX_AGE_MS
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue
+      const file = path.join(dir, name)
+      try {
+        const stat = fs.statSync(file)
+        if (stat.mtimeMs > cutoff) continue
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Operation
+        if (parsed.lease) continue
+        fs.rmSync(file, { force: true })
+      } catch { /* active or unreadable — leave alone */ }
+    }
+  } catch { /* best-effort housekeeping */ }
+}

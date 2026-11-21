@@ -88,6 +88,8 @@ export interface CompanionServerOptions {
   onClientsChanged?: (count: number) => void
   onDevicesChanged?: () => void
   onDeviceRevoked?: (deviceId: string) => void
+  /** WebSocket ping/pong sweep interval in ms (default 30s). */
+  heartbeatIntervalMs?: number
   log?: (message: string) => void
 }
 
@@ -108,11 +110,24 @@ const AUTH_FAILURE_WINDOW_MS = 60_000
 const AUTH_FAILURE_LIMIT = 20
 /** A device's lastSeen is written at most this often. */
 const TOUCH_INTERVAL_MS = 60_000
+/** Interval for detecting half-open mobile WebSockets (e.g. locked iPhone). */
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000
+/** Drop outbound broadcasts to a stalled socket once its send queue exceeds 1 MB. */
+const MAX_WS_BUFFERED_BYTES = 1024 * 1024
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
 
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
+  }
+}
+
+/** Decode a URL path segment or fail with HTTP 400 on malformed percent-encoding. */
+function decodePathSegment(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    throw new HttpError(400, 'Invalid path encoding')
   }
 }
 
@@ -150,6 +165,9 @@ export class CompanionServer {
   private wss: WebSocketServer | null = null
   private readonly sockets = new Set<Duplex>()
   private readonly clients = new Map<WebSocket, PairedDeviceView>()
+  /** Tracks sockets that answered the last ping (cleared on each sweep). */
+  private readonly alive = new WeakSet<WebSocket>()
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pairing: PairingState | null = null
   private pairingTimer: ReturnType<typeof setTimeout> | null = null
   private listenInfo: ListenInfo | null = null
@@ -224,13 +242,49 @@ export class CompanionServer {
     server.on('error', (err) => this.options.log?.(`companion server error: ${err.message}`))
     this.server = server
     this.wss = wss
+    this.startHeartbeat()
     const bound = server.address()
     const boundPort = typeof bound === 'object' && bound ? bound.port : port
     this.listenInfo = { address, port: boundPort, url: `https://${address}:${boundPort}` }
     return this.listenInfo
   }
 
+  /**
+   * Sweep half-open sockets (common when iOS sleeps or backgrounds the PWA
+   * without sending TCP FIN) so client counts and powerSaveBlocker recover.
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    const interval = this.options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS
+    if (interval <= 0) return
+    this.heartbeatTimer = setInterval(() => {
+      let dropped = false
+      for (const ws of [...this.clients.keys()]) {
+        if (ws.readyState !== WebSocket.OPEN || !this.alive.has(ws)) {
+          this.clients.delete(ws)
+          dropped = true
+          try { ws.terminate() } catch { /* already gone */ }
+          continue
+        }
+        this.alive.delete(ws)
+        try { ws.ping() } catch {
+          this.clients.delete(ws)
+          dropped = true
+          try { ws.terminate() } catch { /* already gone */ }
+        }
+      }
+      if (dropped) this.options.onClientsChanged?.(this.clients.size)
+    }, interval)
+    this.heartbeatTimer.unref?.()
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = null
+  }
+
   async close(): Promise<void> {
+    this.stopHeartbeat()
     this.cancelPairing()
     for (const ws of this.clients.keys()) {
       try { ws.close(1001, 'Companion is turning off') } catch { /* already gone */ }
@@ -269,7 +323,9 @@ export class CompanionServer {
   private send(message: CompanionWsMessage): void {
     const text = JSON.stringify(message)
     for (const ws of this.clients.keys()) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(text)
+      if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_WS_BUFFERED_BYTES) {
+        ws.send(text)
+      }
     }
   }
 
@@ -347,7 +403,7 @@ export class CompanionServer {
     }
 
     if (parts[1] === 'tools' && parts[2]) {
-      const toolId = decodeURIComponent(parts[2])
+      const toolId = decodePathSegment(parts[2])
       this.assertToolExists(toolId)
       const action = parts[3]
       if (method === 'GET' && action === 'logs') {
@@ -381,7 +437,7 @@ export class CompanionServer {
     if (parts[1] === 'drafts') {
       if (method === 'GET' && !parts[2]) { this.json(res, 200, host.listDrafts()); return }
       if (method === 'POST' && parts[2]) {
-        const draftId = decodeURIComponent(parts[2])
+        const draftId = decodePathSegment(parts[2])
         if (!host.listDrafts().some((draft) => draft.id === draftId)) throw new HttpError(404, 'That draft is no longer waiting.')
         if (parts[3] === 'accept') {
           const body = await this.readJson(req) as { updatedAt?: unknown }
@@ -398,7 +454,7 @@ export class CompanionServer {
     }
 
     if (parts[1] === 'collections' && parts[2] && method === 'POST') {
-      const collectionId = decodeURIComponent(parts[2])
+      const collectionId = decodePathSegment(parts[2])
       if (!host.listCollections().some((item) => item.id === collectionId)) throw new HttpError(404, 'Collection not found')
       if (parts[3] === 'start') { this.json(res, 200, await host.startCollection(collectionId, device)); return }
       if (parts[3] === 'stop') { this.json(res, 200, await host.stopCollection(collectionId)); return }
@@ -603,8 +659,10 @@ export class CompanionServer {
     const paired = device
     this.touch(paired.id, remote)
     wss.handleUpgrade(req, socket, head, (ws) => {
+      this.alive.add(ws)
       this.clients.set(ws, paired)
       this.options.onClientsChanged?.(this.clients.size)
+      ws.on('pong', () => { this.alive.add(ws) })
       // The probed table, not the in-memory one: tools launched by an agent
       // or adopted from outside are running too, and the phone's list must
       // not flip to Stopped on every reconnect.
@@ -617,8 +675,9 @@ export class CompanionServer {
         })
       ws.on('message', () => { /* the phone only listens; nothing is accepted here */ })
       ws.on('close', () => {
-        this.clients.delete(ws)
-        this.options.onClientsChanged?.(this.clients.size)
+        if (this.clients.delete(ws)) {
+          this.options.onClientsChanged?.(this.clients.size)
+        }
       })
       ws.on('error', () => ws.terminate())
     })

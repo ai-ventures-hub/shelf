@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { storedToolSchema, storedCollectionSchema, FutureLibraryVersionError } from './library-validation'
+import { isHttpUrl } from './tool-validation'
 import { createHash, randomUUID } from 'node:crypto'
 import { atomicWriteFileSync, withFileLockSync } from './atomic-file'
 import { normalizeAgentAccess, normalizeCapabilities } from './capability-intelligence'
@@ -193,6 +194,11 @@ export class LibraryStore {
     // lookup, so each call would add one more identical-looking tool.
     if (!cleanName) throw new Error('Tool name is required.')
 
+    const cleanUrl = input.url?.trim() || undefined
+    if (cleanUrl && !isHttpUrl(cleanUrl)) {
+      throw new Error('Tool URL must start with http:// or https://.')
+    }
+
     const tool: Tool = {
       ...input,
       id: input.id || randomUUID(),
@@ -210,7 +216,7 @@ export class LibraryStore {
       stopCommand: input.stopCommand?.trim() || undefined,
       description: input.description?.trim() || undefined,
       projectPath: input.projectPath?.trim() || undefined,
-      url: input.url?.trim() || undefined,
+      url: cleanUrl,
       notes: input.notes?.trim() || undefined,
       iconPath: input.iconPath?.trim() || undefined,
       iconLucide: input.iconLucide?.trim() || undefined,
@@ -242,6 +248,25 @@ export class LibraryStore {
         ? { ...c, toolIds: c.toolIds.filter((tid) => tid !== id), updatedAt: now }
         : c)
       this.write(data)
+    })
+  }
+
+  /**
+   * Unlink a deleted design profile from any collections referencing it so
+   * stale designProfileId pointers do not linger in library.json.
+   */
+  clearDesignProfile(profileId: string): void {
+    withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      let dirty = false
+      const now = new Date().toISOString()
+      data.collections = data.collections.map((c) => {
+        if (c.designProfileId !== profileId) return c
+        dirty = true
+        const { designProfileId: _removed, ...rest } = c
+        return { ...rest, updatedAt: now }
+      })
+      if (dirty) this.write(data)
     })
   }
 

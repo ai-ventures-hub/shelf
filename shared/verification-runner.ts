@@ -142,7 +142,17 @@ export class VerificationRunner {
       throw new Error(
         'Project configuration or commands changed. Review the current commands before running.',
       )
-    if (!tool.projectPath || !fs.statSync(tool.projectPath).isDirectory())
+    if (!tool.projectPath)
+      throw new Error(
+        'The project folder is unavailable. Update the tool folder before running.',
+      )
+    let projectIsDir = false
+    try {
+      projectIsDir = fs.statSync(tool.projectPath).isDirectory()
+    } catch {
+      projectIsDir = false
+    }
+    if (!projectIsDir)
       throw new Error(
         'The project folder is unavailable. Update the tool folder before running.',
       )

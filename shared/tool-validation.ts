@@ -31,6 +31,20 @@ export const toolSchema = z.object({
   remotePreview: z.boolean().optional(),
 })
 
+/**
+ * Return true only for well-formed http:// or https:// URLs.
+ * Used on write boundaries and external launch surfaces so non-web schemes
+ * (file://, javascript:, custom OS handlers) are never stored or executed.
+ */
+export function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim())
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export type Tool = z.infer<typeof toolSchema>
 export type ToolSource = z.infer<typeof toolSourceSchema>
 export type AgentAccess = z.infer<typeof agentAccessSchema>

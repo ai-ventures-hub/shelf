@@ -166,8 +166,13 @@ export async function stopCollection(
   const collection = deps.store.getCollection(collectionId)
   if (!collection) throw new Error(`Collection not found: ${collectionId}`)
 
+  // Ordered stacks tear down in reverse dependency order (frontends/consumers
+  // before APIs/databases) so dependents stop cleanly before their upstreams.
+  const order = collection.stack?.ordered
+    ? [...collection.toolIds].reverse()
+    : collection.toolIds
   const results: CollectionToolResult[] = []
-  for (const toolId of collection.toolIds) {
+  for (const toolId of order) {
     const tool = deps.store.get(toolId)
     if (!tool) continue
     const current = await deps.processes.getState(toolId)

@@ -138,7 +138,48 @@
   color:var(--muted);
 }
 
-.log-follow { display: flex; align-items: center; gap: 8px; margin-block: 12px; }
+.log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-block: 12px;
+}
+
+.log-streams {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.log-stream-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+}
+
+.log-stream-chip.is-active {
+  border-color: var(--brand);
+  background: var(--tint-brand);
+  color: var(--ink);
+}
+
+.log-filter-input {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 260px;
+  padding: 5px 10px;
+  font-size: .85rem;
+}
+
+.log-follow { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: .88rem; }
+.log-match-summary { margin: 6px 0 0; font-size: .8rem; color: var(--muted); }
 .log-earlier { display: flex; margin: 0 0 .6rem; font-family: inherit; }
 /* Overview tail: a few recent lines, not the full run. */
 .log-tail { max-height: 12rem; }

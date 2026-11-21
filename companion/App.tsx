@@ -17,7 +17,13 @@ const FAV_KEY = 'shelf-companion-favorites'
 
 function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
-  if (parts[0] === 'tools' && parts[1]) return { name: 'tool', id: decodeURIComponent(parts[1]) }
+  if (parts[0] === 'tools' && parts[1]) {
+    try {
+      return { name: 'tool', id: decodeURIComponent(parts[1]) }
+    } catch {
+      return { name: 'tools' }
+    }
+  }
   if (parts[0] === 'more') return { name: 'more' }
   return { name: 'tools' }
 }
@@ -176,15 +182,16 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   const scroll = useRef<HTMLElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
+  const handleLogSink = useCallback((sink: ((line: LogLine) => void) | null) => {
+    logSink.current = sink
+  }, [])
+
   const refresh = useCallback(async () => {
     try {
       const next = await api.overview()
       setOverview(next)
-      setStates((prev) => {
-        const merged = new Map(prev)
-        for (const state of next.states) merged.set(state.toolId, state)
-        return merged
-      })
+      // Rebuild from the server snapshot so removed tools never retain ghost "running" counts.
+      setStates(new Map(next.states.map((state) => [state.toolId, state])))
       setError(null)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -200,19 +207,15 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
 
   useEffect(() => {
     const refreshLater = debounce(() => void refresh(), 400)
-    return connectLive((message) => {
+    const stopLive = connectLive((message) => {
       if (message.type === 'hello') {
-        setStates((prev) => {
-          const next = new Map(prev)
-          for (const state of message.states) next.set(state.toolId, state)
-          return next
-        })
+        setStates(new Map(message.states.map((state) => [state.toolId, state])))
       } else if (message.type === 'process:update') {
         setStates((prev) => new Map(prev).set(message.state.toolId, message.state))
       } else if (message.type === 'logs:line') {
         logSink.current?.(message.line)
       } else if (message.type === 'library:changed' || message.type === 'receipts:update' || message.type === 'drafts:changed') {
-        refreshLater()
+        refreshLater.trigger()
       }
     }, (open) => {
       setLive(open)
@@ -220,6 +223,10 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
       // is the full truth, so fetch it again on every reconnect.
       if (open) void refresh()
     })
+    return () => {
+      refreshLater.cancel()
+      stopLive()
+    }
   }, [refresh])
 
   // Each screen starts at the top; only the middle scrolls.
@@ -305,7 +312,7 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
             tool={tools.find((item) => item.id === route.id) || null}
             state={states.get(route.id)}
             health={health.find((item) => item.toolId === route.id)}
-            onLogSink={(sink) => { logSink.current = sink }}
+            onLogSink={handleLogSink}
             onStateChange={(state) => setStates((prev) => new Map(prev).set(state.toolId, state))}
             onRefresh={() => void refresh()}
           />
@@ -316,11 +323,17 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
   )
 }
 
-function debounce(fn: () => void, ms: number): () => void {
+function debounce(fn: () => void, ms: number): { trigger: () => void; cancel: () => void } {
   let timer: ReturnType<typeof setTimeout> | null = null
-  return () => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(fn, ms)
+  return {
+    trigger: () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { timer = null; fn() }, ms)
+    },
+    cancel: () => {
+      if (timer) clearTimeout(timer)
+      timer = null
+    },
   }
 }
 
@@ -548,6 +561,7 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }
 
   const status = state?.status
   const isUp = status === 'running'
+  const canStop = isUp || status === 'starting'
   const inFlight = status === 'starting' || status === 'stopping'
   const canStart = !isUp && !inFlight
   const blocked = health && !health.launchable && canStart ? health.problems.join(' ') : null
@@ -565,8 +579,8 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }
       <div className="actions">
         {isUp || inFlight ? (
           <>
-            <button type="button" className="btn danger grow" disabled={!!busy || !isUp} onClick={() => void act('stop', () => api.stop(tool.id))}>
-              {busy === 'stop' || status === 'stopping' ? 'Stopping…' : 'Stop'}
+            <button type="button" className="btn danger grow" disabled={!!busy || !canStop} onClick={() => void act('stop', () => api.stop(tool.id))}>
+              {busy === 'stop' || status === 'stopping' ? 'Stopping…' : status === 'starting' ? 'Cancel' : 'Stop'}
             </button>
             <button type="button" className="btn" disabled={!!busy || !isUp} onClick={() => void act('restart', () => api.restart(tool.id))}>
               {busy === 'restart' ? 'Restarting…' : 'Restart'}
@@ -626,9 +640,12 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }
 
 function ToolLog({ toolId, onLogSink }: { toolId: string; onLogSink: (sink: ((line: LogLine) => void) | null) => void }) {
   const [logs, setLogs] = useState<LogLine[]>([])
+  const [errorsOnly, setErrorsOnly] = useState(false)
+  const [filter, setFilter] = useState('')
   const [report, setReport] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const end = useRef<HTMLDivElement | null>(null)
+  const boxRef = useRef<HTMLPreElement | null>(null)
+  const atBottom = useRef(true)
 
   useEffect(() => {
     let cancelled = false
@@ -639,16 +656,62 @@ function ToolLog({ toolId, onLogSink }: { toolId: string; onLogSink: (sink: ((li
     return () => { cancelled = true; onLogSink(null) }
   }, [toolId, onLogSink])
 
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [logs.length])
+  const stderrCount = useMemo(
+    () => logs.reduce((count, line) => count + (line.stream === 'stderr' ? 1 : 0), 0),
+    [logs],
+  )
+  const needle = filter.trim().toLowerCase()
+  const visible = useMemo(() => {
+    if (!errorsOnly && !needle) return logs
+    return logs.filter((line) => {
+      if (errorsOnly && line.stream !== 'stderr') return false
+      if (needle && !line.text.toLowerCase().includes(needle)) return false
+      return true
+    })
+  }, [logs, errorsOnly, needle])
+
+  // Track the last visible line identity so auto-scroll keeps working even
+  // after the 300-line ring buffer reaches capacity (when length stays 300).
+  const lastLine = visible[visible.length - 1]
+  const lastKey = lastLine ? (lastLine.id || `${lastLine.at}:${lastLine.text.length}`) : ''
+  useEffect(() => {
+    const el = boxRef.current
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight
+  }, [lastKey, visible.length])
 
   return (
     <div className="logwrap">
-      <pre className="log">
+      <div className="logfilter">
+        <button
+          type="button"
+          className={`btn small${errorsOnly ? ' primary' : ''}`}
+          aria-pressed={errorsOnly}
+          onClick={() => setErrorsOnly((on) => !on)}
+        >
+          Errors{stderrCount > 0 ? ` (${stderrCount})` : ''}
+        </button>
+        <input
+          type="search"
+          className="logsearch"
+          placeholder="Filter log…"
+          aria-label="Filter log"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
+      <pre
+        ref={boxRef}
+        className="log"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 24
+        }}
+      >
         {logs.length === 0 ? <span className="muted">No output yet.</span> : null}
-        {logs.map((line, index) => (
+        {logs.length > 0 && visible.length === 0 ? <span className="muted">No matching lines.</span> : null}
+        {visible.map((line, index) => (
           <span key={line.id || `${line.at}-${index}`} className={`logline is-${line.stream}`}>{line.text}{'\n'}</span>
         ))}
-        <div ref={end} />
       </pre>
       <div className="actions">
         <button

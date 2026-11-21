@@ -4,7 +4,7 @@ import { ToolEnvironmentPanel } from '../components/ToolEnvironmentPanel'
 import { resolveDesignProfile } from '../../shared/design-resolve'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
 import { Sparkles, Star } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
 import { useConfirm } from '../components/feedback/ConfirmDialog'
@@ -97,6 +97,26 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   // The Library card links here to confirm/deny a resolve suggestion.
   const { suggestions, resolve, dismiss } = useGapSuggestions()
   const toolSuggestions = suggestions.filter((s) => s.toolId === id)
+
+  // Reset per-tool transient UI state when navigating directly from /tools/A to /tools/B.
+  const prevToolIdRef = useRef(id)
+  useEffect(() => {
+    if (prevToolIdRef.current === id) return
+    prevToolIdRef.current = id
+    const result = (location.state as { registration?: import('../types').RegisterProjectResult } | null)?.registration
+    setActionError(
+      result?.outcome === 'saved_launch_failed'
+        ? result.state?.message || 'The tool was saved, but setup or launch failed. Review the Runs tab and check Environment to retry setup.'
+        : result?.outcome === 'needs_setup'
+          ? 'The tool was saved. Open Environment below to review the setup it needs before launching.'
+          : null,
+    )
+    setReportPreview(null)
+    setReportCopied(false)
+    setShareStatus(null)
+    setUpdatesOpen(false)
+    setTeamShareOpen(false)
+  }, [id, location.state])
 
   useEffect(() => {
     if (!id || !window.shelf?.getDesignMd) {

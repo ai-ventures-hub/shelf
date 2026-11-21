@@ -26,34 +26,42 @@ interface ProcessEntry {
 
 let cachedTable: Map<number, ProcessEntry> | null = null
 let cachedAt = 0
+let inFlightSnapshot: Promise<Map<number, ProcessEntry>> | null = null
 
 /**
- * One `ps` pass over the whole table, cached briefly so the 5s reconcile
- * timer × N tools does not fork a ps per tool per tick.
+ * One `ps` pass over the whole table, cached briefly and deduplicated across
+ * concurrent callers so the 5s reconcile timer × N tools forks a single `ps`.
  */
 export async function snapshotProcessTable(): Promise<Map<number, ProcessEntry>> {
   const now = Date.now()
   if (cachedTable && now - cachedAt < SNAPSHOT_TTL_MS) return cachedTable
-  const table = new Map<number, ProcessEntry>()
-  try {
-    const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,pgid='])
-    for (const line of stdout.split('\n')) {
-      const [pid, ppid, pgid] = line.trim().split(/\s+/).map(Number)
-      if (Number.isFinite(pid) && Number.isFinite(ppid) && Number.isFinite(pgid)) {
-        table.set(pid, { ppid, pgid })
+  if (inFlightSnapshot) return inFlightSnapshot
+  inFlightSnapshot = (async () => {
+    const table = new Map<number, ProcessEntry>()
+    try {
+      const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,pgid='])
+      for (const line of stdout.split('\n')) {
+        const [pid, ppid, pgid] = line.trim().split(/\s+/).map(Number)
+        if (Number.isFinite(pid) && Number.isFinite(ppid) && Number.isFinite(pgid)) {
+          table.set(pid, { ppid, pgid })
+        }
       }
+    } catch {
+      // Empty table → every check refuses, which is the safe direction.
     }
-  } catch {
-    // Empty table → every check refuses, which is the safe direction.
-  }
-  cachedTable = table
-  cachedAt = now
-  return table
+    cachedTable = table
+    cachedAt = Date.now()
+    return table
+  })().finally(() => {
+    inFlightSnapshot = null
+  })
+  return inFlightSnapshot
 }
 
 /** Test seam: drop the snapshot so the next check sees fresh processes. */
 export function invalidateProcessSnapshot(): void {
   cachedTable = null
+  inFlightSnapshot = null
 }
 
 /**

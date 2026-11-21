@@ -267,7 +267,12 @@ export function registerCapabilityTools({
               : 'Provide status "planned" and/or relatedToolIds.',
           )
         }
-        const gap = gaps.update(id, { status, relatedToolIds: validToolIds })
+        const gap = gaps.update(id, {
+          status,
+          relatedToolIds: validToolIds,
+          // Enforce resolved/dismissed refusal inside the file lock to prevent TOCTOU races.
+          refuseIfClosed: true,
+        })
         return textResult({ gap, droppedToolIds })
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err))
