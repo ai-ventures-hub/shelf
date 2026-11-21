@@ -3,10 +3,11 @@ import { launchOriginLabel } from '../lib/launchOrigin'
 import { ToolEnvironmentPanel } from '../components/ToolEnvironmentPanel'
 import { resolveDesignProfile } from '../../shared/design-resolve'
 import { useDesignProfiles } from '../hooks/useDesignProfiles'
-import { Sparkles, Star } from 'lucide-react'
+import { RefreshCw, Smartphone, Sparkles, Star } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DiagnosticReportDialog } from '../components/DiagnosticReportDialog'
+import { PhonePreviewDialog } from '../components/PhonePreviewDialog'
 import { useConfirm } from '../components/feedback/ConfirmDialog'
 import { LogPanel, LogTail } from '../components/LogPanel'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
@@ -38,6 +39,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
     startTool,
     stopTool,
     restartTool,
+    saveTool,
     deleteTool,
   } = useLibrary()
 
@@ -90,6 +92,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   >(null)
   const [updatesOpen, setUpdatesOpen] = useState(false)
   const [teamShareOpen, setTeamShareOpen] = useState(false)
+  const [phoneOpen, setPhoneOpen] = useState(false)
   const { receipts, error: receiptError, refresh: refreshReceipts, clear: clearReceipts } = useReceipts({
     toolId: id,
     limit: 25,
@@ -116,6 +119,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
     setShareStatus(null)
     setUpdatesOpen(false)
     setTeamShareOpen(false)
+    setPhoneOpen(false)
   }, [id, location.state])
 
   useEffect(() => {
@@ -324,6 +328,11 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
                   <Star size={11} fill="currentColor" aria-hidden /> Favorite
                 </span>
               ) : null}
+              {current.autoRestart ? (
+                <span className="tag-chip" title="Automatically retries up to 3 times if it crashes">
+                  <RefreshCw size={11} aria-hidden /> Auto-heal
+                </span>
+              ) : null}
               {current.tags.map((tag) => (
                 <span key={tag} className="tag-chip">
                   {tag}
@@ -375,6 +384,11 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
         {state?.code ? (
           <div className="warning-card" role="alert" style={{ marginBottom: '1rem' }}>
             <strong>{friendlyLaunchError(state.code)}</strong>
+            {state.detail ? (
+              <p className="remedy-detail">
+                Detected: <code>{state.detail}</code>
+              </p>
+            ) : null}
             <div
               className="action-row"
               style={{ margin: '0.6rem 0 0', flexWrap: 'wrap' }}
@@ -391,10 +405,36 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
                   Launch on a free port
                 </button>
               ) : null}
-              {state.remedy === 'edit_command' ? (
-                <Link className="btn btn-quiet btn-sm" to={`/tools/${toolId}/edit`}>
-                  Edit launch command
+              {state.remedy === 'install_deps' ? (
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-sm"
+                  onClick={() => {
+                    const heading = document.getElementById('environment-title')
+                    heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }}
+                >
+                  Install dependencies
+                </button>
+              ) : null}
+              {state.remedy === 'edit_env' ? (
+                <Link className="btn btn-quiet btn-sm" to={`/tools/${toolId}/edit?focus=env`}>
+                  Edit environment variables
                 </Link>
+              ) : null}
+              {state.remedy === 'edit_command' || state.remedy === 'repick_folder' ? (
+                <Link className="btn btn-quiet btn-sm" to={`/tools/${toolId}/edit`}>
+                  {state.remedy === 'repick_folder' ? 'Update project folder' : 'Edit launch command'}
+                </Link>
+              ) : null}
+              {state.remedy === 'open_docker' ? (
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-sm"
+                  onClick={() => void run(() => window.shelf.openPath('/Applications/Docker.app'))}
+                >
+                  Open Docker Desktop
+                </button>
               ) : null}
               <button
                 type="button"
@@ -491,6 +531,14 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
               items={openMenuItems}
             />
           ) : null}
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={() => setPhoneOpen(true)}
+            title="Open or preview this tool on your phone"
+          >
+            <Smartphone size={15} aria-hidden /> Phone
+          </button>
           <div className="detail-actions-more">
             <OverflowMenu label="More actions" items={moreMenuItems} size="md" />
           </div>
@@ -705,6 +753,15 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
         tool={current}
         open={teamShareOpen}
         onClose={() => setTeamShareOpen(false)}
+      />
+      <PhonePreviewDialog
+        open={phoneOpen}
+        tool={current}
+        running={status === 'running'}
+        onTogglePreview={async () => {
+          await saveTool({ ...current, remotePreview: !current.remotePreview })
+        }}
+        onClose={() => setPhoneOpen(false)}
       />
 
       {section === 'runs' && <section className="panel">

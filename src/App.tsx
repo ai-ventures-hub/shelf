@@ -22,6 +22,7 @@ const ToolFormPage = lazy(() => import('./pages/ToolFormPage').then((module) => 
 const AddProjectPage = lazy(() => import('./pages/AddProjectPage').then((module) => ({ default: module.AddProjectPage })))
 const StartToolPage = lazy(() => import('./pages/StartToolPage').then((module) => ({ default: module.StartToolPage })))
 const MorningBoardPage = lazy(() => import('./pages/MorningBoardPage').then((module) => ({ default: module.MorningBoardPage })))
+const NeedsYouPage = lazy(() => import('./pages/NeedsYouPage').then((module) => ({ default: module.NeedsYouPage })))
 const DraftToolsPage = lazy(() => import('./pages/DraftToolsPage').then((module) => ({ default: module.DraftToolsPage })))
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/favorites" element={<LibraryPage key="favorites" mode="favorites" />} />
             <Route path="/running" element={<LibraryPage key="running" mode="running" />} />
             <Route path="/recent" element={<LibraryPage key="recent" mode="recent" />} />
+            <Route path="/needs-you" element={<NeedsYouPage />} />
             <Route path="/activity" element={<MorningBoardPage />} />
             <Route path="/drafts" element={<DraftToolsPage />} />
             <Route path="/gaps" element={<CapabilityGapsPage />} />

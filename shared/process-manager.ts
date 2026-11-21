@@ -37,6 +37,24 @@ import type {
 import { adoptedRunNote, maskCommandEnvPrefix, toolSecretValues } from './types'
 export type { PortConflictPolicy, StartOptions } from './contracts'
 
+/** Default exponential backoff delays for opt-in auto-heal restarts. */
+const DEFAULT_AUTO_RESTART_DELAYS_MS = [1_000, 3_000, 8_000]
+/** Rolling window over which crash-restart attempts are counted. */
+const AUTO_RESTART_WINDOW_MS = 5 * 60_000
+/**
+ * Deterministic configuration/setup failures that restarting will never fix.
+ * Auto-heal skips these so Shelf surfaces the remedy immediately instead of looping.
+ */
+const NON_TRANSIENT_ERROR_CODES = new Set<LaunchErrorCode>([
+  'tool_not_found',
+  'folder_missing',
+  'no_launch_command',
+  'deps_missing',
+  'env_missing',
+  'runtime_missing',
+  'bad_launch_command',
+])
+
 interface ManagedProcess {
   child: ChildProcess
   toolId: string
@@ -58,6 +76,8 @@ export interface ProcessManagerOptions {
    * MCP client identity is only known after the initialize handshake.
    */
   defaultOrigin?: () => LaunchOrigin | undefined
+  /** Optional override for auto-restart backoff delays (used by smoke tests). */
+  autoRestartDelaysMs?: number[]
 }
 
 /**
@@ -89,6 +109,10 @@ export class ProcessManager {
    * cannot pick the same "free" port or interleave stale tool snapshots.
    */
   private libraryWriteChain: Promise<unknown> = Promise.resolve()
+  /** Pending backoff timers for opt-in auto-restart after unexpected crashes. */
+  private readonly autoRestartTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** Timestamps of recent auto-restart attempts per tool within AUTO_RESTART_WINDOW_MS. */
+  private readonly autoRestartHistory = new Map<string, number[]>()
 
   constructor(
     private readonly store: LibraryStore,
@@ -154,6 +178,8 @@ export class ProcessManager {
     toolId: string,
     options: StartOptions = {},
   ): Promise<ToolRuntimeState> {
+    // A direct start supersedes any queued auto-restart timer.
+    this.cancelAutoRestart(toolId, false)
     const inFlight = this.inFlightStarts.get(toolId)
     if (inFlight) return inFlight
     const generation = this.operations.generation(toolId)
@@ -332,7 +358,7 @@ export class ProcessManager {
           outcome: 'error',
           message: err.message,
         })
-        const { code } = classifyLaunchFailure(this.runtime.getLogs(toolId))
+        const { code, detail } = classifyLaunchFailure(this.runtime.getLogs(toolId))
         this.runtime.setState(toolId, {
           toolId,
           status: 'error',
@@ -340,6 +366,7 @@ export class ProcessManager {
           message: err.message,
           code,
           remedy: remedyFor(code),
+          detail,
         })
       })
 
@@ -372,17 +399,26 @@ export class ProcessManager {
           message,
           pid: child.pid,
         })
-        const failureCode = cleanExit
+        const classification = cleanExit
           ? undefined
-          : classifyLaunchFailure(this.runtime.getLogs(toolId)).code
+          : classifyLaunchFailure(this.runtime.getLogs(toolId))
+        const failureCode = classification?.code
+        // Opt-in auto-heal: retry unexpected transient crashes with exponential backoff.
+        if (!cleanExit && this.scheduleAutoRestart(toolId, failureCode, origin)) {
+          return
+        }
+        const exhausted = !cleanExit && this.isAutoRestartExhausted(toolId)
         this.runtime.setState(toolId, {
           toolId,
           status: cleanExit ? 'stopped' : 'error',
           startedAt,
           exitCode: code,
-          message,
+          message: exhausted
+            ? `${message} Auto-restart gave up after ${this.autoRestartDelays().length} attempts.`
+            : message,
           code: failureCode,
           remedy: failureCode ? remedyFor(failureCode) : undefined,
+          detail: classification?.detail,
         })
       })
 
@@ -543,7 +579,7 @@ export class ProcessManager {
           startedBy: origin,
         })
       }
-      const { code } = classifyLaunchFailure(this.runtime.getLogs(toolId))
+      const { code, detail } = classifyLaunchFailure(this.runtime.getLogs(toolId))
       return this.runtime.setState(toolId, {
         toolId,
         status: 'error',
@@ -551,6 +587,7 @@ export class ProcessManager {
         message,
         code,
         remedy: remedyFor(code),
+        detail,
       })
     }
   }
@@ -560,6 +597,7 @@ export class ProcessManager {
     reason?: string,
     failure?: { code?: LaunchErrorCode; remedy?: RemedyKind },
   ): Promise<ToolRuntimeState> {
+    this.cancelAutoRestart(toolId, true)
     this.operations.cancelStarts(toolId)
     return this.operations.run(toolId, () => this.stopInternal(toolId, reason, failure))
   }
@@ -722,6 +760,7 @@ export class ProcessManager {
   }
 
   async restart(toolId: string, options: StartOptions = {}): Promise<ToolRuntimeState> {
+    this.cancelAutoRestart(toolId, true)
     this.operations.cancelStarts(toolId)
     return this.operations.run(toolId, async () => {
       const stopped = await this.stopInternal(toolId)
@@ -738,6 +777,7 @@ export class ProcessManager {
    */
   forget(toolId: string): void {
     if (this.processes.has(toolId)) return
+    this.cancelAutoRestart(toolId, true)
     this.runtime.forget(toolId)
   }
 
@@ -750,6 +790,10 @@ export class ProcessManager {
     reason = 'Shelf is quitting.',
     opts: { scope?: 'local' | 'all' } = {},
   ): Promise<void> {
+    // Cancel all queued auto-restart timers before stopping active processes.
+    for (const toolId of [...this.autoRestartTimers.keys()]) {
+      this.cancelAutoRestart(toolId, true)
+    }
     const scope = opts.scope || 'all'
     if (scope === 'local') {
       await Promise.all([...new Set([...this.processes.keys(), ...this.inFlightStarts.keys()])].map((id) => this.stop(id, reason)))
@@ -834,6 +878,96 @@ export class ProcessManager {
         this.ownership.trustedExternalOwner(id, port, occupants),
       findActiveReceipt: (id) => this.ownership.findActiveReceipt(id),
     })
+  }
+
+  /** Backoff schedule for opt-in auto-heal restarts. */
+  private autoRestartDelays(): number[] {
+    return this.options.autoRestartDelaysMs?.length
+      ? this.options.autoRestartDelaysMs
+      : DEFAULT_AUTO_RESTART_DELAYS_MS
+  }
+
+  /** Cancel any queued auto-restart timer for a tool, optionally resetting its crash budget. */
+  private cancelAutoRestart(toolId: string, resetHistory: boolean): void {
+    const timer = this.autoRestartTimers.get(toolId)
+    if (timer) {
+      clearTimeout(timer)
+      this.autoRestartTimers.delete(toolId)
+    }
+    if (resetHistory) {
+      this.autoRestartHistory.delete(toolId)
+    }
+  }
+
+  /** True when the tool is opted into auto-restart and has exhausted its rolling crash budget. */
+  private isAutoRestartExhausted(toolId: string): boolean {
+    const latest = this.store.get(toolId)
+    if (!latest?.autoRestart) return false
+    const now = Date.now()
+    const recent = (this.autoRestartHistory.get(toolId) || []).filter(
+      (at) => now - at < AUTO_RESTART_WINDOW_MS,
+    )
+    return recent.length >= this.autoRestartDelays().length
+  }
+
+  /**
+   * Schedule an exponential-backoff restart for an unexpectedly crashed process
+   * when the tool has opted into `autoRestart` and the failure looks transient.
+   */
+  private scheduleAutoRestart(
+    toolId: string,
+    failureCode: LaunchErrorCode | undefined,
+    origin: LaunchOrigin | undefined,
+  ): boolean {
+    const latest = this.store.get(toolId)
+    if (!latest?.autoRestart) return false
+    if (failureCode && NON_TRANSIENT_ERROR_CODES.has(failureCode)) return false
+    const delays = this.autoRestartDelays()
+    const now = Date.now()
+    const recent = (this.autoRestartHistory.get(toolId) || []).filter(
+      (at) => now - at < AUTO_RESTART_WINDOW_MS,
+    )
+    if (recent.length >= delays.length) {
+      this.autoRestartHistory.set(toolId, recent)
+      return false
+    }
+    recent.push(now)
+    this.autoRestartHistory.set(toolId, recent)
+    const attempt = recent.length
+    const delayMs = delays[attempt - 1]
+    const delayLabel = delayMs >= 1000 ? `${Math.round(delayMs / 1000)}s` : `${delayMs}ms`
+    this.runtime.appendLog(
+      toolId,
+      'system',
+      `Process crashed unexpectedly. Auto-restarting (${attempt}/${delays.length}) in ${delayLabel}…`,
+    )
+    this.runtime.setState(toolId, {
+      toolId,
+      status: 'starting',
+      message: `Auto-restarting (${attempt}/${delays.length})…`,
+      autoRestartAttempts: attempt,
+    })
+    this.cancelAutoRestart(toolId, false)
+    const timer = setTimeout(() => {
+      this.autoRestartTimers.delete(toolId)
+      void (async () => {
+        // Wait for any exiting start() operation (e.g. waitForPort/waitForSniffedUrl
+        // poll interval) to settle so inFlightStarts does not coalesce and swallow
+        // this retry.
+        const prev = this.inFlightStarts.get(toolId)
+        if (prev) await prev.catch(() => undefined)
+        // Abort if the user manually stopped/restarted (which clears history) or
+        // another process is already running or autoRestart was turned off.
+        if (!this.autoRestartHistory.has(toolId)) return
+        if (this.processes.has(toolId)) return
+        const currentTool = this.store.get(toolId)
+        if (!currentTool?.autoRestart) return
+        // Suppress browser auto-open on background crash recovery.
+        await this.start(toolId, { openUrlWhenReady: false, origin })
+      })()
+    }, delayMs)
+    this.autoRestartTimers.set(toolId, timer)
+    return true
   }
 
   /** Run fn after every previously queued library-mutating launch step. */

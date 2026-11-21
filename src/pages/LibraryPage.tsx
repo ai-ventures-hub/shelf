@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { AgentReadyChecklist } from '../components/AgentReadyChecklist'
 import { AddToolButton } from '../components/StudioShell'
 import { OverflowMenu } from '../components/OverflowMenu'
 import { requestAddShared } from '../lib/sharingEvents'
@@ -577,6 +578,10 @@ export function LibraryPage({
             />
           </div>
         </section>
+      ) : null}
+
+      {mode === 'all' && !loading && !loadFailed && !query.trim() && activeFilters.length === 0 ? (
+        <AgentReadyChecklist tools={tools} states={states} isDeveloper={isDeveloper} />
       ) : null}
 
       {loading ? (

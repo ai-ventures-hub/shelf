@@ -21,6 +21,8 @@ const { DesignProfileStore } = dist('design-profile-store')
 const { VerificationStore } = dist('verification-store')
 const { CapabilityGapStore } = dist('capability-gap-store')
 const { ProcessOperations } = dist('process-operation')
+const { ProcessManager } = dist('process-manager')
+const { classifyLaunchFailure, remedyFor } = dist('launch-diagnostics')
 const { startCollection, stopCollection } = dist('collection-launch')
 const { findFreePort } = dist('ports')
 const { sanitizeBackendSetCookies, PREVIEW_COOKIE } = dist('companion-cookies')
@@ -398,6 +400,97 @@ try {
       console.log('OK: CompanionServer returns 400 on bad encoding and drops silent dead WebSockets via heartbeat')
     } finally {
       await server.close()
+    }
+  }
+
+  // v2.5: missing env diagnostics (`env_missing` -> `edit_env`) & detail extraction.
+  {
+    const c1 = classifyLaunchFailure([
+      { id: '1', toolId: 't', stream: 'stderr', text: 'Error: Missing required environment variable: STRIPE_API_KEY', at: new Date().toISOString() },
+    ])
+    assert.equal(c1.code, 'env_missing')
+    assert.equal(c1.detail, 'STRIPE_API_KEY')
+    assert.equal(remedyFor(c1.code), 'edit_env')
+
+    const c2 = classifyLaunchFailure([
+      { id: '2', toolId: 't', stream: 'stderr', text: "KeyError: 'DATABASE_URL'", at: new Date().toISOString() },
+    ])
+    assert.equal(c2.code, 'env_missing')
+    assert.equal(c2.detail, 'DATABASE_URL')
+    console.log('OK: classifyLaunchFailure detects missing env vars with key detail and edit_env remedy')
+  }
+
+  // v2.5: opt-in autoRestart persistence, transient crash backoff, non-transient skip, and stop cancellation.
+  {
+    const autoRoot = fs.mkdtempSync(path.join(root, 'auto-restart-'))
+    const store = new LibraryStore(autoRoot)
+    const transient = store.save({
+      id: 'auto-crash',
+      name: 'Auto Crash',
+      launchCommand: 'node -e "setTimeout(() => process.exit(1), 25)"',
+      tags: [],
+      autoRestart: true,
+    })
+    assert.equal(store.get(transient.id)?.autoRestart, true)
+    const disabled = store.save({
+      id: 'auto-off',
+      name: 'Auto Off',
+      launchCommand: 'echo hi',
+      tags: [],
+      autoRestart: false,
+    })
+    assert.equal(store.get(disabled.id)?.autoRestart, undefined)
+
+    const envCrash = store.save({
+      id: 'auto-env',
+      name: 'Auto Env Crash',
+      launchCommand: 'node -e "console.error(\'Missing required environment variable: SECRET_TOKEN\'); process.exit(1)"',
+      tags: [],
+      autoRestart: true,
+    })
+
+    const states = []
+    const pm = new ProcessManager(store, {
+      autoRestartDelaysMs: [40, 60],
+      onEvent: (ch, payload) => {
+        if (ch === 'process:update') states.push(payload)
+      },
+    })
+    try {
+      // Transient crash retries twice then settles in error state with exhausted message.
+      await pm.start(transient.id, { openUrlWhenReady: false })
+      for (let i = 0; i < 60; i++) {
+        const cur = pm.peekState(transient.id)
+        if (cur.status === 'error' && cur.message?.includes('Auto-restart gave up')) break
+        await new Promise((r) => setTimeout(r, 40))
+      }
+      const finalTransient = pm.peekState(transient.id)
+      assert.equal(finalTransient.status, 'error', `expected exhausted error state, got ${JSON.stringify(finalTransient)}`)
+      assert.match(finalTransient.message || '', /Auto-restart gave up after 2 attempts/)
+      const attemptsSeen = states
+        .filter((s) => s.toolId === transient.id && s.autoRestartAttempts)
+        .map((s) => s.autoRestartAttempts)
+      assert.deepEqual(attemptsSeen, [1, 2], 'auto-restart should attempt 1 then 2 before giving up')
+
+      // Deterministic missing-env failure must skip auto-restart immediately and report detail.
+      await pm.start(envCrash.id, { openUrlWhenReady: false })
+      for (let i = 0; i < 40; i++) {
+        if (pm.peekState(envCrash.id).status === 'error') break
+        await new Promise((r) => setTimeout(r, 30))
+      }
+      const finalEnv = pm.peekState(envCrash.id)
+      assert.equal(finalEnv.status, 'error')
+      assert.equal(finalEnv.code, 'env_missing')
+      assert.equal(finalEnv.remedy, 'edit_env')
+      assert.equal(finalEnv.detail, 'SECRET_TOKEN')
+      assert.equal(
+        states.some((s) => s.toolId === envCrash.id && s.autoRestartAttempts),
+        false,
+        'non-transient env_missing failure must not trigger auto-restart loop',
+      )
+      console.log('OK: opt-in autoRestart retries transient crashes with backoff and skips non-transient env errors')
+    } finally {
+      await pm.stopAll('smoke cleanup')
     }
   }
 

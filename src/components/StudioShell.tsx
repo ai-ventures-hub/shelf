@@ -80,6 +80,13 @@ function NavIcon({ name }: { name: string }) {
           <path d="M4 6h16M4 12h16M4 18h10" />
         </svg>
       )
+    case 'inbox':
+      return (
+        <svg {...common}>
+          <path d="M4 12h4.2l1.8 3h4l1.8-3H20" />
+          <path d="M5.5 5h13L20 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5V12L5.5 5z" />
+        </svg>
+      )
     case 'drafts':
       return (
         <svg {...common}>
@@ -202,7 +209,9 @@ export function StudioShell({ children }: { children: ReactNode }) {
 
   const favorites = tools.filter((t) => t.favorite).length
   const running = Object.values(states).filter((s) => s.status === 'running').length
+  const errored = tools.filter((t) => states[t.id]?.status === 'error').length
   const recent = tools.filter((t) => t.lastLaunchedAt).length
+  const needsYouCount = errored + drafts.length + (isDeveloper ? openGaps.length : 0)
 
   useEffect(() => {
     if (!window.shelf) return
@@ -372,26 +381,40 @@ export function StudioShell({ children }: { children: ReactNode }) {
             <NavLabel collapsed={collapsed}>Running</NavLabel>
             <NavCount collapsed={collapsed} value={running} />
           </NavLink>
+          {isDeveloper ? (
+            <NavLink
+              to="/recent"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title="Recent"
+              aria-label={counted('Recent', recent, 'tool')}
+            >
+              <NavIcon name="recent" />
+              <NavLabel collapsed={collapsed}>Recent</NavLabel>
+              <NavCount collapsed={collapsed} value={recent} />
+            </NavLink>
+          ) : null}
           <NavLink
-            to="/recent"
+            to="/needs-you"
             className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title="Recent"
-            aria-label={counted('Recent', recent, 'tool')}
+            title="Needs you"
+            aria-label={counted('Needs you', needsYouCount, 'item')}
           >
-            <NavIcon name="recent" />
-            <NavLabel collapsed={collapsed}>Recent</NavLabel>
-            <NavCount collapsed={collapsed} value={recent} />
+            <NavIcon name="inbox" />
+            <NavLabel collapsed={collapsed}>Needs you</NavLabel>
+            {needsYouCount > 0 ? <NavCount collapsed={collapsed} value={needsYouCount} /> : null}
           </NavLink>
-          <NavLink
-            to="/activity"
-            className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
-            title="Activity"
-            aria-label="Activity"
-          >
-            <NavIcon name="activity" />
-            <NavLabel collapsed={collapsed}>Activity</NavLabel>
-          </NavLink>
-          {drafts.length > 0 ? (
+          {isDeveloper ? (
+            <NavLink
+              to="/activity"
+              className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
+              title="Activity"
+              aria-label="Activity"
+            >
+              <NavIcon name="activity" />
+              <NavLabel collapsed={collapsed}>Activity</NavLabel>
+            </NavLink>
+          ) : null}
+          {isDeveloper && drafts.length > 0 ? (
             <NavLink
               to="/drafts"
               className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}

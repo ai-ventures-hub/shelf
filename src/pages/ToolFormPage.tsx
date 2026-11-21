@@ -78,8 +78,19 @@ export function ToolFormPage() {
     setEnvText(envToText(existing.env))
   }, [existing?.id, existing?.updatedAt])
 
-  // Edit: open Advanced when power-user fields exist, but honor an explicit collapse ('0').
+  // Edit: open Advanced when power-user fields exist (or when deep-linked to ?focus=env),
+  // honoring an explicit collapse ('0') unless a direct field focus was requested.
   useEffect(() => {
+    const focusField = searchParams.get('focus')
+    if (focusField === 'env') {
+      setAdvancedOpen(true)
+      window.setTimeout(() => {
+        const el = document.getElementById('env')
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        el?.focus()
+      }, 60)
+      return
+    }
     if (!existing) return
     try {
       const stored = localStorage.getItem(TOOL_FORM_ADVANCED_KEY)
@@ -95,7 +106,7 @@ export function ToolFormPage() {
     } catch {
       setAdvancedOpen(toolHasAdvancedContent(existing, prefs))
     }
-  }, [existing?.id, existing?.updatedAt, prefs])
+  }, [existing?.id, existing?.updatedAt, prefs, searchParams])
 
   function update<K extends keyof Tool>(key: K, value: Tool[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))

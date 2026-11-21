@@ -81,6 +81,21 @@ const LOG_PATTERNS: {
     detail: (m) => m[1],
   },
   { re: /Missing script:?\s+"?([\w:-]+)"?/i, code: 'bad_launch_command', detail: (m) => m[1] },
+  {
+    re: /Missing (?:required )?env(?:ironment)? var(?:iable)?s?:?\s*['"`]?([A-Z][A-Z0-9_]{1,63})['"`]?/i,
+    code: 'env_missing',
+    detail: (m) => m[1],
+  },
+  {
+    re: /env(?:ironment)? variable\s+['"`]?([A-Z][A-Z0-9_]{1,63})['"`]?\s+(?:is not set|is required|is missing|must be set)/i,
+    code: 'env_missing',
+    detail: (m) => m[1],
+  },
+  {
+    re: /KeyError:\s*['"]([A-Z][A-Z0-9_]{2,63})['"]/,
+    code: 'env_missing',
+    detail: (m) => m[1],
+  },
   { re: /EADDRINUSE|address already in use/i, code: 'port_in_use' },
   {
     re: /Cannot connect to the Docker daemon|docker daemon is not running|Is the docker daemon running/i,
@@ -93,6 +108,7 @@ const REMEDIES: Partial<Record<LaunchErrorCode, RemedyKind>> = {
   no_launch_command: 'edit_command',
   bad_launch_command: 'edit_command',
   deps_missing: 'install_deps',
+  env_missing: 'edit_env',
   runtime_missing: 'install_runtime',
   docker_not_running: 'open_docker',
   port_in_use: 'reassign_port',

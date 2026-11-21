@@ -53,6 +53,8 @@ export function compactToolRow(tool: Tool, state: ToolRuntimeState) {
 const REMEDY_NEXT: Record<RemedyKind, string> = {
   install_deps:
     "Dependencies look missing. Run the project's install command in its folder (or call shelf_register_project with runSetup: true), then launch again.",
+  edit_env:
+    'A required environment variable is missing (see logTail / detail). Ask the user to add it in Shelf (Edit tool -> Environment variables) or in the project .env.local, then launch again.',
   reassign_port:
     "The port is busy. Launch again with onPortConflict: 'reassign', or stop whatever holds the port.",
   open_docker: 'Docker is not running. Ask the user to start Docker Desktop, then launch again.',

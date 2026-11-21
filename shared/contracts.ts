@@ -142,6 +142,7 @@ export type LaunchErrorCode =
   | 'folder_missing'
   | 'no_launch_command'
   | 'deps_missing'
+  | 'env_missing'
   | 'runtime_missing'
   | 'docker_not_running'
   | 'port_in_use'
@@ -155,6 +156,7 @@ export type LaunchErrorCode =
 /** What the UI can offer for a coded failure. */
 export type RemedyKind =
   | 'install_deps'
+  | 'edit_env'
   | 'reassign_port'
   | 'open_docker'
   | 'repick_folder'
@@ -196,6 +198,10 @@ export interface ToolRuntimeState {
   /** Present on coded failures (and timeout stops); absent on success paths. */
   code?: LaunchErrorCode
   remedy?: RemedyKind
+  /** Short diagnostic evidence extracted from logs (missing module, env key, binary). */
+  detail?: string
+  /** Current auto-restart retry count (1..3) when auto-heal is recovering a crash. */
+  autoRestartAttempts?: number
   /** Live port once known (may differ from the configured port after reassign/sniff). */
   port?: number
   /** 'local' = this manager spawned it; 'external' = adopted from another Shelf process. */

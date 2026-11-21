@@ -246,6 +246,15 @@ export function QuickOpen({
           ]
         : []),
       {
+        id: 'action:needs-you',
+        kind: 'action',
+        title: 'Needs you',
+        subtitle: 'Crashed tools, waiting drafts, and open requests',
+        keywords: ['inbox', 'waiting', 'drafts', 'errors', 'gaps', 'attention'],
+        boost: 19,
+        run: () => navigate('/needs-you'),
+      },
+      {
         id: 'action:add-tool',
         kind: 'action',
         title: 'Add tool',

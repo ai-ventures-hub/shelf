@@ -74,7 +74,8 @@
   gap: 1rem;
 }
 
-.draft-card-head h2 {
+.draft-card-head h2,
+.draft-card-head h3 {
   margin: 0;
   font-size: 1.05rem;
 }
@@ -140,4 +141,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.inbox-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.inbox-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.inbox-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inbox-section-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.inbox-error-card {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
 }

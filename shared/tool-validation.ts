@@ -29,6 +29,11 @@ export const toolSchema = z.object({
    * carries the stored value through and never sets it.
    */
   remotePreview: z.boolean().optional(),
+  /**
+   * Auto-heal (2.5): opt-in automatic restart with backoff when the managed
+   * process crashes unexpectedly (never on user stop or non-transient config errors).
+   */
+  autoRestart: z.boolean().optional(),
 })
 
 /**

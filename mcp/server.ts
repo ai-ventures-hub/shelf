@@ -506,6 +506,8 @@ server.registerTool(
         // Reaches only phones the user paired; an agent may ask for it so the
         // user can preview from the phone without a trip to the Mac.
         remotePreview: (args.remotePreview ?? existing?.remotePreview) ? true : undefined,
+        // Auto-heal is a user-owned runtime preference; preserve across MCP edits.
+        autoRestart: existing?.autoRestart ? true : undefined,
         iconPath: args.iconPath ?? existing?.iconPath,
         iconLucide: args.iconLucide ?? existing?.iconLucide,
         iconColor: args.iconColor ?? existing?.iconColor,

@@ -331,6 +331,21 @@ export function ToolFormAdvanced({
             </p>
           </div>
 
+          <div className="field span-2">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={Boolean(form.autoRestart)}
+                onChange={(e) => update('autoRestart', e.target.checked)}
+              />
+              Auto-restart if it crashes unexpectedly
+            </label>
+            <p className="field-hint">
+              Retries up to 3 times with backoff (1s, 3s, 8s) if the process dies on its own.
+              Stops immediately if you click Stop or if a missing package, command, or env var is detected.
+            </p>
+          </div>
+
           {prefs.companionEnabled || form.remotePreview ? <div className="field span-2">
             <label className="checkbox-row">
               <input

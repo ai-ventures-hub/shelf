@@ -1,14 +1,15 @@
-import { LayoutGrid, List, MoreHorizontal, Search, Star } from 'lucide-react'
+import { Layers, LayoutGrid, List, MoreHorizontal, Search, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CompanionDraft, CompanionOverview, CompanionPreviewGrant, CompanionTool } from '../shared/companion-contracts'
-import type { LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
+import type { Collection, LogLine, ToolRuntimeState, ToolStatus } from '../shared/contracts'
 import { dockBadgeText } from '../shared/desktop-status'
 import { ShelfMark } from '../src/components/ShelfMark'
 import { api, ApiError, clearPaired, connectLive, getToken, setPaired } from './api'
 
 type Route =
   | { name: 'tools' }
-  | { name: 'tool'; id: string }
+  | { name: 'stacks' }
+  | { name: 'tool'; id: string; autoPreview?: boolean }
   | { name: 'more' }
 
 type ViewMode = 'list' | 'grid'
@@ -16,14 +17,22 @@ const VIEW_KEY = 'shelf-companion-view'
 const FAV_KEY = 'shelf-companion-favorites'
 
 function parseRoute(hash: string): Route {
-  const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
+  const cleaned = hash.replace(/^#\/?/, '')
+  const [pathPart, queryPart = ''] = cleaned.split('?')
+  const parts = pathPart.split('/').filter(Boolean)
   if (parts[0] === 'tools' && parts[1]) {
     try {
-      return { name: 'tool', id: decodeURIComponent(parts[1]) }
+      const params = new URLSearchParams(queryPart)
+      return {
+        name: 'tool',
+        id: decodeURIComponent(parts[1]),
+        autoPreview: params.get('preview') === '1',
+      }
     } catch {
       return { name: 'tools' }
     }
   }
+  if (parts[0] === 'stacks') return { name: 'stacks' }
   if (parts[0] === 'more') return { name: 'more' }
   return { name: 'tools' }
 }
@@ -263,9 +272,11 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
 
   const tools = overview?.tools ?? []
   const drafts = overview?.drafts ?? []
+  const collections = overview?.collections ?? []
   const health = overview?.health ?? []
   const running = [...states.values()].filter((state) => state.status === 'running').length
   const onTools = route.name === 'tools'
+  const onStacks = route.name === 'stacks'
 
   return (
     <div className="app">
@@ -278,6 +289,11 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
           <span className={`live${live ? ' is-live' : ''}`} aria-label={live ? `${running} running` : 'Reconnecting'} title={live ? `${running} running` : 'Reconnecting…'}>
             <i />{running}
           </span>
+          {collections.length > 0 || onStacks ? (
+            <a href="#/stacks" className={`iconbtn${onStacks ? ' is-on' : ''}`} aria-label="Stacks" aria-current={onStacks ? 'page' : undefined}>
+              <Layers size={20} aria-hidden />
+            </a>
+          ) : null}
           {onTools ? (
             <>
               <button type="button" className={`iconbtn${searchOpen ? ' is-on' : ''}`} aria-label="Search" aria-pressed={searchOpen} onClick={toggleSearch}>
@@ -307,11 +323,13 @@ function Shell({ onUnpaired }: { onUnpaired: () => void }) {
       <main className="scroll" ref={scroll}>
         {error ? <p className="notice error" role="alert">{error} <button type="button" className="link" onClick={() => void refresh()}>Retry</button></p> : null}
         {onTools ? <ToolsScreen tools={tools} drafts={drafts} states={states} health={health} loaded={Boolean(overview)} view={view} query={query} favoritesOnly={favoritesOnly} go={go} onRefresh={() => void refresh()} /> : null}
+        {onStacks ? <StacksScreen collections={collections} tools={tools} states={states} loaded={Boolean(overview)} go={go} onRefresh={() => void refresh()} /> : null}
         {route.name === 'tool' ? (
           <ToolScreen
             tool={tools.find((item) => item.id === route.id) || null}
             state={states.get(route.id)}
             health={health.find((item) => item.toolId === route.id)}
+            autoPreview={route.autoPreview}
             onLogSink={handleLogSink}
             onStateChange={(state) => setStates((prev) => new Map(prev).set(state.toolId, state))}
             onRefresh={() => void refresh()}
@@ -520,10 +538,167 @@ function DraftsSection({ drafts, onDecided }: { drafts: CompanionDraft[]; onDeci
   )
 }
 
-function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }: {
+/**
+ * Collections (stacks) on the phone: start/stop multi-tool stacks with one tap,
+ * see member progress, and jump straight into any member's preview or logs.
+ */
+function StacksScreen({ collections, tools, states, loaded, go, onRefresh }: {
+  collections: Collection[]
+  tools: CompanionTool[]
+  states: Map<string, ToolRuntimeState>
+  loaded: boolean
+  go: (hash: string) => void
+  onRefresh: () => void
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notices, setNotices] = useState<Record<string, { tone: 'ok' | 'error'; text: string }>>({})
+  const toolById = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools])
+
+  async function runStack(collection: Collection, action: 'start' | 'stop') {
+    setBusyId(`${collection.id}:${action}`)
+    try {
+      const result = action === 'start'
+        ? await api.startCollection(collection.id)
+        : await api.stopCollection(collection.id)
+      const total = result.results.length
+      const problems = result.results.filter((r) => r.outcome === 'failed' || r.outcome === 'blocked')
+      const succeeded = result.results.filter(
+        (r) =>
+          r.outcome === 'started' ||
+          r.outcome === 'already_running' ||
+          r.outcome === 'stopped' ||
+          r.outcome === 'not_running',
+      ).length
+      const firstIssue = problems[0]
+      const text = problems.length > 0
+        ? `${action === 'start' ? 'Started' : 'Stopped'} ${succeeded} of ${total} — ${firstIssue.name}: ${firstIssue.message || firstIssue.outcome}.`
+        : `${action === 'start' ? 'Started' : 'Stopped'} ${succeeded} of ${total} tools.`
+      setNotices((prev) => ({
+        ...prev,
+        [collection.id]: { tone: problems.length > 0 ? 'error' : 'ok', text },
+      }))
+    } catch (err) {
+      setNotices((prev) => ({
+        ...prev,
+        [collection.id]: { tone: 'error', text: errorMessage(err) },
+      }))
+    } finally {
+      setBusyId(null)
+      onRefresh()
+    }
+  }
+
+  if (!loaded) return <section className="screen"><p className="muted center">Loading…</p></section>
+  if (collections.length === 0) {
+    return (
+      <section className="screen">
+        <a href="#/" className="back">‹ Tools</a>
+        <p className="muted center">No collections yet. Create one in Shelf on your Mac to launch multi-tool stacks from here.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="screen">
+      <a href="#/" className="back">‹ Tools</a>
+      <h2>Stacks &amp; Collections</h2>
+      <ul className="list">
+        {collections.map((collection) => {
+          const members = collection.toolIds
+            .map((id) => toolById.get(id))
+            .filter((item): item is CompanionTool => Boolean(item))
+          const upCount = members.filter((m) => states.get(m.id)?.status === 'running').length
+          const activeCount = members.filter((m) => {
+            const st = states.get(m.id)?.status
+            return st === 'running' || st === 'starting'
+          }).length
+          const previewTarget = members.find(
+            (m) => m.remotePreview && states.get(m.id)?.status === 'running',
+          )
+          const notice = notices[collection.id]
+          const starting = busyId === `${collection.id}:start`
+          const stopping = busyId === `${collection.id}:stop`
+          return (
+            <li key={collection.id} className="card">
+              <div className="stack-head">
+                <div className="row-main">
+                  <strong>{collection.name}</strong>
+                  {collection.description ? <small>{collection.description}</small> : null}
+                </div>
+                <span className={`pill compact${upCount > 0 ? ' is-running' : ''}`}>
+                  {upCount} of {members.length} up
+                </span>
+              </div>
+              {collection.stack?.ordered ? (
+                <span className="stack-badge">Ordered stack</span>
+              ) : null}
+              {members.length > 0 ? (
+                <div className="stack-members">
+                  {members.map((member) => {
+                    const st = states.get(member.id)?.status || 'stopped'
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        className="member-chip"
+                        onClick={() => go(`#/tools/${encodeURIComponent(member.id)}`)}
+                      >
+                        <i className={`member-dot is-${st}`} aria-hidden="true" />
+                        <span>{member.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="muted small">No tools in this collection yet.</p>
+              )}
+              {notice ? (
+                <p className={`notice${notice.tone === 'error' ? ' error' : ''}`} role="status">
+                  {notice.text}
+                </p>
+              ) : null}
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn primary small grow"
+                  disabled={busyId !== null || members.length === 0}
+                  onClick={() => void runStack(collection, 'start')}
+                >
+                  {starting ? 'Starting…' : 'Start stack'}
+                </button>
+                {activeCount > 0 ? (
+                  <button
+                    type="button"
+                    className="btn danger small"
+                    disabled={busyId !== null}
+                    onClick={() => void runStack(collection, 'stop')}
+                  >
+                    {stopping ? 'Stopping…' : 'Stop'}
+                  </button>
+                ) : null}
+                {previewTarget ? (
+                  <button
+                    type="button"
+                    className="btn small"
+                    onClick={() => go(`#/tools/${encodeURIComponent(previewTarget.id)}?preview=1`)}
+                  >
+                    Preview
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function ToolScreen({ tool, state, health, autoPreview = false, onLogSink, onStateChange, onRefresh }: {
   tool: CompanionTool | null
   state: ToolRuntimeState | undefined
   health: CompanionOverview['health'][number] | undefined
+  autoPreview?: boolean
   onLogSink: (sink: ((line: LogLine) => void) | null) => void
   onStateChange: (state: ToolRuntimeState) => void
   onRefresh: () => void
@@ -532,11 +707,26 @@ function ToolScreen({ tool, state, health, onLogSink, onStateChange, onRefresh }
   const [error, setError] = useState<string | null>(null)
   const [grant, setGrant] = useState<CompanionPreviewGrant | null>(null)
   const [showLog, setShowLog] = useState(false)
+  const autoPreviewRequested = useRef<string | null>(null)
   const toolId = tool?.id
 
   // A grant belongs to one tool and one minute; drop it when either changes.
-  useEffect(() => { setGrant(null); setShowLog(false) }, [toolId])
+  useEffect(() => { setGrant(null); setShowLog(false); autoPreviewRequested.current = null }, [toolId])
   useEffect(() => { setGrant(null) }, [state?.status])
+
+  // Deep link from the Mac's "Open on Phone" QR (`#/tools/<id>?preview=1`):
+  // request a one-time preview grant automatically as soon as the tool is running.
+  useEffect(() => {
+    if (!autoPreview || !tool || !tool.remotePreview || state?.status !== 'running' || grant) return
+    if (autoPreviewRequested.current === tool.id) return
+    autoPreviewRequested.current = tool.id
+    setBusy('preview')
+    setError(null)
+    api.previewGrant(tool.id)
+      .then((next) => { setGrant(next); onRefresh() })
+      .catch((err: unknown) => setError(errorMessage(err)))
+      .finally(() => setBusy(null))
+  }, [autoPreview, tool, state?.status, grant, onRefresh])
 
   if (!tool) {
     return (

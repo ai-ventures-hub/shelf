@@ -208,3 +208,8 @@
 .verification-status[data-status="passed"] { color: var(--success); }
 .verification-status[data-status="failed"], .verification-status[data-status="timed_out"], .verification-status[data-status="cleanup_required"] { color: var(--danger); }
 @media (max-width: 720px) { .verification-command-fields { grid-template-columns: minmax(0, 1fr); } }
+
+.remedy-detail { margin: .35rem 0 0; font-size: .86rem; color: var(--muted); }
+.phone-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: .55rem; margin: .85rem 0; }
+.phone-qr-img { border-radius: 12px; background: #fff; padding: 6px; border: 1px solid var(--line); }
+.phone-qr-url { margin: 0; font-size: .76rem; color: var(--muted); word-break: break-all; text-align: center; }

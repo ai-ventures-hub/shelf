@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.5.0 - 2026-11-21
+
+- Added opt-in **Auto-heal (`autoRestart`)** per tool (Edit → Advanced) with
+  exponential backoff (`1s`, `3s`, `8s`, max 3 retries in 5 minutes): retries
+  unexpected transient crashes automatically, suppresses repeated browser popups
+  during recovery, cancels cleanly on Stop/Quit, and skips deterministic config
+  or setup errors so remedies surface immediately.
+- Expanded failure diagnostics and 1-click remedies: `launch-diagnostics` now
+  detects missing environment variables (`env_missing` → `edit_env`) and
+  extracts diagnostic evidence (`detail`) onto `ToolRuntimeState`; `ToolDetailPage`
+  adds 1-click **Install dependencies**, **Edit environment variables**
+  (`?focus=env`), **Update project folder**, and **Open Docker Desktop** actions
+  alongside **Launch on a free port**, and MCP `nextStepFor()` carries matching
+  guidance for agents.
+- Added the unified **Needs you** inbox (`/needs-you`, also in Quick Open `⌘K`)
+  combining errored tools (with inline retry / free-port / env actions), staged
+  agent registrations (inline Accept / Reject), and open capability gaps; trimmed
+  Simple mode's sidebar down to a calm **Needs you** badge while preserving all
+  Developer-mode views and deep links.
+- Added **Stacks & Collections** (`#/stacks`) to the phone Companion web app with
+  live `N of M up` progress, tappable member chips, 1-tap Start/Stop stack
+  controls, and direct preview shortcuts.
+- Added the desktop **Phone** quick-QR modal on `ToolDetailPage` (`PhonePreviewDialog`)
+  with an inline **Allow remote preview** toggle and a deep-linked QR code
+  (`#/tools/<id>?preview=1`) that requests a one-time preview grant automatically
+  when scanned on a paired phone.
+- Added a dismissible **Get Shelf ready** checklist (`AgentReadyChecklist`) on
+  empty and early libraries tracking first tool, connected AI client, and first
+  clean launch with zero periodic polling.
+
 ## 2.4.5 - 2026-11-21
 
 - Fixed Companion preview proxy bugs: previews now support IPv6-only (`::1`)

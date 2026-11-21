@@ -9,6 +9,7 @@ const COPY: Record<LaunchErrorCode, string> = {
   folder_missing: "Shelf can't find this project's folder anymore.",
   no_launch_command: 'No launch command is set for this tool yet.',
   deps_missing: "This project's packages aren't installed yet.",
+  env_missing: 'A required environment variable is missing.',
   runtime_missing: 'This Mac is missing a program this project needs to run.',
   docker_not_running: "Docker Desktop isn't running.",
   port_in_use: 'The port this tool wants is busy.',

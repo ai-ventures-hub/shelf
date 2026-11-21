@@ -602,6 +602,8 @@ function normalizeTool(input: Partial<Tool>): Tool {
     lastLaunchedAt: input.lastLaunchedAt,
     // Companion (2.4): only a literal true survives; anything else reads as off.
     remotePreview: input.remotePreview === true ? true : undefined,
+    // Auto-heal (2.5): opt-in crash recovery; only literal true survives.
+    autoRestart: input.autoRestart === true ? true : undefined,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
     // Fail closed for pre-0.9 records: createdAt, never "now" — a normalize

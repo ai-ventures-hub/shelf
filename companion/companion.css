@@ -172,3 +172,22 @@ a { color: var(--brand-strong); }
   background: var(--input); color: var(--ink); font: inherit; letter-spacing: .04em;
 }
 .fingerprint { word-break: break-all; }
+
+/* Stacks / Collections */
+.stack-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.stack-badge {
+  align-self: flex-start; font-size: .7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; padding: .15rem .45rem; border-radius: 999px;
+  background: var(--tint-brand); color: var(--brand-strong);
+}
+.stack-members { display: flex; flex-wrap: wrap; gap: .4rem; }
+.member-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .3rem .6rem; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: .8rem;
+}
+.member-chip:active { background: var(--panel-raised); }
+.member-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--subtle); }
+.member-dot.is-running { background: var(--success); }
+.member-dot.is-starting, .member-dot.is-stopping { background: var(--warning); }
+.member-dot.is-error { background: var(--danger); }
