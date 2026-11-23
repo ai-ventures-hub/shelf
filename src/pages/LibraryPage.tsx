@@ -388,7 +388,7 @@ export function LibraryPage({
           <p>
             {drafts.length} tool{drafts.length === 1 ? '' : 's'} waiting for you to accept.
           </p>
-          <Link className="btn btn-primary btn-sm" to="/drafts">
+          <Link className="btn btn-quiet btn-sm" to="/drafts">
             Review
           </Link>
         </div>

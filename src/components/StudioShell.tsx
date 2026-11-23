@@ -157,9 +157,19 @@ function counted(label: string, value: number, noun: string): string {
   return `${label}, ${value} ${value === 1 ? noun : `${noun}s`}`
 }
 
-function NavCount({ collapsed, value }: { collapsed: boolean; value: number }) {
-  if (collapsed) return null
-  return <span className="nav-count">{value}</span>
+function NavCount({
+  collapsed,
+  value,
+  alwaysShow = false,
+  accent = false,
+}: {
+  collapsed: boolean
+  value: number
+  alwaysShow?: boolean
+  accent?: boolean
+}) {
+  if (collapsed || (!alwaysShow && value === 0)) return null
+  return <span className={`nav-count${accent ? ' is-accent' : ''}`}>{value}</span>
 }
 
 export function StudioShell({ children }: { children: ReactNode }) {
@@ -359,7 +369,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
           >
             <NavIcon name="all" />
             <NavLabel collapsed={collapsed}>All tools</NavLabel>
-            <NavCount collapsed={collapsed} value={tools.length} />
+            <NavCount collapsed={collapsed} value={tools.length} alwaysShow />
           </NavLink>
           <NavLink
             to="/favorites"
@@ -401,7 +411,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
           >
             <NavIcon name="inbox" />
             <NavLabel collapsed={collapsed}>Needs you</NavLabel>
-            {needsYouCount > 0 ? <NavCount collapsed={collapsed} value={needsYouCount} /> : null}
+            <NavCount collapsed={collapsed} value={needsYouCount} accent />
           </NavLink>
           {isDeveloper ? (
             <NavLink
@@ -423,7 +433,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
             >
               <NavIcon name="drafts" />
               <NavLabel collapsed={collapsed}>Waiting</NavLabel>
-              <NavCount collapsed={collapsed} value={drafts.length} />
+              <NavCount collapsed={collapsed} value={drafts.length} accent />
             </NavLink>
           ) : null}
           {isDeveloper ? (

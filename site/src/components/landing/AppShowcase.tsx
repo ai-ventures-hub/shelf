@@ -89,11 +89,11 @@ export function AppShowcase() {
               ))}
               <div className="showcase-side-label">COLLECTIONS</div>
               <div className="showcase-side-row">
-                <span>GWP Tools</span>
+                <span>Client Sites</span>
                 <span className="n">3</span>
               </div>
               <div className="showcase-side-row">
-                <span>Suds Tools</span>
+                <span>Media Studio</span>
                 <span className="n">2</span>
               </div>
               <div className="showcase-side-row" data-quiet="true">

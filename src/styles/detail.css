@@ -124,10 +124,15 @@
 
 .log-line {
   margin:0 0 .2rem;
+  padding:.05rem .35rem;
+  border-radius:4px;
 }
 
 .log-line[data-stream=stderr] {
   color:var(--danger);
+  background:color-mix(in srgb, var(--danger) 8%, transparent);
+  border-left:2px solid var(--danger);
+  padding-left:.5rem;
 }
 
 .log-line[data-stream=system] {
@@ -136,6 +141,27 @@
 
 .log-line[data-stream=stdout] {
   color:var(--muted);
+}
+
+.run-output-controls {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.65rem;
+}
+
+.run-output-select {
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  flex:1 1 260px;
+  min-width:0;
+  max-width:440px;
+}
+
+.run-output-select .field-input {
+  flex:1 1 auto;
+  min-width:0;
 }
 
 .log-toolbar {

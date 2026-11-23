@@ -169,8 +169,15 @@ function ToolCardView({
           <OriginChip state={state} />
           {!hideChips ? (
             <>
-              {tool.port ? <span className="meta-chip">:{tool.port}</span> : null}
-              <span className="meta-chip">{formatRelativeTime(tool.lastLaunchedAt, 'Never')}</span>
+              <span className="tool-meta-inline">
+                {tool.port ? `:${tool.port}` : null}
+                {tool.port && tool.lastLaunchedAt ? ' · ' : null}
+                {tool.lastLaunchedAt
+                  ? formatRelativeTime(tool.lastLaunchedAt)
+                  : tool.port
+                    ? ' · Never run'
+                    : 'Never run'}
+              </span>
               {visibleTags.map((tag) => (
                 <span key={tag} className="tag-chip">
                   {tag}

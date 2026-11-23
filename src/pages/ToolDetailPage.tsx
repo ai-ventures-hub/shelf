@@ -625,9 +625,17 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
             <button className="btn btn-quiet btn-sm" onClick={() => void run(async () => { const report = await window.shelf.getErrorReport(toolId, selectedRun || receipts[0]?.id); if (report) setReportPreview(report) })}>Prepare report for your AI tool</button>
           </div>
           <div className="panel-body run-output-body">
-            <label className="field"><span className="field-label">Run to inspect</span><select className="field-input" value={selectedRun} onChange={(event) => setSelectedRun(event.target.value)}><option value="">Latest output (live when running)</option>{receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{new Date(receipt.startedAt).toLocaleString()} · {receipt.outcome}</option>)}</select></label>
+            <div className="run-output-controls">
+              <label className="run-output-select">
+                <span className="field-label">Run</span>
+                <select className="field-input" value={selectedRun} onChange={(event) => setSelectedRun(event.target.value)}>
+                  <option value="">Latest output (live when running)</option>
+                  {receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{new Date(receipt.startedAt).toLocaleString()} · {receipt.outcome}</option>)}
+                </select>
+              </label>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={reloadLogs}>Refresh output</button>
+            </div>
             {logError && <p role="alert">{logError}</p>}
-            <button className="btn btn-quiet btn-sm" onClick={reloadLogs}>Refresh output</button>
             <LogPanel lines={logs} />
           </div>
         </section>

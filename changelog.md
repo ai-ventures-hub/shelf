@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- Visual polish pass across the desktop app:
+  - Refined tool cards with artifact-free inset top status accents, subtle hover
+    elevation and light-mode card depth shadows, live status dots on status pills,
+    deterministic studio-calibrated gradient palettes for letter icons, clean
+    inline port/run metadata (removing dashed wireframe pills), and semantic
+    tinted Launch/Stop icon buttons.
+  - Upgraded the `Grid | List | Compact` switcher into a unified segmented
+    control and softened the "waiting to accept" banner so it no longer competes
+    with the primary **Add tool** button.
+  - Quieted the sidebar by hiding zero counts (except **All tools**), adding
+    brand-tinted pill badges for active **Needs you** / **Waiting** counts, and
+    polishing active nav item elevation.
+  - Collapsed the **Run output** selector and **Refresh output** button into a
+    single compact toolbar row and added a left-edge danger accent to `stderr`
+    log lines.
+  - Made the **Get Shelf ready** onboarding checklist a compact 3-column
+    horizontal strip on desktop so tool cards remain visible above the fold.
+- Added `docs/landing-page-audit.md` documenting the live `shelfmcp.com` audit
+  against Shelf `v2.5.0`, live copy/UI bugs, missing capability coverage, and a
+  recommended 7-section redesign brief for handoff.
+- Site: replaced private collection names in the landing mockups with generic
+  demo names and refreshed the hero library screenshot from a sanitized
+  `v2.5.0` demo library.
+
 ## 2.5.0 - 2026-11-21
 
 - Added opt-in **Auto-heal (`autoRestart`)** per tool (Edit → Advanced) with

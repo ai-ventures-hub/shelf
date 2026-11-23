@@ -107,7 +107,7 @@ export function ToolSharing() {
                 <span />
               </span>
               <span className="team-pane-title">Team Tools</span>
-              <span className="team-pane-meta">GWP Tools · 6 tools</span>
+              <span className="team-pane-meta">Studio Team · 6 tools</span>
             </div>
             <div className="team-pane-body">
               {TEAM_ROWS.map((row) => (
