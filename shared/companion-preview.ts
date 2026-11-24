@@ -444,6 +444,10 @@ export class PreviewProxy {
   }
 
   private upgrade(listener: Listener, req: IncomingMessage, socket: Duplex, head: Buffer, retryHost?: LoopbackHost): void {
+    // Node drops its own error listener before handing over an upgrade
+    // socket; a phone that vanishes mid-handshake would otherwise surface as
+    // an uncaught error in the main process.
+    if (!retryHost) socket.on('error', () => socket.destroy())
     const url = companionRequestUrl(req.url, listener.origin)
     const credential = url ? this.authorized(listener, req) : null
     if (!credential) {
@@ -462,7 +466,12 @@ export class PreviewProxy {
       rejectUnauthorized: false,
     })
     let backend: Duplex | undefined
-    const close = () => { upstream.destroy(); backend?.destroy(); socket.destroy() }
+    const close = () => { clearTimeout(stalled); upstream.destroy(); backend?.destroy(); socket.destroy() }
+    // A tool that never answers the handshake must not hold the phone's socket open forever.
+    const stalled = setTimeout(close, 20_000)
+    upstream.once('upgrade', () => clearTimeout(stalled))
+    upstream.once('response', () => clearTimeout(stalled))
+    upstream.once('error', () => clearTimeout(stalled))
     const untrack = this.track(listener, credential.deviceId, close)
     const onSocketClose = () => { untrack(); close() }
     socket.once('close', onSocketClose)

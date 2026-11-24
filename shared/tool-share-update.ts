@@ -131,13 +131,13 @@ async function applyToolUpdateLocked(
     // --port flag). That is not a local edit — compare after re-pinning the
     // OLD manifest command to the tool's port, and re-pin the new one too.
     if (!same(after.launchCommand, before?.launchCommand)) {
-      const pinned = tool.port && before?.launchCommand ? withForcedPort(before.launchCommand, tool.port) : undefined
+      const pinned = tool.port && before?.launchCommand ? withForcedPort(before.launchCommand, tool.port, before.port) : undefined
       const unchanged =
         same(tool.launchCommand, before?.launchCommand) || (pinned !== undefined && same(tool.launchCommand, pinned))
       if (unchanged) {
         next.launchCommand =
           pinned !== undefined && same(tool.launchCommand, pinned) && tool.port
-            ? withForcedPort(after.launchCommand, tool.port)
+            ? withForcedPort(after.launchCommand, tool.port, after.port)
             : after.launchCommand
         applied.push('launchCommand')
       } else skipped.push({ field: 'launchCommand', reason: editReason(before?.launchCommand) })
@@ -165,7 +165,7 @@ async function applyToolUpdateLocked(
         next.port = after.port
         next.url = after.url ? urlForPort(after.url, after.port) : urlForPort(tool.url, after.port)
         if (before?.port && next.launchCommand === withForcedPort(next.launchCommand, before.port)) {
-          next.launchCommand = withForcedPort(next.launchCommand, after.port)
+          next.launchCommand = withForcedPort(next.launchCommand, after.port, before.port)
         }
         applied.push('port')
       } else skipped.push({ field: 'port', reason: `your copy runs on port ${tool.port}, which Shelf kept` })

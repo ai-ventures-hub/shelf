@@ -61,7 +61,9 @@ export function withFileLockSync<T>(targetPath: string, action: () => T): T {
       acquired = entries.length === 1 && entries[0] === marker
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
-      if (code !== 'EEXIST' && !(created && code === 'ENOENT')) throw err
+      // A contender can remove the directory between our mkdir and the
+      // marker write. macOS reports that as ENOENT or, mid-removal, EINVAL.
+      if (code !== 'EEXIST' && !(created && (code === 'ENOENT' || code === 'EINVAL'))) throw err
     } finally {
       if (created && !acquired) {
         try { fs.unlinkSync(ownerPath) } catch (err) {

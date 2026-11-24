@@ -8,7 +8,7 @@ export function processIdentity(pid: number, fresh = false): string | undefined 
   if (!fresh && cached && Date.now() - cached.at < 1000) return cached.identity
   let identity: string | undefined
   try {
-    identity = execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || undefined
+    identity = execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, LC_ALL: 'C' } }).trim() || undefined
   } catch { /* absent or unreadable process */ }
   if (cache.size > 1000) cache.clear()
   cache.set(pid, { at: Date.now(), identity })

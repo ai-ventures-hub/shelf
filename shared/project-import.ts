@@ -6,7 +6,7 @@ import { readProjectFacts, type ProjectFacts } from './project-facts'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveDesignMd } from './design-md'
-import { findFreePort, isPortFree, urlForPort, withForcedPort } from './ports'
+import { findFreePort, isPortFree, takesPortFlag, urlForPort, withForcedPort } from './ports'
 import { detectAgentAccess } from './project-import-mcp'
 import type { LaunchAlternative, ProjectImportSuggestion } from './types'
 
@@ -28,6 +28,7 @@ const SCRIPT_PRIORITY = [
 export async function inspectProject(
   projectPath: string,
   observed?: ProjectFacts,
+  options: { reservedPorts?: Iterable<number> } = {},
 ): Promise<ProjectImportSuggestion> {
   const resolved = path.resolve(projectPath.trim())
   const base: ProjectImportSuggestion = {
@@ -193,17 +194,21 @@ export async function inspectProject(
   let portFree: boolean | undefined
   let url: string | undefined
   if (preferredPort) {
-    portFree = await isPortFree(preferredPort)
+    // A stopped library tool's port is free now and busy the moment it starts.
+    const reserved = new Set(options.reservedPorts ?? [])
+    const claimed = reserved.has(preferredPort)
+    portFree = !claimed && (await isPortFree(preferredPort))
     if (!portFree) {
+      const why = claimed ? 'belongs to another Shelf tool' : 'busy'
       try {
-        const free = await findFreePort({ preferred: preferredPort, from: 3000, to: 4999 })
+        const free = await findFreePort({ preferred: preferredPort, from: 3000, to: 4999, exclude: reserved })
         port = free.port
         portFree = true
         signals.push(
-          `Port ${preferredPort} busy → suggesting free port ${port}`,
+          `Port ${preferredPort} ${why} → suggesting free port ${port}`,
         )
       } catch {
-        signals.push(`Port ${preferredPort} busy; could not find a free alternative.`)
+        signals.push(`Port ${preferredPort} ${why}; could not find a free alternative.`)
       }
     } else {
       signals.push(`Port ${preferredPort} is free`)
@@ -263,7 +268,7 @@ export async function inspectProject(
 }
 
 function shouldPinPort(command: string): boolean {
-  return /\b(npm|pnpm|yarn|bun)\s+run\b/.test(command) || /\b(next|vite|flask)\b/.test(command)
+  return takesPortFlag(command)
 }
 
 function titleFromFolder(dir: string): string {

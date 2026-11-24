@@ -57,6 +57,7 @@ export function ToolFormPage() {
   // Create starts collapsed; edit may auto-open when advanced fields have content.
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const isEdit = Boolean(id)
+  const portSharedWith = form.port ? tools.find((tool) => tool.port === form.port && tool.id !== id) : undefined
   const initialForm = useRef(form)
   const base = baseRef.current || initialForm.current
   const guard = useUnsavedChanges(JSON.stringify(form) !== JSON.stringify(base) || tagsText !== base.tags.join(', ') || capabilitiesText !== base.capabilities.join('\n') || envText !== envToText(base.env), saving)
@@ -497,6 +498,11 @@ export function ToolFormPage() {
               <p className="field-hint">
                 Shelf waits for this port to respond before showing the tool as Running.
               </p>
+              {portSharedWith && (
+                <p className="field-hint" role="status">
+                  {portSharedWith.name} also uses port {form.port}. Only one of them can run at a time.
+                </p>
+              )}
             </div>
 
             <label className="checkbox-row span-2">

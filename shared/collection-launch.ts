@@ -176,7 +176,10 @@ export async function stopCollection(
     const tool = deps.store.get(toolId)
     if (!tool) continue
     const current = await deps.processes.getState(toolId)
-    if (current.status !== 'running' && current.status !== 'starting') {
+    // An error state can still have a live child (service unreachable, a
+    // stop that failed); stopping the stack must not leave those running.
+    const live = current.status === 'running' || current.status === 'starting' || deps.processes.hasLiveProcess(toolId)
+    if (!live) {
       results.push({ toolId, name: tool.name, outcome: 'not_running', state: current })
       continue
     }

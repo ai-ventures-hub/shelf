@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { LibraryStore } from '../shared/library-store'
 import { inspectProject } from '../shared/project-import'
+import { claimedPorts } from '../shared/ports'
 import { canonicalFolderKey, findToolByFolder } from '../shared/register-project'
 import {
   publicToolDraft,
@@ -95,7 +96,9 @@ export async function stageRegistration(
   host: RegistrationHost,
   input: StageInput,
 ): Promise<{ draft: StagedToolDraft; suggestion: ProjectImportSuggestion }> {
-  const suggestion = await inspectProject(input.folder)
+  const suggestion = await inspectProject(input.folder, undefined, {
+    reservedPorts: claimedPorts([...host.store.list(), ...host.drafts.list()], input.folder),
+  })
   let manifestKeys: string[] = []
   try {
     manifestKeys = Object.keys(readManifest(input.folder)?.manifest.env || {})

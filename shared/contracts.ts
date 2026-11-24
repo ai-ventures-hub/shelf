@@ -316,6 +316,11 @@ export interface RunReceipt {
   message?: string
   /** Who initiated the launch; absent on receipts written before 0.8. */
   startedBy?: LaunchOrigin
+  /**
+   * Set by a Shelf process that does not own this run just before it stops
+   * it, so the owner reads the exit as a stop and not a crash.
+   */
+  stopRequestedAt?: string
 }
 
 export type CapabilityGapStatus = 'open' | 'planned' | 'resolved' | 'dismissed'

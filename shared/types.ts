@@ -322,12 +322,17 @@ export function toolSecretValues(tool?: Pick<Tool, 'env' | 'launchCommand' | 'st
 // An env value such as "error" must not corrupt a runtime status or tool id.
 const OUTPUT_METADATA_KEYS = new Set(['id', 'toolId', 'runId', 'receiptId', 'status', 'outcome', 'kind', 'stream', 'origin', 'transport', 'at', 'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'lastLaunchedAt', 'processStartedAt'])
 
+// What the user named things. A short env value (DB_NAME=invoices) must not
+// blank out a tool called "Invoices dashboard" or its folder. Pattern masking
+// (tokens, KEY=value, URL credentials) still applies to these fields.
+const OUTPUT_IDENTITY_KEYS = new Set(['name', 'toolName', 'description', 'tags', 'capabilities', 'projectPath', 'iconPath'])
+
 /** Sanitize nested output copies; never mutate the private source record. */
 export function sanitizeOutput<T>(value: T, knownValues: readonly string[] = []): T {
   if (typeof value === 'string') return maskSecrets(value, knownValues) as T
   if (Array.isArray(value)) return value.map((item) => sanitizeOutput(item, knownValues)) as T
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeOutput(item, OUTPUT_METADATA_KEYS.has(key) ? [] : knownValues)])) as T
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeOutput(item, OUTPUT_METADATA_KEYS.has(key) || OUTPUT_IDENTITY_KEYS.has(key) ? [] : knownValues)])) as T
   }
   return value
 }

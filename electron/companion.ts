@@ -4,7 +4,7 @@
  * status the Settings pane shows. The server itself (shared/companion-server)
  * knows nothing about Electron.
  */
-import { app, dialog, powerSaveBlocker, type BrowserWindow } from 'electron'
+import { app, dialog, powerMonitor, powerSaveBlocker, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import { buildActivityBoard } from '../shared/activity-board'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
@@ -88,6 +88,8 @@ export class CompanionManager {
   private pending: Promise<void> = Promise.resolve()
   /** What the running server was started with, to know when a pref change needs a restart. */
   private running: { address: string; port: number } | null = null
+  private networkTimer: ReturnType<typeof setInterval> | null = null
+  private lastInterfaces = ''
 
   constructor(private readonly deps: CompanionManagerDeps) {}
 
@@ -247,7 +249,31 @@ export class CompanionManager {
     }
   }
 
+  /**
+   * Interfaces come and go after launch: Tailscale connects a little after
+   * login, Wi-Fi hands out a new address, the Mac wakes on another network.
+   * Without this, Companion stayed off (or bound to a dead address) until a
+   * Companion setting was touched.
+   */
+  watchNetwork(): void {
+    if (this.networkTimer) return
+    const seen = () => listCompanionInterfaces().map((item) => item.address).sort().join(',')
+    const check = (force = false) => {
+      if (!this.deps.prefs.get().companionEnabled) return
+      const now = seen()
+      if (!force && now === this.lastInterfaces) return
+      this.lastInterfaces = now
+      void this.applyPrefs()
+    }
+    this.lastInterfaces = seen()
+    this.networkTimer = setInterval(() => check(), 20_000)
+    this.networkTimer.unref?.()
+    powerMonitor.on('resume', () => check(true))
+  }
+
   async shutdown(): Promise<void> {
+    if (this.networkTimer) clearInterval(this.networkTimer)
+    this.networkTimer = null
     await this.stopServer()
     this.releaseBlocker()
   }

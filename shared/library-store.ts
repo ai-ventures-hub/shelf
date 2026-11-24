@@ -572,7 +572,7 @@ function findCollectionByName(
 
 function normalizeTool(input: Partial<Tool>): Tool {
   const now = new Date().toISOString()
-  return {
+  const known: Tool = {
     id: input.id || randomUUID(),
     // Invisibles stripped so an agent cannot plant a tool whose name renders
     // identically to one of yours in the library or Quick Open, where the
@@ -611,6 +611,13 @@ function normalizeTool(input: Partial<Tool>): Tool {
     capabilitiesUpdatedAt: input.capabilitiesUpdatedAt || input.createdAt || undefined,
     source: normalizeSource(input.source),
   }
+  // Every write rewrites every tool. An MCP server left running from an
+  // older build must hand back fields a newer Shelf added, not erase them
+  // library-wide (this is how a stale server would have dropped autoRestart).
+  const carried = Object.fromEntries(
+    Object.entries(input).filter(([key, value]) => !(key in known) && value !== undefined),
+  )
+  return { ...carried, ...known }
 }
 
 /** Provenance is data about a tool, never executed — keep only known fields. */

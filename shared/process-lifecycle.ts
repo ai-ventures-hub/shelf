@@ -63,6 +63,15 @@ export async function terminatePidGroup(pid: number): Promise<void> {
   await terminateTargets([-pid, pid])
 }
 
+/**
+ * Stop what is left of a process group whose leader has already exited.
+ * Group only: the leader's pid is free for the OS to hand to someone else.
+ */
+export async function terminateLeaderlessGroup(pgid: number): Promise<void> {
+  if (!Number.isSafeInteger(pgid) || pgid <= 1) throw new Error('Invalid owned process group.')
+  await terminateTargets([-pgid])
+}
+
 async function terminateTargets(targets: number[]): Promise<void> {
   // Darwin can return EPERM for a group whose last member is exiting. Only
   // accept that as gone when a fresh process table proves no live member;

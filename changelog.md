@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- Fixes from the November 23 audit:
+  - Two tools no longer end up on the same port by accident. Import and
+    `shelf_register_project` skip ports another library tool or staged draft
+    claims, `shelf_find_free_port` does the same (and reports
+    `preferredClaimedBy`), the tool form says which tool shares a port, and a
+    busy-port warning or launch error names the library tool that holds it.
+  - Moving a tool to another port rewrites the port where the command already
+    names it and leaves every other flag alone. Before, `--port`/`-p` were
+    stripped from any command and only re-added for package scripts and
+    next/vite/flask, which broke `docker run -p 8080:80`, `uvicorn --port`,
+    and `python server.py --port`. `pnpm run` commands no longer get a `--`
+    before `--port`: pnpm forwards it and the script never saw the flag.
+    `name.localhost` URLs keep their host and path.
+  - `shelf_upsert_tool` no longer reports a running tool's own listener as a
+    port conflict, skips `autoFixPort` while the tool is running, and refuses
+    an edited `launchCommand`, `stopCommand`, or `notes` that still contains
+    the `***` mask instead of saving the mask over the stored value.
+  - Agent-facing output no longer blanks a short env value out of a tool's
+    name, description, tags, capabilities, or folder.
+  - A stop from the other Shelf process (the app stopping a tool an agent
+    started, or the reverse) is recorded as a stop by the process that owns
+    it, not as a crash, and cannot trigger auto-restart.
+  - A launcher that crashes while its children still hold the port has them
+    stopped, so the tool is not left refusing both Stop and Start.
+  - A tool with no port is no longer stopped for printing a localhost URL it
+    only talks to. A URL it announces as its own still has to be served.
+  - Stopping a collection also stops members that are in an error state with
+    a live process.
+  - Companion comes up by itself when its network arrives after launch
+    (Tailscale connecting after login, a new Wi-Fi address, wake) and no
+    longer raises an error dialog when a phone drops mid WebSocket handshake.
+  - Library writes keep tool fields this build does not know, so an MCP
+    server left running from an older build cannot erase a newer setting.
+  - A library or receipt write no longer fails with `EINVAL` when the app
+    and the MCP server reach for the same file lock at the same moment.
+  - Process identity is read with a fixed locale, so the app and an MCP
+    server started under different language settings recognize each other's
+    runs.
+
 - Visual polish pass across the desktop app:
   - Refined tool cards with artifact-free inset top status accents, subtle hover
     elevation and light-mode card depth shadows, live status dots on status pills,

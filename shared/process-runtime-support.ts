@@ -5,7 +5,7 @@ import {
   PORT_POLL_MS,
   sleep,
 } from './process-lifecycle'
-import { sniffLocalUrlFromText } from './ports'
+import { sniffAnnouncedUrlFromText, sniffLocalUrlFromText } from './ports'
 import type { ReceiptStore } from './receipt-store'
 import type { LogLine, RunReceipt, ToolRuntimeState } from './types'
 import { randomUUID } from 'node:crypto'
@@ -200,6 +200,17 @@ export class ProcessRuntimeSupport {
     }
   }
 
+  /** Cross-process stop intent; see RunReceipt.stopRequestedAt. */
+  requestReceiptStop(id: string | undefined): void {
+    if (!id || !this.receipts) return
+    try { this.receipts.requestStop(id) } catch { /* the stop itself still proceeds */ }
+  }
+
+  receiptStopRequested(id: string | undefined): boolean {
+    if (!id || !this.receipts) return false
+    try { return Boolean(this.receipts.get(id)?.stopRequestedAt) } catch { return false }
+  }
+
   endReceipt(
     id: string | undefined,
     input: Parameters<ReceiptStore['end']>[1],
@@ -225,7 +236,8 @@ export class ProcessRuntimeSupport {
   }
 
   /** Scan recent logs for a Local:/listening URL. */
-  sniffReadyUrl(toolId: string): { url: string; port: number } | null {
+  /** `announced`: the output presents the URL as the tool's own, not a passing mention. */
+  sniffReadyUrl(toolId: string): { url: string; port: number; announced: boolean } | null {
     const blob = this.getLogs(toolId)
       .map((l) => l.text)
       .join('\n')
@@ -235,7 +247,7 @@ export class ProcessRuntimeSupport {
       const parsed = new URL(url)
       const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80))
       if (!Number.isFinite(port)) return null
-      return { url, port }
+      return { url, port, announced: sniffAnnouncedUrlFromText(blob) === url }
     } catch {
       return null
     }
@@ -246,7 +258,7 @@ export class ProcessRuntimeSupport {
     toolId: string,
     timeoutMs: number,
     stillManaged: () => boolean,
-  ): Promise<{ url: string; port: number } | null> {
+  ): Promise<{ url: string; port: number; announced: boolean } | null> {
     const started = Date.now()
     while (Date.now() - started < timeoutMs) {
       if (!stillManaged()) return null

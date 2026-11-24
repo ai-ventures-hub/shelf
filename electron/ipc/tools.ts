@@ -5,6 +5,7 @@ import { deriveToolReadiness } from '../../shared/capability-intelligence'
 import { containedDataUrl, ICON_MIME_TYPES } from '../../shared/contained-data-url'
 import { resolveDesignMd } from '../../shared/design-md'
 import { inspectProject } from '../../shared/project-import'
+import { claimedPorts } from '../../shared/ports'
 import { registerProject } from '../../shared/register-project'
 import { inspectToolEnvironment } from '../../shared/tool-environment'
 import { deriveLibraryHealth } from '../../shared/tool-health'
@@ -76,7 +77,8 @@ export function registerToolsIpc(ctx: IpcContext): void {
   })
 
   // Smart import: suggest launch/port/tags from a chosen project folder.
-  handle('tools:inspectProject', (_e, projectPath) => inspectProject(projectPath))
+  handle('tools:inspectProject', (_e, projectPath) =>
+    inspectProject(projectPath, undefined, { reservedPorts: claimedPorts(store.list(), projectPath) }))
 
   // One-shot register: inspect → save → (consented) setup → launch.
   // Consent flow is two calls: first without runSetup (may return
