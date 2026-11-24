@@ -47,6 +47,7 @@ async function main() {
   await run('phase 1 regressions', 'node', ['scripts/smoke-phase1.mjs'])
   await run('recovery regressions', 'node', ['scripts/smoke-recovery.mjs'])
   await run('audit regressions', 'node', ['scripts/smoke-audit-fixes.mjs'])
+  await run('port and lifecycle audit regressions', 'node', ['scripts/smoke-audit-ports.mjs'])
   await run('library safety', 'node', ['scripts/smoke-library-safety.mjs'])
   await run('prefs uiMode', 'node', ['scripts/smoke-prefs.mjs'])
   await run('capability intelligence', 'node', ['scripts/smoke-capabilities.mjs'])

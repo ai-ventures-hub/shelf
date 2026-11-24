@@ -29,6 +29,7 @@ import {
   type BootstrapStep,
 } from './project-bootstrap'
 import { inspectProject } from './project-import'
+import { claimedPorts } from './ports'
 import type { ProjectImportSuggestion, Tool, ToolSource } from './types'
 
 export interface RegisterProjectDeps {
@@ -201,7 +202,9 @@ export async function registerProject(
   }
 
   const facts = readProjectFacts(resolved)
-  const suggestion = await inspectProject(resolved, facts)
+  const suggestion = await inspectProject(resolved, facts, {
+    reservedPorts: claimedPorts(deps.store.list(), resolved),
+  })
   // Any spelling of a registered folder (symlink, different case) updates
   // that tool instead of creating a duplicate beside it.
   const existing = findToolByFolder(deps.store, resolved)

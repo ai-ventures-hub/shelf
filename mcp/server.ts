@@ -21,6 +21,7 @@ import { DesignProfileStore } from '../shared/design-profile-store'
 import { resolveDesignProfile } from '../shared/design-resolve'
 import { LibraryStore } from '../shared/library-store'
 import {
+  claimedPorts,
   findFreePort,
   findPortOccupant,
   urlForPort,
@@ -171,7 +172,7 @@ server.registerTool(
 server.registerTool(
   'shelf_find_free_port',
   {
-    description: "Find free localhost TCP ports, e.g. before setting a web tool's port.",
+    description: "Find free localhost TCP ports, e.g. before setting a web tool's port. Skips ports that library tools or staged drafts claim, running or not.",
     inputSchema: {
       preferred: portSchema.optional()
         .describe('Preferred port (returned when free)'),
@@ -189,13 +190,22 @@ server.registerTool(
   },
   async (args) => {
     try {
+      // A stopped tool's port is free now and busy once it starts, so ports
+      // the library or a staged draft already claims are never offered.
+      const claimed = claimedPorts([...store.list(), ...drafts.list()])
       const result = await findFreePort({
         preferred: args.preferred,
         from: args.from,
         to: args.to,
         count: args.count,
+        exclude: claimed,
       })
-      return textResult(result)
+      if (!args.preferred || !claimed.includes(args.preferred)) return textResult(result)
+      const owner = store.list().find((tool) => tool.port === args.preferred)?.name
+      return textResult({
+        ...result,
+        preferredClaimedBy: owner || 'a tool waiting for the user to accept',
+      })
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err))
     }
@@ -408,6 +418,20 @@ server.registerTool(
     const incomingNotes =
       existing && args.notes === maskedExisting?.notes ? existing.notes : args.notes
 
+    // "***" stands for a value Shelf holds back. Edited masked text sent back
+    // would be saved as the literal mask and lose the stored value.
+    if (existing && maskedExisting) {
+      for (const key of ['launchCommand', 'stopCommand', 'notes'] as const) {
+        const incoming = args[key]
+        const shown = maskedExisting[key]
+        if (typeof incoming !== 'string' || !incoming.includes('***')) continue
+        if (incoming === shown || shown === existing[key]) continue
+        return errorResult(
+          `${key} contains "***", which Shelf shows in place of a stored value. Send the real value, or leave ${key} out to keep the stored one.`,
+        )
+      }
+    }
+
     const checkPort = args.checkPort !== false
     let port = args.port ?? existing?.port
     let url = args.url ?? existing?.url
@@ -430,7 +454,11 @@ server.registerTool(
         .map((t) => ({ id: t.id, name: t.name }))
 
       const occupantPid = await findPortOccupant(port)
-      if (occupantPid) {
+      // A running tool listens on its own port; that is not a conflict.
+      const ownStatus = existing ? (await processes.getState(existing.id)).status : undefined
+      const live = ownStatus === 'running' || ownStatus === 'starting'
+      const ownListener = live && existing?.port === port
+      if (occupantPid && !ownListener) {
         warnings.push(`Port ${port} is currently in use by pid ${occupantPid}.`)
       }
       if (libraryConflicts.length > 0) {
@@ -463,10 +491,16 @@ server.registerTool(
           // leave suggestedPort unset
         }
 
-        if (args.autoFixPort && suggestedPort) {
+        if (args.autoFixPort && suggestedPort && live) {
+          // Moving the saved port under a live process would leave Shelf
+          // waiting on a port the tool is not serving.
+          warnings.push(
+            `autoFixPort skipped: the tool is running. Stop it, then re-upsert to move it to port ${suggestedPort}.`,
+          )
+        } else if (args.autoFixPort && suggestedPort) {
+          launchCommand = withForcedPort(launchCommand, suggestedPort, port)
           port = suggestedPort
           url = urlForPort(url, suggestedPort)
-          launchCommand = withForcedPort(launchCommand, suggestedPort)
           portFixed = true
           warnings.push(
             `autoFixPort applied: saved as port ${suggestedPort} with updated launchCommand/url.`,
@@ -763,7 +797,9 @@ server.registerTool(
   },
   async ({ projectPath }) => {
     try {
-      const suggestion = await inspectProject(projectPath)
+      const suggestion = await inspectProject(projectPath, undefined, {
+        reservedPorts: claimedPorts([...store.list(), ...drafts.list()], projectPath),
+      })
       return textResult(maskSuggestion(suggestion))
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err))

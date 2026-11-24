@@ -123,8 +123,11 @@ export class ReceiptStore {
   ): RunReceipt | undefined {
     return this.update(id, (r) => {
       if (r.endedAt) return r
+      // Also the path a failed stop takes: the run goes on, so a later exit
+      // is no longer the stop someone asked for.
+      const { stopRequestedAt: _cleared, ...open } = r
       return {
-        ...r,
+        ...open,
         outcome: 'running',
         pid: patch.pid ?? r.pid,
         port: patch.port ?? r.port,
@@ -132,6 +135,11 @@ export class ReceiptStore {
         message: patch.message || r.message || 'Running',
       }
     })
+  }
+
+  /** Tell the process that owns this run that its exit is an intended stop. */
+  requestStop(id: string): RunReceipt | undefined {
+    return this.update(id, (r) => (r.endedAt ? r : { ...r, stopRequestedAt: new Date().toISOString() }))
   }
 
   /** Finalize an open receipt (stop, crash, timeout, failed start). */

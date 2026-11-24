@@ -632,6 +632,8 @@ export class CompanionServer {
   // ---- WebSocket ----------------------------------------------------------
 
   private upgrade(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    // See PreviewProxy.upgrade: upgrade sockets arrive with no error listener.
+    socket.on('error', () => socket.destroy())
     const remote = req.socket.remoteAddress || 'unknown'
     const url = companionRequestUrl(req.url, 'https://companion.invalid')
     if (!url) {

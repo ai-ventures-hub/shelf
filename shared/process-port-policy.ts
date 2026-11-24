@@ -48,7 +48,15 @@ export async function resolvePortConflict(
 
   }
   if (onPortConflict !== 'reassign') {
-    const message = `Port ${port} is already in use by another process.`
+    // Two library tools on one port: say which one holds it.
+    const holder = deps.store.list().find((item) => {
+      if (item.id === toolId || item.port !== port) return false
+      const status = deps.runtime.peekState(item.id).status
+      return status === 'running' || status === 'starting'
+    })
+    const message = holder
+      ? `Port ${port} is already in use by ${holder.name}, which has the same port.`
+      : `Port ${port} is already in use by another process.`
     deps.runtime.emitFailedReceipt({
       toolId,
       toolName: tool.name,
@@ -83,7 +91,7 @@ export async function resolvePortConflict(
     exclude: reservedPorts,
   })
   const nextPort = free.port
-  const nextLaunch = withForcedPort(tool.launchCommand, nextPort)
+  const nextLaunch = withForcedPort(tool.launchCommand, nextPort, previousPort)
   const nextUrl = urlForPort(tool.url, nextPort)
   const saved = deps.store.patch(toolId, {
     port: nextPort,

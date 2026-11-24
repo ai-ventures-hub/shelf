@@ -658,6 +658,7 @@ if (gotLock) {
     initAutoUpdate(sendToRenderer)
     // Companion server follows prefs.json; off by default.
     void companion.applyPrefs()
+    companion.watchNetwork()
 
     // Cold-start argv may include a shelf:// link (Windows/Linux; mac uses open-url).
     const bootUrl = process.argv.find((arg) => arg.startsWith('shelf://'))

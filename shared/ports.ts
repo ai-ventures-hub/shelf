@@ -4,6 +4,7 @@
  */
 import { execFile } from 'node:child_process'
 import net from 'node:net'
+import path from 'node:path'
 import { promisify } from 'node:util'
 import { invalidateProcessSnapshot, verifyOccupantsOwnedBy } from './process-ownership'
 
@@ -234,18 +235,44 @@ export async function findFreePort(
 }
 
 /**
- * Rewrite localhost / 127.0.0.1 URLs to the given port; synthesize one when missing.
+ * Ports that library tools and staged drafts already claim, running or not.
+ * `exceptProjectPath` leaves out the entries for one folder, so re-inspecting
+ * a registered project does not push it off its own port.
+ */
+export function claimedPorts(
+  entries: Iterable<{ port?: number; projectPath?: string }>,
+  exceptProjectPath?: string,
+): number[] {
+  const except = exceptProjectPath ? path.resolve(exceptProjectPath) : undefined
+  const ports = new Set<number>()
+  for (const entry of entries) {
+    if (typeof entry.port !== 'number') continue
+    if (except && entry.projectPath && path.resolve(entry.projectPath) === except) continue
+    ports.add(entry.port)
+  }
+  return [...ports]
+}
+
+/** Hosts that always resolve to this Mac, including `name.localhost`. */
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '0.0.0.0' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.localhost')
+  )
+}
+
+/**
+ * Rewrite a loopback URL to the given port, keeping its host and path;
+ * synthesize one when missing or not local.
  */
 export function urlForPort(existingUrl: string | undefined, port: number): string {
   if (!existingUrl?.trim()) return `http://127.0.0.1:${port}/`
   try {
     const parsed = new URL(existingUrl)
-    if (
-      parsed.hostname === 'localhost' ||
-      parsed.hostname === '127.0.0.1' ||
-      parsed.hostname === '0.0.0.0' ||
-      parsed.hostname === '[::1]'
-    ) {
+    if (isLoopbackHostname(parsed.hostname)) {
       parsed.port = String(port)
       // Keep trailing slash style if the original had a path of "/"
       return parsed.toString()
@@ -256,44 +283,90 @@ export function urlForPort(existingUrl: string | undefined, port: number): strin
   return `http://127.0.0.1:${port}/`
 }
 
+const ENV_PREFIX_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/
+const PACKAGE_RUN_RE = /\b(npm|pnpm|yarn|bun)\s+run\b/
+/** next/vite/flask as the binary itself, not a folder such as next-app. */
+const PORT_FLAG_BINARY_RE = /(?:^|[\s/])(?:next|vite|flask)(?=\s|$)/
+
+/** Commands whose port Shelf can set with a `--port` flag. */
+export function takesPortFlag(command: string): boolean {
+  return PACKAGE_RUN_RE.test(command) || PORT_FLAG_BINARY_RE.test(command)
+}
+
+/** Drop PORT=n from the leading env assignments, wherever it sits among them. */
+function stripPortEnv(command: string): string {
+  return command.replace(ENV_PREFIX_RE, (prefix) => prefix.replace(/(^|\s)PORT=\d+\s+/g, '$1'))
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 /**
- * Force a launch command onto a specific port via PORT= and framework flags.
- * Idempotent: strips prior PORT= / -p / --port before re-applying.
+ * Move a launch command onto a port: PORT= in front, and the port the command
+ * already names rewritten where it stands. Flags are never removed, so a
+ * command Shelf does not recognize keeps its shape (docker -p 8080:80,
+ * uvicorn --port, ssh -p). `previousPort` is the port the tool had; with it,
+ * only that number is rewritten. A flag is appended only when the command
+ * names no port and is a package script or next/vite/flask.
+ * Idempotent for the commands it pins.
  */
-export function withForcedPort(launchCommand: string, port: number): string {
-  let cmd = launchCommand.trim()
-  cmd = cmd.replace(/^(?:PORT=\d+\s+)+/, '')
-  cmd = cmd.replace(/\s+--port(?:=|\s+)\d+/g, '')
-  cmd = cmd.replace(/\s+-p(?:=|\s+)\d+/g, '')
-
-  // Package-manager scripts need `--` so flags reach the underlying binary.
-  if (/\b(npm|pnpm|yarn|bun)\s+run\b/.test(cmd)) {
-    if (/\s--(\s|$)/.test(cmd)) {
-      return `PORT=${port} ${cmd} --port ${port}`
-    }
-    return `PORT=${port} ${cmd} -- --port ${port}`
+export function withForcedPort(launchCommand: string, port: number, previousPort?: number): string {
+  const next = String(port)
+  let cmd = stripPortEnv(launchCommand.trim())
+  let named = false
+  const put = (lead: string) => {
+    named = true
+    return `${lead}${next}`
   }
 
-  // Direct next/vite/flask-style binaries.
-  if (/\b(next|vite|flask)\b/.test(cmd)) {
-    return `PORT=${port} ${cmd} --port ${port}`
+  // pnpm forwards a literal `--` to the script, which hides the flag from it.
+  if (/\bpnpm\s+run\b/.test(cmd)) cmd = cmd.replace(/\s--\s+(?=--port(?:=|\s))/, ' ')
+
+  cmd = cmd.replace(/(\s--port(?:=|\s+))\d+(?![\d:.])/g, (_whole, lead: string) => put(lead))
+  cmd = cmd.replace(/(\s-p(?:=|\s+))(\d+)(?![\d:.])/g, (whole, lead: string, value: string) =>
+    previousPort !== undefined && Number(value) !== previousPort ? whole : put(lead))
+
+  if (previousPort !== undefined && previousPort !== port) {
+    // The same number elsewhere: `http.server 8000`, `localhost:8000`,
+    // `--server.port 8501`, the host side of `-p 8080:80` or `-L 8000:db:5432`.
+    const previous = escapeRegExp(String(previousPort))
+    cmd = cmd.replace(new RegExp(`(^|[\\s:=])${previous}(?=$|[\\s/:])`, 'g'), (_whole, lead: string) => put(lead))
   }
 
-  return `PORT=${port} ${cmd}`
+  if (!named) {
+    const manager = PACKAGE_RUN_RE.exec(cmd)?.[1]
+    // Only npm needs `--` to pass a flag through to the script.
+    if (manager === 'npm') cmd = /\s--(\s|$)/.test(cmd) ? `${cmd} --port ${next}` : `${cmd} -- --port ${next}`
+    else if (manager || PORT_FLAG_BINARY_RE.test(cmd)) cmd = `${cmd} --port ${next}`
+  }
+
+  return `PORT=${next} ${cmd}`
+}
+
+const ANNOUNCED_URL_PATTERNS = [
+  /Local:\s*(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])[:\d]*)/i,
+  /(?:listening on|ready on|started server on)\s+(https?:\/\/(?:localhost|127\.0\.0\.1)[:\d/]*)/i,
+]
+/** Any loopback URL with a port: may be the tool's own or one it only talks to. */
+const MENTIONED_URL_PATTERN = /(https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/?)/i
+
+function firstUrl(text: string, patterns: RegExp[]): string | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match?.[1]) return match[1].replace(/\/$/, '') + '/'
+  }
+  return null
+}
+
+/** A URL the output presents as the tool's own ("Local:", "listening on"). */
+export function sniffAnnouncedUrlFromText(text: string): string | null {
+  return firstUrl(text, ANNOUNCED_URL_PATTERNS)
 }
 
 /**
  * Pull a local http URL out of framework ready logs (Next/Vite/etc).
  */
 export function sniffLocalUrlFromText(text: string): string | null {
-  const patterns = [
-    /Local:\s*(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])[:\d]*)/i,
-    /(?:listening on|ready on|started server on)\s+(https?:\/\/(?:localhost|127\.0\.0\.1)[:\d/]*)/i,
-    /(https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/?)/i,
-  ]
-  for (const pattern of patterns) {
-    const match = text.match(pattern)
-    if (match?.[1]) return match[1].replace(/\/$/, '') + '/'
-  }
-  return null
+  return firstUrl(text, [...ANNOUNCED_URL_PATTERNS, MENTIONED_URL_PATTERN])
 }

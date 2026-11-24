@@ -12,6 +12,7 @@ import {
   runOnce,
   sanitizeEnv,
   spawnLoginShell,
+  terminateLeaderlessGroup,
   terminatePidGroup,
   terminateProcess,
   waitForPort,
@@ -147,6 +148,11 @@ export class ProcessManager {
   }
 
   /** Current evidence without another OS probe, for event-driven tray refreshes. */
+  /** True while this manager holds a child for the tool, whatever its status. */
+  hasLiveProcess(toolId: string): boolean {
+    return this.processes.has(toolId)
+  }
+
   peekStates(): ToolRuntimeState[] {
     const seen = new Set<string>()
     const out: ToolRuntimeState[] = []
@@ -384,11 +390,23 @@ export class ProcessManager {
         if (current.status === 'stopping') return
         const wasManaged = this.processes.delete(toolId)
         if (!wasManaged || current.status === 'stopped') return
-        const exitedBeforeReady = current.status === 'starting' && Boolean(tool.port)
+        // The app and the MCP server each run a manager. When the other one
+        // stops this tool it says so on the shared receipt first; without
+        // that, a wrapper exiting 143 read as a crash and could auto-restart.
+        const stoppedElsewhere = this.runtime.receiptStopRequested(open?.receiptId)
+        const exitedBeforeReady = !stoppedElsewhere && current.status === 'starting' && Boolean(tool.port)
         const cleanExit =
-          !exitedBeforeReady &&
-          (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT')
-        const message = exitedBeforeReady
+          stoppedElsewhere ||
+          (!exitedBeforeReady && (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT'))
+        // A crashed launcher can leave children holding the port in a group
+        // Shelf no longer tracks, which then refuses both Stop and Start.
+        // Exit 0 is left alone: that is a script that meant to detach.
+        if (!cleanExit && code !== 0 && typeof child.pid === 'number') {
+          void terminateLeaderlessGroup(child.pid).catch(() => { /* reported on the next start as a busy port */ })
+        }
+        const message = stoppedElsewhere
+          ? 'Stopped from another Shelf process.'
+          : exitedBeforeReady
           ? `Process exited before port ${tool.port} became ready.`
           : cleanExit
             ? `Process exited${signal ? ` (${signal})` : ' cleanly'}.`
@@ -505,10 +523,22 @@ export class ProcessManager {
         // No configured port: still try to learn URL from framework ready logs.
         const candidate = await this.runtime.waitForSniffedUrl(toolId, 8_000, () => this.processes.has(toolId) && !cancelled())
         if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
-        const sniffed = candidate && await this.ownership.ownsListener(candidate.port, child.pid) ? candidate : null
-        if (candidate && !sniffed) {
+        // The URL may be printed just before the bind, so give the listener a
+        // moment. A URL the tool announces as its own ("Local:", "listening
+        // on") with nothing behind it is a failed start. A URL it merely
+        // mentions (a database, another service) is not this tool's concern.
+        let sniffed: typeof candidate = null
+        for (let attempt = 0; candidate && !sniffed && attempt < 6; attempt++) {
+          if (!this.processes.has(toolId) || cancelled()) break
+          if (await this.ownership.ownsListener(candidate.port, child.pid)) sniffed = candidate
+          else await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+        if (candidate?.announced && !sniffed && this.processes.has(toolId) && !cancelled()) {
           await this.stopInternal(toolId, 'The advertised service URL has no verified listener.', { code: 'port_timeout', remedy: 'copy_ai_report' })
           return this.runtime.setState(toolId, { toolId, status: 'error', code: 'port_timeout', message: 'The process printed a URL, but Shelf could not verify its service.', remedy: 'copy_ai_report' })
+        }
+        if (candidate && !sniffed && this.processes.has(toolId)) {
+          this.runtime.appendLog(toolId, 'system', `Saw ${candidate.url} in the output, but this tool is not listening there; no URL saved.`)
         }
         if (cancelled()) return this.stopInternal(toolId, 'Launch cancelled.')
         if (!this.processes.has(toolId)) {
@@ -693,6 +723,8 @@ export class ProcessManager {
         })
       }
 
+      // Tell the owning manager first, so it records a stop, not a crash.
+      if (!managed && (externalOwner || externalReceipt)) this.runtime.requestReceiptStop(receiptId)
       if (managed) {
         await terminateProcess(managed)
         this.processes.delete(toolId)
