@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.5.1 - 2026-11-23
 
 - Fixes from the November 23 audit:
   - Two tools no longer end up on the same port by accident. Import and
