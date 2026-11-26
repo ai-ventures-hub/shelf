@@ -120,6 +120,57 @@ export class CapabilityGapStore {
     })
   }
 
+  /**
+   * Note a capability search that matched nothing. The searched text is the
+   * capability, so the same wording counts up instead of piling up. Unlike
+   * record(), this never reopens a gap the user resolved or dismissed: a
+   * search is not a request, and their decision stands.
+   */
+  recordSearchMiss(input: { task: string; client?: string }): { action: 'created' | 'updated' | 'ignored'; gap?: CapabilityGap } {
+    const task = input.task.trim().replace(/\s+/g, ' ').slice(0, 200)
+    const capabilities = normalizeCapabilities([task])
+    if (!task || capabilities.length === 0) return { action: 'ignored' }
+    const fingerprint = gapFingerprint(capabilities)
+    const client = input.client?.trim().slice(0, 80) || undefined
+
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const index = data.gaps.findIndex((gap) => gapFingerprint(gap.capabilities) === fingerprint)
+      const now = new Date().toISOString()
+      if (index >= 0) {
+        const existing = data.gaps[index]
+        const gap: CapabilityGap = {
+          ...existing,
+          occurrenceCount: existing.occurrenceCount + 1,
+          client: client ?? existing.client,
+          lastRequestedAt: now,
+          updatedAt: now,
+        }
+        data.gaps[index] = gap
+        this.write(data)
+        return { action: 'updated', gap }
+      }
+      const gap: CapabilityGap = {
+        id: randomUUID(),
+        capabilities,
+        task,
+        reason: 'A search for this found no tool in the library.',
+        relatedToolIds: [],
+        status: 'open',
+        occurrenceCount: 1,
+        examples: [{ task, at: now }],
+        createdAt: now,
+        updatedAt: now,
+        lastRequestedAt: now,
+        source: 'search',
+        client,
+      }
+      data.gaps.unshift(gap)
+      this.write(data)
+      return { action: 'created', gap }
+    })
+  }
+
   updateStatus(id: string, status: CapabilityGapStatus): CapabilityGap {
     return this.update(id, { status })
   }

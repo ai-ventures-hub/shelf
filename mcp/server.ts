@@ -14,6 +14,7 @@ import { z } from 'zod'
 import pkg from '../package.json'
 import { CapabilityGapStore } from '../shared/capability-gap-store'
 import { deriveToolReadiness } from '../shared/capability-intelligence'
+import { AccessCheckStore } from '../shared/access-check-store'
 import { recordClientObservation } from '../shared/client-observation'
 import { summarizeDesignProfile } from '../shared/design-brief'
 import { resolveDesignMd } from '../shared/design-md'
@@ -87,6 +88,7 @@ const receipts = new ReceiptStore()
 const capabilityGaps = new CapabilityGapStore()
 const designProfiles = new DesignProfileStore()
 const drafts = new ToolDraftStore()
+const accessChecks = new AccessCheckStore()
 const projectMemory = new ProjectMemoryStore(store.getRoot())
 const processes = new ProcessManager(store, {
   receipts,
@@ -163,7 +165,7 @@ server.registerTool(
     if (!tool) return toolNotFound(id)
     return textResult({
       tool: sanitizeToolForOutput(tool),
-      readiness: deriveToolReadiness(tool),
+      readiness: deriveToolReadiness(tool, accessChecks.forTool(id)),
       state: await processes.getState(id),
     })
   },
@@ -641,6 +643,8 @@ server.registerPrompt(
 )
 
 registerCapabilityTools({
+  checks: accessChecks,
+  client: () => server.server.getClientVersion()?.name,
   server,
   store,
   processes,

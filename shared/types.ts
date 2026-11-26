@@ -1,4 +1,5 @@
 export type {
+  AccessCheck,
   AgentAccess,
   AgentAccessKind,
   AppearanceMode,

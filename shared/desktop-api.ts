@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 /** The desktop bridge contract, checked by both preload and renderer. */
 import type {
+  AccessCheck,
   VerificationStep,
   VerificationWorkflow,
   VerificationRun,
@@ -185,7 +186,9 @@ export interface ShelfApi {
   onCompanionStatus: (cb: (status: CompanionStatus) => void) => () => void
   submitOnboarding: (input: OnboardingSubmissionInput) => Promise<{ appVersion: string }>
   getDesignMd: (opts: { id?: string; projectPath?: string }) => Promise<DesignMdResult>
-  checkToolReadiness: (id: string) => Promise<ToolReadiness>
+  checkToolReadiness: (id: string) => Promise<ToolReadiness & { checks?: Record<string, AccessCheck> }>
+  /** Try each declared interface now and return the refreshed readiness. */
+  checkToolAccess: (id: string) => Promise<ToolReadiness & { checks?: Record<string, AccessCheck> }>
   listCapabilityGaps: (opts?: {
     status?: CapabilityGapStatus
     limit?: number

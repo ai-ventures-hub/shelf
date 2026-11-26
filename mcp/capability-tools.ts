@@ -1,12 +1,14 @@
 import { z } from 'zod'
 import { agentAccessKindSchema } from '../shared/tool-validation'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { AccessCheckStore } from '../shared/access-check-store'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
 import type { DesignProfileStore } from '../shared/design-profile-store'
 import { resolveProfileForGap } from '../shared/design-resolve'
 import {
   deriveToolReadiness,
   findCapabilityMatches,
+  isSearchableTask,
   summarizeAgentAccess,
 } from '../shared/capability-intelligence'
 import { buildGapBrief } from '../shared/gap-brief'
@@ -76,6 +78,10 @@ interface CapabilityToolHost {
   processes: ProcessManager
   gaps: CapabilityGapStore
   profiles: DesignProfileStore
+  /** Results of the last time Shelf tried each declared interface. */
+  checks?: AccessCheckStore
+  /** The connected MCP client's self-reported name. */
+  client?: () => string | undefined
 }
 
 /** Register the stable, non-invoking Capability Intelligence MCP surface. */
@@ -85,18 +91,21 @@ export function registerCapabilityTools({
   processes,
   gaps,
   profiles,
+  checks,
+  client,
 }: CapabilityToolHost): void {
   server.registerTool(
     'shelf_find_capability',
     {
       description:
-        'Rank library tools for a task, with reasons, readiness, and declared access entrypoints, plus matching team-catalog tools not installed yet (the user installs those).',
+        'Rank library tools for a task, with reasons, readiness, and declared access entrypoints, plus matching team-catalog tools not installed yet (the user installs those). A search that matches nothing is noted for the user as an unmet need.',
       inputSchema: {
         task: z.string().min(1).describe('Task or capability needed'),
         accessKind: agentAccessKindSchema.optional(),
         limit: z.number().int().positive().max(10).optional(),
       },
-      annotations: READ_ONLY,
+      // Not read-only: a search with no match is written to the gaps list.
+      annotations: LOCAL_WRITE,
     },
     async ({ task, accessKind, limit }) => {
       const matches = findCapabilityMatches(store.list(), task, {
@@ -134,17 +143,31 @@ export function registerCapabilityTools({
           note: TEAM_NOTE,
         }
       })
+      // Nothing anywhere: note the need so the user sees real demand without
+      // relying on the agent to record it. An accessKind filter is skipped
+      // (a tool may exist with another interface), as is a team match.
+      let noted = false
+      if (compact.length === 0 && teamMatches.length === 0 && !accessKind && isSearchableTask(task)) {
+        try {
+          noted = gaps.recordSearchMiss({ task, client: client?.() }).action !== 'ignored'
+        } catch {
+          // The search result is still correct without the note.
+        }
+      }
       const next =
         compact.length > 0
           ? undefined
           : teamMatches.length > 0
             ? 'No installed tool matches. Ask the user to install a candidate from Team Tools in Shelf, or record the need with shelf_record_capability_gap.'
-            : 'No installed tool matches. Record the need with shelf_record_capability_gap so the user sees it in Shelf.'
+            : noted
+              ? 'No installed tool matches. Shelf noted the search for the user. To describe the need properly (capabilities, why, suggested interface), call shelf_record_capability_gap.'
+              : 'No installed tool matches. Record the need with shelf_record_capability_gap so the user sees it in Shelf.'
       return textResult({
         task,
         count: compact.length,
         matches: compact,
         ...(teamMatches.length ? { teamMatches } : {}),
+        ...(noted ? { noted: true } : {}),
         ...(next ? { next } : {}),
       })
     },
@@ -154,7 +177,7 @@ export function registerCapabilityTools({
     'shelf_check_tool_readiness',
     {
       description:
-        "Declared agent-access readiness for one tool's own CLI/MCP/HTTP interface, with its access list and runtime state. Contacts and starts nothing.",
+        "Agent-access readiness for one tool's own CLI/MCP/HTTP interface: what is declared, what Shelf saw when it last checked (readiness.verified), its access list and runtime state. Contacts and starts nothing; shelf_verify_tool_access runs a fresh check.",
       inputSchema: { id: z.string().describe('Tool id') },
       annotations: READ_ONLY,
     },
@@ -163,7 +186,7 @@ export function registerCapabilityTools({
       if (!tool) return toolNotFound(id)
       return textResult({
         id,
-        readiness: deriveToolReadiness(tool),
+        readiness: deriveToolReadiness(tool, checks?.forTool(id)),
         access: summarizeAgentAccess(tool),
         runtime: await processes.getState(id),
       })

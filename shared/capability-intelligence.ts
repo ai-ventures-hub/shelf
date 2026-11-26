@@ -4,6 +4,7 @@ import {
   BARE_SECRET_SOURCE,
   maskSecrets,
   stripInvisibleChars,
+  type AccessCheck,
   type AgentAccess,
   type AgentAccessKind,
   type AgentAccessSummary,
@@ -78,7 +79,7 @@ const SHELF_ACTIONS = [
   'shelf_get_logs',
 ]
 
-export function deriveToolReadiness(tool: Tool): ToolReadiness {
+export function deriveToolReadiness(tool: Tool, checks: Record<string, AccessCheck> = {}): ToolReadiness {
   const projectMissing = Boolean(tool.projectPath && !fs.existsSync(tool.projectPath))
   const launchable = Boolean(tool.launchCommand?.trim()) && !projectMissing
   const base = { launchable, shelfActions: SHELF_ACTIONS }
@@ -120,12 +121,27 @@ export function deriveToolReadiness(tool: Tool): ToolReadiness {
 
   const ready = tool.agentAccess.filter((access) => !access.setupRequired)
   if (ready.length > 0) {
+    const seen = ready.map((access) => checks[access.id])
+    const failed = ready.filter((access) => checks[access.id]?.ok === false)
+    const verified = failed.length > 0 ? 'failed' : seen.every(Boolean) ? 'verified' : 'unchecked'
+    const times = seen.filter(Boolean).map((check) => check!.checkedAt).sort()
+    const through = ready.map((access) => accessLabel(access.kind)).join(', ')
     return {
       ...base,
       state: 'ready',
       childInterface: 'declared',
-      summary: `Declared ready through ${ready.map((access) => accessLabel(access.kind)).join(', ')}. Connect to the tool yourself using the declared entrypoint(s); Shelf records but never invokes them.`,
-      reasons: ready.map((access) => `${accessLabel(access.kind)} is declared ready.`),
+      verified,
+      ...(times.length ? { checkedAt: times[0] } : {}),
+      summary:
+        verified === 'verified'
+          ? `Ready through ${through}, and it answered when Shelf last checked. Use it through Shelf (shelf_tool_interface, shelf_use_tool, shelf_request_tool) or connect to the declared entrypoint yourself.`
+          : verified === 'failed'
+            ? `Declared ready through ${through}, but it did not answer when Shelf last checked: ${failed.map((access) => checks[access.id].detail).join(' ')}`
+            : `Declared ready through ${through}; not checked yet. Use it through Shelf (shelf_tool_interface, shelf_use_tool, shelf_request_tool) or connect to the declared entrypoint yourself.`,
+      reasons: ready.map((access) => {
+        const check = checks[access.id]
+        return check ? `${accessLabel(access.kind)}: ${check.detail}` : `${accessLabel(access.kind)} is declared ready; not checked yet.`
+      }),
     }
   }
 
@@ -148,6 +164,11 @@ export function summarizeAgentAccess(tool: Tool): AgentAccessSummary[] {
     entrypoint: maskSecrets(access.entrypoint),
     setupRequired: access.setupRequired,
   }))
+}
+
+/** True when the text has words a search can rank on (not only stop words). */
+export function isSearchableTask(task: string): boolean {
+  return Boolean(normalizeText(task)) && significantTokens(task).length > 0
 }
 
 export function findCapabilityMatches(

@@ -26,9 +26,28 @@ export type CapabilityReadinessState =
   | 'manual_only'
   | 'unavailable'
 
+/** What Shelf saw the last time it tried one declared interface. */
+export interface AccessCheck {
+  ok: boolean
+  /** One plain sentence: what answered, or why not. */
+  detail: string
+  checkedAt: string
+  /** For MCP: how many tools the server listed. */
+  toolCount?: number
+}
+
 export interface ToolReadiness {
   /** Describes the tool's OWN agent interface — never whether Shelf can launch it. */
   state: CapabilityReadinessState
+  /**
+   * Whether Shelf has tried the declared interface: 'verified' when every
+   * ready interface answered on its last check, 'failed' when one did not,
+   * 'unchecked' when at least one has never been tried. Absent when no
+   * interface is declared ready.
+   */
+  verified?: 'verified' | 'failed' | 'unchecked'
+  /** Oldest check behind `verified`. */
+  checkedAt?: string
   summary: string
   reasons: string[]
   /** True unless the project folder is missing or the launch command is empty. */
@@ -345,6 +364,13 @@ export interface CapabilityGap {
   lastRequestedAt: string
   /** Tools the user declined as resolve suggestions (suggestion hidden, gap stays open). */
   suggestionDismissedToolIds?: string[]
+  /**
+   * How the gap got here. 'search': Shelf noted it because a capability
+   * search matched nothing. Absent or 'agent': an agent recorded it on purpose.
+   */
+  source?: 'agent' | 'search'
+  /** The MCP client whose request this was, as it names itself. */
+  client?: string
 }
 
 /** Suggested tool fields from smart folder import (see shared/project-import). */

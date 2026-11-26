@@ -4,6 +4,7 @@ import path from 'node:path'
 import { deriveToolReadiness } from '../../shared/capability-intelligence'
 import { containedDataUrl, ICON_MIME_TYPES } from '../../shared/contained-data-url'
 import { resolveDesignMd } from '../../shared/design-md'
+import { AccessCheckStore } from '../../shared/access-check-store'
 import { inspectProject } from '../../shared/project-import'
 import { claimedPorts } from '../../shared/ports'
 import { registerProject } from '../../shared/register-project'
@@ -52,10 +53,23 @@ export function registerToolsIpc(ctx: IpcContext): void {
     try { verification.forgetTool(id) } catch { /* left for a later delete */ }
     try { projectMemory.forget(id) } catch { /* unreadable memory stays untouched */ }
   })
+  const accessChecks = new AccessCheckStore(store.getRoot())
   handle('tools:readiness', (_e, id) => {
     const tool = store.get(id)
     if (!tool) throw new Error(`Tool not found: ${id}`)
-    return deriveToolReadiness(tool)
+    return { ...deriveToolReadiness(tool, accessChecks.forTool(id)), checks: accessChecks.forTool(id) }
+  })
+  // The user pressed Check: try every declared interface once and remember
+  // what answered. The MCP client code loads only when this is first used.
+  handle('tools:checkAccess', async (_e, id) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    const { probeAccess } = await import('../../shared/tool-connect')
+    accessChecks.prune(id, tool.agentAccess.map((access) => access.id))
+    await Promise.all(
+      tool.agentAccess.map(async (access) => accessChecks.record(id, access.id, await probeAccess(tool, access))),
+    )
+    return { ...deriveToolReadiness(tool, accessChecks.forTool(id)), checks: accessChecks.forTool(id) }
   })
   // Launchability glyphs for library cards — one lsof call for all tools.
   handle('tools:health', async () =>
