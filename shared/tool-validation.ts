@@ -34,6 +34,12 @@ export const toolSchema = z.object({
    * process crashes unexpectedly (never on user stop or non-transient config errors).
    */
   autoRestart: z.boolean().optional(),
+  /**
+   * Gateway (2.6): false keeps agents from using this tool's own interface
+   * through Shelf. Absent means allowed. The user's switch: no agent or
+   * import path sets it; they all carry the stored value through.
+   */
+  agentUse: z.boolean().optional(),
 })
 
 /**

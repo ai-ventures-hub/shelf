@@ -126,7 +126,7 @@ export function ToolFormAdvanced({
           <fieldset className="field span-2 access-fieldset">
             <legend className="field-label">Agent access</legend>
             <p className="field-hint">
-              Describe existing interfaces only. Shelf does not connect to or invoke them.
+              Describe interfaces the tool already has. Agents can use an MCP server or a local HTTP API through Shelf; a CLI is listed for them to run themselves.
             </p>
             <div className="access-list">
               {form.agentAccess.map((access) => (
@@ -345,6 +345,21 @@ export function ToolFormAdvanced({
               Stops immediately if you click Stop or if a missing package, command, or env var is detected.
             </p>
           </div>
+
+          {form.agentAccess.length > 0 || form.agentUse === false ? <div className="field span-2">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={form.agentUse !== false}
+                onChange={(e) => update('agentUse', e.target.checked ? undefined : false)}
+              />
+              Let agents use this tool through Shelf
+            </label>
+            <p className="field-hint">
+              A connected agent can call the interfaces listed under Agent access through Shelf,
+              which starts the tool when needed. Only you can change this.
+            </p>
+          </div> : null}
 
           {prefs.companionEnabled || form.remotePreview ? <div className="field span-2">
             <label className="checkbox-row">

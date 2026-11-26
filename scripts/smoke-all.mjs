@@ -79,6 +79,7 @@ async function main() {
   await run('phase 4 project context', 'node', ['scripts/smoke-phase4.mjs'])
   await run('verification workflows', 'node', ['scripts/smoke-verification.mjs'])
   await run('mcp smoke', 'node', ['scripts/smoke-mcp.mjs'])
+  await run('gateway, checked readiness, idle stop', 'node', ['scripts/smoke-gateway.mjs'])
   await run('mcp new-tool prompt', 'node', ['scripts/smoke-mcp-new-tool.mjs'])
   await run('companion preview proxy', 'node', ['scripts/smoke-companion-preview.mjs'])
   await run('tool sharing', 'node', ['scripts/smoke-sharing.mjs'])

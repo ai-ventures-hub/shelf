@@ -79,6 +79,12 @@ export interface ProcessManagerOptions {
   defaultOrigin?: () => LaunchOrigin | undefined
   /** Optional override for auto-restart backoff delays (used by smoke tests). */
   autoRestartDelaysMs?: number[]
+  /**
+   * The user (app, menu bar, or phone) asked for this tool to run. Fires even
+   * when it is already running, so a run Shelf started for an agent becomes
+   * the user's and is no longer stopped for idleness.
+   */
+  onUserStart?: (toolId: string) => void
 }
 
 /**
@@ -186,6 +192,7 @@ export class ProcessManager {
   ): Promise<ToolRuntimeState> {
     // A direct start supersedes any queued auto-restart timer.
     this.cancelAutoRestart(toolId, false)
+    this.noteUserStart(toolId, options)
     const inFlight = this.inFlightStarts.get(toolId)
     if (inFlight) return inFlight
     const generation = this.operations.generation(toolId)
@@ -791,8 +798,15 @@ export class ProcessManager {
     }
   }
 
+  private noteUserStart(toolId: string, options: StartOptions): void {
+    const kind = (options.origin ?? this.options.defaultOrigin?.())?.kind
+    if (kind !== 'gui' && kind !== 'tray' && kind !== 'companion') return
+    try { this.options.onUserStart?.(toolId) } catch { /* advisory */ }
+  }
+
   async restart(toolId: string, options: StartOptions = {}): Promise<ToolRuntimeState> {
     this.cancelAutoRestart(toolId, true)
+    this.noteUserStart(toolId, options)
     this.operations.cancelStarts(toolId)
     return this.operations.run(toolId, async () => {
       const stopped = await this.stopInternal(toolId)

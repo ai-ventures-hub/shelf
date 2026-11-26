@@ -123,6 +123,10 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   companionBindAddress: 'tailscale',
   companionPort: 48620,
   companionKeepAwake: false,
+  companionNotifications: false,
+  gatewayEnabled: true,
+  idleStopEnabled: true,
+  idleStopMinutes: 15,
 }
 
 /**

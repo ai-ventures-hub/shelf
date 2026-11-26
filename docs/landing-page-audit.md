@@ -21,7 +21,7 @@ Sections were also appended release-by-release (`1.2`, `1.3`, `1.4`), pushing th
 
 - **Visual identity & tokens:** Dark navy/indigo studio theme (`--av-*` design tokens in `site/src/app/globals.css`), high contrast, zero SaaS fluff.
 - **Voice & trust rules:** Plain words, short sentences, explicit safety guarantees. These guardrails apply to every section of the redesign:
-  - Never claim Shelf connects to or invokes child MCP servers (discovery & honesty only).
+  - Shelf connects to a tool's own MCP server or local HTTP API only when an agent asks through the gateway or the user presses Check, only on this Mac, and the user can switch it off. Never claim it runs a tool's CLI or reaches remote servers.
   - Never claim cloud sync, Shelf accounts, or hosted relays.
   - Keep *"Secrets never travel"* and *"Nothing runs until you approve"* front and center. The current wording lives in `site/src/lib/landing-content.ts`; reuse it rather than rewriting it.
   - Companion claims must match `docs/COMPANION.md`: HTTPS with a self-signed, fingerprint-pinned certificate over the user's own Tailscale or LAN address; no relay, no broker, no login. Do not say "encrypted cloud", "sync", or imply it works away from the user's own network without Tailscale.

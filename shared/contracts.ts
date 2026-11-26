@@ -37,7 +37,7 @@ export interface AccessCheck {
 }
 
 export interface ToolReadiness {
-  /** Describes the tool's OWN agent interface — never whether Shelf can launch it. */
+  /** Describes the tool's OWN agent interface (what the gateway can use) — never whether Shelf can launch it. */
   state: CapabilityReadinessState
   /**
    * Whether Shelf has tried the declared interface: 'verified' when every
@@ -188,8 +188,13 @@ export type RemedyKind =
  * 'mcp' is an agent client, identified by the (self-reported) name from the
  * MCP initialize handshake, e.g. "claude-code" or "cursor".
  */
-/** 'companion' = a paired phone over the Companion server; client carries the device name. */
-export type LaunchOriginKind = 'gui' | 'tray' | 'mcp' | 'companion'
+/**
+ * 'companion' = a paired phone over the Companion server; client carries the device name.
+ * 'gateway' = Shelf started the tool by itself because an agent called the
+ * tool's interface through Shelf; client is that agent. Only these runs are
+ * candidates for stopping when idle.
+ */
+export type LaunchOriginKind = 'gui' | 'tray' | 'mcp' | 'companion' | 'gateway'
 
 export interface LaunchOrigin {
   kind: LaunchOriginKind
@@ -266,6 +271,14 @@ export interface UiPrefs {
   /** 'tailscale' = the detected Tailscale interface; otherwise an explicit IPv4 address. */
   companionBindAddress: string
   companionPort: number
+  /** Companion (2.6): send alerts to paired phones through their push service. Off by default. */
+  companionNotifications: boolean
+  /** Gateway (2.6): agents may use a tool's own interface through Shelf. */
+  gatewayEnabled: boolean
+  /** Stop tools Shelf started for an agent once no agent has used them for a while. */
+  idleStopEnabled: boolean
+  /** Minutes without agent use before such a tool is stopped (2 to 240). */
+  idleStopMinutes: number
   /** Hold a power-save blocker while a paired device is connected. */
   companionKeepAwake: boolean
   windowBounds?: {

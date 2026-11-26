@@ -619,7 +619,7 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
                     <div>
                       <strong>{access.kind === 'http-api' ? 'HTTP API' : access.kind.toUpperCase()}</strong>
                       {access.kind === 'mcp' ? ` · ${access.transport}` : ''}
-                      {access.setupRequired ? ' · setup required' : ' · declared ready'}
+                      {access.setupRequired ? ' · setup required' : readiness?.checks?.[access.id]?.ok ? ' · answering' : ' · declared ready'}
                     </div>
                     <code>{access.entrypoint}</code>
                     {readiness?.checks?.[access.id] ? (

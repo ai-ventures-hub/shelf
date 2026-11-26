@@ -84,7 +84,7 @@ interface CapabilityToolHost {
   client?: () => string | undefined
 }
 
-/** Register the stable, non-invoking Capability Intelligence MCP surface. */
+/** Register the Capability Intelligence MCP surface: search, readiness, and gaps. Using a tool is the gateway's job. */
 export function registerCapabilityTools({
   server,
   store,

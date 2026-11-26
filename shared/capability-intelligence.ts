@@ -103,7 +103,7 @@ export function deriveToolReadiness(tool: Tool, checks: Record<string, AccessChe
         'Agents can launch and stop this tool through Shelf (shelf_launch_tool / shelf_stop_tool). No child interface is declared — once running, the tool is used through its own UI rather than driven directly by agents.',
       reasons: [
         'Launching via shelf_launch_tool is always available for every registered tool.',
-        'No CLI, MCP, or HTTP API interface is declared for connecting to the tool itself. Add agentAccess if the tool exposes one.',
+        'No CLI, MCP, or HTTP API interface is declared for the tool itself, so there is nothing to use through Shelf. Add agentAccess if the tool exposes one.',
       ],
     }
   }

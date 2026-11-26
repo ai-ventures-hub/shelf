@@ -51,6 +51,7 @@ export class PrefsStore {
           : current.windowBounds,
       }
       next.sidebarWidth = Math.min(280, Math.max(210, Number(next.sidebarWidth) || 250))
+      next.idleStopMinutes = clampIdleStopMinutes(next.idleStopMinutes)
       this.write(next)
       return next
     })
@@ -72,5 +73,24 @@ export class PrefsStore {
 
   private write(data: UiPrefs): void {
     atomicWriteFileSync(this.filePath, JSON.stringify(data, null, 2))
+  }
+}
+
+/** Whole minutes between 2 and 240; anything unreadable falls back to 15. */
+export function clampIdleStopMinutes(value: unknown): number {
+  const minutes = Math.round(Number(value))
+  return Number.isFinite(minutes) && minutes > 0 ? Math.min(240, Math.max(2, minutes)) : 15
+}
+
+/**
+ * Current prefs without creating or locking the file. For the MCP server,
+ * which only reads what the user chose in the app.
+ */
+export function readPrefsSnapshot(root = resolveShelfDataRoot()): UiPrefs {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, 'prefs.json'), 'utf8')) as Partial<UiPrefs>
+    return { ...DEFAULT_UI_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) }
+  } catch {
+    return { ...DEFAULT_UI_PREFS }
   }
 }

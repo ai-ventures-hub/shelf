@@ -131,6 +131,53 @@ export function SettingsPage() {
         </section>
         <section className="panel">
           <div className="panel-header">
+            <h2 className="panel-title">Agents</h2>
+          </div>
+          <div className="panel-body stack">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={prefs.gatewayEnabled}
+                onChange={(e) => void updatePrefs({ gatewayEnabled: e.target.checked })}
+              />
+              Let connected agents use your tools through Shelf
+            </label>
+            <p className="field-hint" style={{ margin: 0 }}>
+              An agent can call a tool&apos;s own MCP server or local API through Shelf, and Shelf starts
+              the tool when needed. Each tool has its own switch under Advanced. Only interfaces on
+              this Mac are reachable.
+            </p>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={prefs.idleStopEnabled}
+                disabled={!prefs.gatewayEnabled}
+                onChange={(e) => void updatePrefs({ idleStopEnabled: e.target.checked })}
+              />
+              Stop tools Shelf started for an agent when no agent has used them for
+              <input
+                type="number"
+                className="field-input"
+                style={{ width: 72, marginInline: 8 }}
+                min={2}
+                max={240}
+                aria-label="Minutes without agent use"
+                value={prefs.idleStopMinutes}
+                disabled={!prefs.gatewayEnabled || !prefs.idleStopEnabled}
+                onChange={(e) => {
+                  const minutes = Number(e.target.value)
+                  if (Number.isFinite(minutes) && minutes >= 2) void updatePrefs({ idleStopMinutes: minutes })
+                }}
+              />
+              minutes
+            </label>
+            <p className="field-hint" style={{ margin: 0 }}>
+              Tools you launch yourself are never stopped this way. Launching a tool makes it yours.
+            </p>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-header">
             <h2 className="panel-title">Library layout</h2>
           </div>
           <div className="panel-body stack">

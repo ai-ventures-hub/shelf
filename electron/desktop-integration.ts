@@ -165,7 +165,7 @@ function trayLabelForRunning(
   const port = state?.port ?? tool.port
   let label = port != null ? `${tool.name} · :${port}` : tool.name
   // Only agents and paired phones get a suffix — "via You" would just be noise.
-  if (state?.startedBy?.kind === 'mcp' || state?.startedBy?.kind === 'companion') {
+  if (state?.startedBy?.kind === 'mcp' || state?.startedBy?.kind === 'gateway' || state?.startedBy?.kind === 'companion') {
     const who = launchOriginLabel(state.startedBy)
     if (who) label += ` · via ${who}`
   }

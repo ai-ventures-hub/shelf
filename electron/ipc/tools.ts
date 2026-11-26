@@ -52,6 +52,7 @@ export function registerToolsIpc(ctx: IpcContext): void {
     // effort: a cleanup failure must not undo a completed delete.
     try { verification.forgetTool(id) } catch { /* left for a later delete */ }
     try { projectMemory.forget(id) } catch { /* unreadable memory stays untouched */ }
+    try { accessChecks.prune(id) } catch { /* stale checks are harmless */ }
   })
   const accessChecks = new AccessCheckStore(store.getRoot())
   handle('tools:readiness', (_e, id) => {
