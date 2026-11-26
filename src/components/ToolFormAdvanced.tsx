@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { previewBlocker as remotePreviewBlocker } from '../../shared/companion-preview-policy'
+import { usePrefs } from '../hooks/usePrefs'
 import { ColorField } from './ColorField'
 import { LucideIconPicker } from './LucideIconPicker'
 import type { AgentAccess, AgentAccessKind, Tool, UiPrefs } from '../types'
@@ -54,6 +55,8 @@ export function ToolFormAdvanced({
   update,
   setForm,
 }: ToolFormAdvancedProps) {
+  const { updatePrefs } = usePrefs()
+  const gatewayBlocked = (prefs.gatewayBlockedToolIds || []).includes(form.id)
   function addAccess(kind: AgentAccessKind) {
     const access: AgentAccess = {
       id: crypto.randomUUID(),
@@ -126,7 +129,7 @@ export function ToolFormAdvanced({
           <fieldset className="field span-2 access-fieldset">
             <legend className="field-label">Agent access</legend>
             <p className="field-hint">
-              Describe existing interfaces only. Shelf does not connect to or invoke them.
+              Describe interfaces the tool already has. Agents can use an MCP server or a local HTTP API through Shelf; a CLI is listed for them to run themselves.
             </p>
             <div className="access-list">
               {form.agentAccess.map((access) => (
@@ -345,6 +348,27 @@ export function ToolFormAdvanced({
               Stops immediately if you click Stop or if a missing package, command, or env var is detected.
             </p>
           </div>
+
+          {form.id && (form.agentAccess.length > 0 || gatewayBlocked) ? <div className="field span-2">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={!gatewayBlocked}
+                disabled={!prefs.gatewayEnabled}
+                onChange={(e) => {
+                  const others = (prefs.gatewayBlockedToolIds || []).filter((id) => id !== form.id)
+                  void updatePrefs({ gatewayBlockedToolIds: e.target.checked ? others : [...others, form.id] })
+                }}
+              />
+              Let agents use this tool through Shelf
+            </label>
+            <p className="field-hint">
+              A connected agent can call the interfaces listed under Agent access through Shelf,
+              which starts the tool when needed. This is your setting: it takes effect at once, is
+              kept apart from the tool, and no agent can change it.
+              {prefs.gatewayEnabled ? '' : ' Agent use is currently off for every tool in Settings.'}
+            </p>
+          </div> : null}
 
           {prefs.companionEnabled || form.remotePreview ? <div className="field span-2">
             <label className="checkbox-row">

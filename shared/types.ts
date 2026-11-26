@@ -1,4 +1,5 @@
 export type {
+  AccessCheck,
   AgentAccess,
   AgentAccessKind,
   AppearanceMode,
@@ -122,6 +123,11 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   companionBindAddress: 'tailscale',
   companionPort: 48620,
   companionKeepAwake: false,
+  companionNotifications: false,
+  gatewayEnabled: true,
+  gatewayBlockedToolIds: [],
+  idleStopEnabled: true,
+  idleStopMinutes: 15,
 }
 
 /**

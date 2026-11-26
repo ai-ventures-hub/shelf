@@ -23,7 +23,7 @@ import { useToolLogs } from '../hooks/useToolLogs'
 import { useUiMode } from '../hooks/useUiMode'
 import { friendlyLaunchError } from '../lib/launchErrorCopy'
 import { formatRelativeTime } from '../lib/relativeTime'
-import type { DesignMdResult, ToolReadiness } from '../types'
+import type { AccessCheck, DesignMdResult, ToolReadiness } from '../types'
 
 export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' | 'runs' }) {
   const { id } = useParams()
@@ -82,7 +82,10 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   const [reportPreview, setReportPreview] = useState<string | null>(null)
   const [reportCopied, setReportCopied] = useState(false)
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
-  const [readiness, setReadiness] = useState<ToolReadiness | null>(null)
+  const [readiness, setReadiness] = useState<(ToolReadiness & { checks?: Record<string, AccessCheck> }) | null>(null)
+  const [checkingAccess, setCheckingAccess] = useState(false)
+  const latestToolId = useRef(id)
+  latestToolId.current = id
   // Tool Sharing: result line after "Share" and the updates sheet.
   const [shareStatus, setShareStatus] = useState<
     | { kind: 'copied'; link: string; envKeys: string[] }
@@ -579,6 +582,24 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
               {readiness.state.replace('_', ' ')}
             </span>
           ) : null}
+          {tool.agentAccess.length > 0 && window.shelf?.checkToolAccess ? (
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={checkingAccess}
+              title="Tries each interface once: starts its MCP server and asks for its tool list, sends one request to its HTTP API, and looks up its CLI without running it."
+              onClick={() => {
+                const checkedId = tool.id
+                setCheckingAccess(true)
+                void window.shelf.checkToolAccess(checkedId)
+                  .then((result) => { if (latestToolId.current === checkedId) setReadiness(result) })
+                  .catch(() => setActionError('Could not check the agent interfaces. Try again.'))
+                  .finally(() => setCheckingAccess(false))
+              }}
+            >
+              {checkingAccess ? 'Checking…' : 'Check now'}
+            </button>
+          ) : null}
         </div>
         <div className="panel-body capability-detail-grid">
           <div>
@@ -602,9 +623,16 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
                     <div>
                       <strong>{access.kind === 'http-api' ? 'HTTP API' : access.kind.toUpperCase()}</strong>
                       {access.kind === 'mcp' ? ` · ${access.transport}` : ''}
-                      {access.setupRequired ? ' · setup required' : ' · declared ready'}
+                      {access.setupRequired ? ' · setup required' : readiness?.checks?.[access.id]?.ok ? ' · answering' : ' · declared ready'}
                     </div>
                     <code>{access.entrypoint}</code>
+                    {readiness?.checks?.[access.id] ? (
+                      <p>
+                        {readiness.checks[access.id].ok ? 'Answered' : 'Did not answer'} {formatRelativeTime(readiness.checks[access.id].checkedAt)}: {readiness.checks[access.id].detail}
+                      </p>
+                    ) : (
+                      <p>Not checked yet.</p>
+                    )}
                     {access.notes ? <p>{access.notes}</p> : null}
                   </div>
                 ))}

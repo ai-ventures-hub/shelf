@@ -135,6 +135,7 @@ const api = {
 
   getDesignMd: (opts) => invoke('designMd:get', opts),
   checkToolReadiness: (id) => invoke('tools:readiness', id),
+  checkToolAccess: (id) => invoke('tools:checkAccess', id),
   listCapabilityGaps: (opts) => invoke('capabilityGaps:list', opts),
   recordCapabilityGap: (input) => invoke('capabilityGaps:record', input),
   updateCapabilityGapStatus: (id, status) => invoke('capabilityGaps:updateStatus', id, status),

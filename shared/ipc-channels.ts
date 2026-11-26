@@ -46,6 +46,7 @@ export interface IpcInvokeMap {
   'tools:save': ShelfApi['saveTool']
   'tools:delete': ShelfApi['deleteTool']
   'tools:readiness': ShelfApi['checkToolReadiness']
+  'tools:checkAccess': ShelfApi['checkToolAccess']
   'tools:health': ShelfApi['getToolHealth']
   'tools:environment': ShelfApi['inspectToolEnvironment']
   'tools:pickFolder': ShelfApi['pickFolder']

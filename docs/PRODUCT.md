@@ -86,7 +86,14 @@ tool or record one deduplicated gap; all results explain the match and distingui
 access from GUI-only use.
 
 Only after real usage demonstrates demand should Shelf consider curated one-click activation for
-selected MCP tools. A universal child-MCP gateway remains out of scope.
+selected MCP tools. ~~A universal child-MCP gateway remains out of scope.~~
+
+**Reversed 2026-11-26 (2.6).** Real usage did show the demand: most launches in the library were
+started by agents, and nine of 24 tools could be launched by agents but not operated. Shelf now has
+a gateway: an agent uses a tool's own MCP server or local HTTP API through Shelf, which starts the
+tool on demand, checks that declared interfaces answer, and stops tools it started for an agent
+when idle. Limits that stay: only interfaces on this Mac, never a tool's CLI, and the user owns the
+switches (one global, one per tool; agents cannot set either).
 
 ## Roadmap
 

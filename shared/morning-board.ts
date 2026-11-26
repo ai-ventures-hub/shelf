@@ -99,7 +99,7 @@ export function buildMorningBoard(sources: MorningSources): MorningEvent[] {
       at: gap.lastRequestedAt,
       kind: 'gap',
       title: gap.task,
-      detail: gap.status === 'planned' ? 'Planned' : 'No tool matched',
+      detail: gap.status === 'planned' ? 'Planned' : gap.source === 'search' ? 'Searched, nothing matched' : 'No tool matched',
       href: '/gaps',
     })
   }

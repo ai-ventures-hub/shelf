@@ -48,6 +48,8 @@ export interface DesktopIntegrationHost {
   sendToRenderer: (channel: string, ...args: unknown[]) => void
   /** True once the user has chosen Quit (not close-to-tray). */
   isQuitting: () => boolean
+  /** The user opened or launched this tool on purpose; it is never idle-stopped after that. */
+  claimTool?: (toolId: string) => void
 }
 
 let tray: Tray | null = null
@@ -165,7 +167,7 @@ function trayLabelForRunning(
   const port = state?.port ?? tool.port
   let label = port != null ? `${tool.name} · :${port}` : tool.name
   // Only agents and paired phones get a suffix — "via You" would just be noise.
-  if (state?.startedBy?.kind === 'mcp' || state?.startedBy?.kind === 'companion') {
+  if (state?.startedBy?.kind === 'mcp' || state?.startedBy?.kind === 'gateway' || state?.startedBy?.kind === 'companion') {
     const who = launchOriginLabel(state.startedBy)
     if (who) label += ` · via ${who}`
   }
@@ -214,6 +216,7 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost, snapshot?: ToolRunt
                       label: 'Open URL',
                       click: () => {
                         // Enforce http(s)-only URL handling matching the renderer bridge.
+                        host.claimTool?.(tool.id)
                         void system.openUrl(url).catch(() => undefined)
                       },
                     } satisfies Electron.MenuItemConstructorOptions,

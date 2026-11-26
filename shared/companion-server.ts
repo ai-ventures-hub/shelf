@@ -27,12 +27,14 @@ import {
   type CompanionOverview,
   type CompanionPairResponse,
   type CompanionPreviewGrant,
+  type CompanionPushInfo,
   type CompanionTool,
   type CompanionToolIcon,
   type CompanionWsMessage,
   type PairedDeviceView,
 } from './companion-contracts'
 import { CompanionDeviceStore, mintDeviceToken, sanitizeDeviceName } from './companion-store'
+import { COMPANION_SERVICE_WORKER } from './companion-sw'
 import { isLoopbackAddress, isUnspecifiedAddress } from './companion-net'
 import type {
   Collection,
@@ -75,6 +77,11 @@ export interface CompanionHost {
   /** Accept as shown (updatedAt guards against a re-staged draft); saves, never launches. */
   acceptDraft(id: string, updatedAt: string | undefined, device: PairedDeviceView): Promise<CompanionDraftDecision>
   rejectDraft(id: string, device: PairedDeviceView): CompanionDraftDecision
+  /** Phone alerts (2.6): whether they are on, and the key a phone subscribes with. */
+  pushInfo(device: PairedDeviceView): CompanionPushInfo
+  /** Save this phone's subscription; throws with the reason when it is refused. */
+  pushSubscribe(device: PairedDeviceView, subscription: unknown): void
+  pushUnsubscribe(device: PairedDeviceView): void
 }
 
 export interface CompanionServerOptions {
@@ -453,6 +460,25 @@ export class CompanionServer {
       throw new HttpError(404, 'Not found')
     }
 
+    if (parts[1] === 'push') {
+      if (parts[2] === 'key' && method === 'GET') { this.json(res, 200, host.pushInfo(device)); return }
+      if (parts[2] === 'subscribe' && method === 'POST') {
+        try {
+          host.pushSubscribe(device, await this.readJson(req))
+        } catch (err) {
+          throw new HttpError(400, err instanceof Error ? err.message : String(err))
+        }
+        this.json(res, 200, { ok: true })
+        return
+      }
+      if (parts[2] === 'subscribe' && method === 'DELETE') {
+        host.pushUnsubscribe(device)
+        this.json(res, 200, { ok: true })
+        return
+      }
+      throw new HttpError(parts[2] === 'key' || parts[2] === 'subscribe' ? 405 : 404, parts[2] === 'key' || parts[2] === 'subscribe' ? 'Method not allowed' : 'Not found')
+    }
+
     if (parts[1] === 'collections' && parts[2] && method === 'POST') {
       const collectionId = decodePathSegment(parts[2])
       if (!host.listCollections().some((item) => item.id === collectionId)) throw new HttpError(404, 'Collection not found')
@@ -599,6 +625,13 @@ export class CompanionServer {
         theme_color: '#090d16',
         icons: [{ src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
       }))
+      return
+    }
+    if (pathname === '/sw.js') {
+      // Served from memory at the root so its scope is the whole app, and
+      // never cached hard: a worker must be replaceable by the next build.
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' })
+      res.end(COMPANION_SERVICE_WORKER)
       return
     }
     if (pathname === '/apple-touch-icon.png' || pathname === '/icon.png') {

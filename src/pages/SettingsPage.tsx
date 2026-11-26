@@ -131,6 +131,46 @@ export function SettingsPage() {
         </section>
         <section className="panel">
           <div className="panel-header">
+            <h2 className="panel-title">Agents</h2>
+          </div>
+          <div className="panel-body stack">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={prefs.gatewayEnabled}
+                onChange={(e) => void updatePrefs({ gatewayEnabled: e.target.checked })}
+              />
+              Let connected agents use your tools through Shelf
+            </label>
+            <p className="field-hint" style={{ margin: 0 }}>
+              An agent can call a tool&apos;s own MCP server or local API through Shelf, and Shelf starts
+              the tool when needed. Each tool has its own switch under Advanced. Only interfaces on
+              this Mac are reachable.
+            </p>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={prefs.idleStopEnabled}
+                disabled={!prefs.gatewayEnabled}
+                onChange={(e) => void updatePrefs({ idleStopEnabled: e.target.checked })}
+              />
+              Stop tools Shelf started for an agent when no agent has used them for a while
+            </label>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="field-label" htmlFor="idle-stop-minutes">Minutes without agent use</label>
+              <IdleMinutesInput
+                value={prefs.idleStopMinutes}
+                disabled={!prefs.gatewayEnabled || !prefs.idleStopEnabled}
+                onCommit={(minutes) => void updatePrefs({ idleStopMinutes: minutes })}
+              />
+            </div>
+            <p className="field-hint" style={{ margin: 0 }}>
+              Tools you launch yourself are never stopped this way. Launching a tool makes it yours.
+            </p>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-header">
             <h2 className="panel-title">Library layout</h2>
           </div>
           <div className="panel-body stack">
@@ -449,5 +489,33 @@ export function SettingsPage() {
         </section>
       </div>}
     </>
+  )
+}
+
+/** Typed freely, saved on blur or Enter: saving each keystroke would fight the 2 to 240 limit. */
+function IdleMinutesInput({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (minutes: number) => void }) {
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => { setDraft(String(value)) }, [value])
+  const commit = () => {
+    const minutes = Math.round(Number(draft))
+    if (!Number.isFinite(minutes) || minutes <= 0) { setDraft(String(value)); return }
+    const clamped = Math.min(240, Math.max(2, minutes))
+    setDraft(String(clamped))
+    if (clamped !== value) onCommit(clamped)
+  }
+  return (
+    <input
+      id="idle-stop-minutes"
+      type="number"
+      className="field-input"
+      style={{ maxWidth: '8rem' }}
+      min={2}
+      max={240}
+      value={draft}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+    />
   )
 }

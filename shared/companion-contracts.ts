@@ -37,9 +37,29 @@ export interface PairedDevice {
   pairedAt: string
   lastSeenAt?: string
   lastSeenFrom?: string
+  /** Where to send this phone's alerts; set by the phone when it turns notifications on. */
+  push?: CompanionPushSubscription
 }
 
-export type PairedDeviceView = Omit<PairedDevice, 'tokenHash'>
+/** A phone's push subscription. Stored on the Mac only, beside its token hash. */
+export interface CompanionPushSubscription {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+  subscribedAt: string
+}
+
+/** What the app and the phone may see of a device: never its token hash or push keys. */
+export type PairedDeviceView = Omit<PairedDevice, 'tokenHash' | 'push'> & { notifications?: boolean }
+
+/** What a phone needs to turn alerts on. */
+export interface CompanionPushInfo {
+  /** False while the user has phone notifications off in Shelf's settings. */
+  enabled: boolean
+  /** The Mac's public signing key to subscribe with (base64url); null while off. */
+  key: string | null
+  /** True when this phone already has alerts on. */
+  subscribed: boolean
+}
 
 export interface CompanionDevicesFile {
   version: 1

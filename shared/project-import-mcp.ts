@@ -1,8 +1,9 @@
 /**
  * Agent-access detection for Smart Import — finds MCP/HTTP interfaces a
  * project PROVIDES (never servers it merely consumes) so registration can
- * prefill `agentAccess`. Shelf records these endpoints for agents; it never
- * connects to or invokes them itself.
+ * prefill `agentAccess`. Shelf records these endpoints for agents and connects
+ * to them only through the gateway or a readiness check
+ * (shared/tool-connect.ts).
  */
 import fs from 'node:fs'
 import path from 'node:path'

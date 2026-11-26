@@ -45,6 +45,8 @@ import { registerIpc, type IpcContext } from './ipc'
 import { LibraryStore, pinShelfUserDataPath } from './library-store'
 import { flushPendingOnboarding } from './onboarding-relay'
 import { ProcessManager } from './process-manager'
+import { sweepIdleTools } from '../shared/idle-stop'
+import { ToolUseStore } from '../shared/tool-use-store'
 import * as system from './system-bridge'
 import type { ToolRuntimeState } from './types'
 
@@ -60,6 +62,7 @@ let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let teamCatalogs: TeamCatalogStore
 let toolDrafts: ToolDraftStore
+let toolUses: ToolUseStore
 let companion: CompanionManager
 let isQuitting = false
 let quitDiscardApproved = false
@@ -208,6 +211,7 @@ function getDesktopHost(): DesktopIntegrationHost {
     navigate,
     sendToRenderer,
     isQuitting: () => isQuitting,
+    claimTool: (toolId) => toolUses.claim(toolId),
   }
 }
 
@@ -541,6 +545,7 @@ function buildIpcContext(): IpcContext {
     applyLaunchAtLogin,
     isShuttingDown: () => isQuitting || quitPreparing,
     installUpdate,
+    claimTool: (toolId) => toolUses.claim(toolId),
   }
 }
 
@@ -614,9 +619,12 @@ if (gotLock) {
     // Scratch clones from adds that never reached approve/cancel, plus old operation files.
     cleanStagingRoot(store.getRoot())
     cleanStaleOperations(store.getRoot())
+    toolUses = new ToolUseStore(store.getRoot())
     processes = new ProcessManager(store, {
       receipts,
       defaultOrigin: () => ({ kind: 'gui' }),
+      // Launching a tool yourself makes it yours: never stopped for idleness.
+      onUserStart: (toolId) => toolUses.claim(toolId),
       onReadyUrl: (url) => system.openUrl(url),
       onEvent: (channel, payload) => {
         sendToRenderer(channel, payload)
@@ -632,6 +640,7 @@ if (gotLock) {
     companion = new CompanionManager({
       prefs, store, processes, receipts, verification, capabilityGaps, designProfiles, toolDrafts,
       sendToRenderer,
+      onUserTouch: (toolId) => toolUses.claim(toolId),
       dataRoot: store.getRoot(),
       staticRoot: path.join(__dirname, '../../dist'),
       iconPngPath: app.isPackaged
@@ -692,6 +701,16 @@ if (gotLock) {
     }
     reconcileExternalsNow = reconcile
     scheduleReconcile()
+
+    // Tools Shelf started for an agent stop again once no agent uses them.
+    // Agent sessions come and go; the app is the host that is still here.
+    const idleSweep = setInterval(() => {
+      if (isQuitting) return
+      void sweepIdleTools({ processes, receipts, uses: toolUses, prefs: prefs.get() }).catch(() => {
+        /* next pass tries again */
+      })
+    }, 60_000)
+    idleSweep.unref?.()
 
     // External writers (the MCP server in an agent session) update the shared
     // JSON stores directly; watch the data root so the GUI reflects new tools

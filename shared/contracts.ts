@@ -26,9 +26,30 @@ export type CapabilityReadinessState =
   | 'manual_only'
   | 'unavailable'
 
+/** What Shelf saw the last time it tried one declared interface. */
+export interface AccessCheck {
+  ok: boolean
+  /** One plain sentence: what answered, or why not. */
+  detail: string
+  checkedAt: string
+  /** For MCP: how many tools the server listed. */
+  toolCount?: number
+  /** The entrypoint that was tried. A check for an entrypoint since edited no longer counts. */
+  entrypoint?: string
+}
+
 export interface ToolReadiness {
-  /** Describes the tool's OWN agent interface — never whether Shelf can launch it. */
+  /** Describes the tool's OWN agent interface (what the gateway can use) — never whether Shelf can launch it. */
   state: CapabilityReadinessState
+  /**
+   * Whether Shelf has tried the declared interface: 'verified' when every
+   * ready interface answered on its last check, 'failed' when one did not,
+   * 'unchecked' when at least one has never been tried. Absent when no
+   * interface is declared ready.
+   */
+  verified?: 'verified' | 'failed' | 'unchecked'
+  /** Oldest check behind `verified`. */
+  checkedAt?: string
   summary: string
   reasons: string[]
   /** True unless the project folder is missing or the launch command is empty. */
@@ -169,8 +190,13 @@ export type RemedyKind =
  * 'mcp' is an agent client, identified by the (self-reported) name from the
  * MCP initialize handshake, e.g. "claude-code" or "cursor".
  */
-/** 'companion' = a paired phone over the Companion server; client carries the device name. */
-export type LaunchOriginKind = 'gui' | 'tray' | 'mcp' | 'companion'
+/**
+ * 'companion' = a paired phone over the Companion server; client carries the device name.
+ * 'gateway' = Shelf started the tool by itself because an agent called the
+ * tool's interface through Shelf; client is that agent. Only these runs are
+ * candidates for stopping when idle.
+ */
+export type LaunchOriginKind = 'gui' | 'tray' | 'mcp' | 'companion' | 'gateway'
 
 export interface LaunchOrigin {
   kind: LaunchOriginKind
@@ -247,6 +273,20 @@ export interface UiPrefs {
   /** 'tailscale' = the detected Tailscale interface; otherwise an explicit IPv4 address. */
   companionBindAddress: string
   companionPort: number
+  /** Companion (2.6): send alerts to paired phones through their push service. Off by default. */
+  companionNotifications: boolean
+  /** Gateway (2.6): agents may use a tool's own interface through Shelf. */
+  gatewayEnabled: boolean
+  /**
+   * Tools the user took out of the gateway. Kept here, not on the tool
+   * record: agents and MCP servers (including one left running from an
+   * older build) rewrite library.json, and none of them write prefs.json.
+   */
+  gatewayBlockedToolIds: string[]
+  /** Stop tools Shelf started for an agent once no agent has used them for a while. */
+  idleStopEnabled: boolean
+  /** Minutes without agent use before such a tool is stopped (2 to 240). */
+  idleStopMinutes: number
   /** Hold a power-save blocker while a paired device is connected. */
   companionKeepAwake: boolean
   windowBounds?: {
@@ -345,6 +385,13 @@ export interface CapabilityGap {
   lastRequestedAt: string
   /** Tools the user declined as resolve suggestions (suggestion hidden, gap stays open). */
   suggestionDismissedToolIds?: string[]
+  /**
+   * How the gap got here. 'search': Shelf noted it because a capability
+   * search matched nothing. Absent or 'agent': an agent recorded it on purpose.
+   */
+  source?: 'agent' | 'search'
+  /** The MCP client whose request this was, as it names itself. */
+  client?: string
 }
 
 /** Suggested tool fields from smart folder import (see shared/project-import). */

@@ -5,7 +5,9 @@
 
 export function isLoopbackHost(host: string): boolean {
   const lower = host.trim().toLowerCase()
-  return lower === 'localhost' || lower === '::1' || lower === '[::1]' || lower.startsWith('127.')
+  // A full dotted address only: "127.0.0.1.example.com" is a name someone
+  // else controls, not this Mac.
+  return lower === 'localhost' || lower === '::1' || lower === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(lower)
 }
 
 /** Host part of a tool's url, or null when the url is missing or unparsable. */

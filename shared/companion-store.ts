@@ -35,8 +35,8 @@ export function sameDigest(a: string, b: string): boolean {
 }
 
 export function deviceView(device: PairedDevice): PairedDeviceView {
-  const { tokenHash: _hash, ...view } = device
-  return view
+  const { tokenHash: _hash, push, ...view } = device
+  return push ? { ...view, notifications: true } : view
 }
 
 export function sanitizeDeviceName(raw: unknown, fallback = 'Paired device'): string {
@@ -119,6 +119,25 @@ export class CompanionDeviceStore {
       this.write(file)
       return deviceView(device)
     })
+  }
+
+  /** Turn alerts on (a subscription) or off (null) for one phone. */
+  setPush(id: string, subscription: { endpoint: string; keys: { p256dh: string; auth: string } } | null): boolean {
+    return withFileLockSync(this.filePath, () => {
+      const file = this.read()
+      const device = file.devices.find((item) => item.id === id)
+      if (!device) return false
+      if (subscription) device.push = { ...subscription, subscribedAt: new Date().toISOString() }
+      else delete device.push
+      this.write(file)
+      return true
+    })
+  }
+
+  /** Phones with alerts on. Never leaves the main process. */
+  pushTargets(): { id: string; name: string; push: NonNullable<PairedDevice['push']> }[] {
+    return this.read().devices.flatMap((device) =>
+      device.push ? [{ id: device.id, name: device.name, push: device.push }] : [])
   }
 
   /** Invalidate a device's token. Takes effect on its next request. */

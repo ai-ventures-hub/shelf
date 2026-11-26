@@ -12,6 +12,8 @@ import type {
 } from './types'
 
 const MAX_EXAMPLES = 5
+/** Gaps Shelf noted from unmatched searches (not ones an agent recorded on purpose). */
+const MAX_SEARCH_GAPS = 100
 
 export interface RecordCapabilityGapInput {
   task: string
@@ -86,6 +88,8 @@ export class CapabilityGapStore {
           reason,
           relatedToolIds: unique([...(existing.relatedToolIds || []), ...(input.relatedToolIds || [])]),
           suggestedAccess: input.suggestedAccess ?? existing.suggestedAccess,
+          // An agent has now described the need on purpose.
+          source: 'agent',
           status:
             existing.status === 'resolved' || existing.status === 'dismissed'
               ? 'open'
@@ -115,6 +119,68 @@ export class CapabilityGapStore {
         lastRequestedAt: now,
       }
       data.gaps.unshift(gap)
+      this.write(data)
+      return { action: 'created', gap }
+    })
+  }
+
+  /**
+   * Note a capability search that matched nothing. The searched text is the
+   * capability, so the same wording counts up instead of piling up. Unlike
+   * record(), this never reopens a gap the user resolved or dismissed: a
+   * search is not a request, and their decision stands.
+   */
+  recordSearchMiss(input: { task: string; client?: string }): { action: 'created' | 'updated' | 'ignored'; gap?: CapabilityGap } {
+    const task = input.task.trim().replace(/\s+/g, ' ').slice(0, 200)
+    const capabilities = normalizeCapabilities([task])
+    if (!task || capabilities.length === 0) return { action: 'ignored' }
+    const fingerprint = gapFingerprint(capabilities)
+    const client = input.client?.trim().slice(0, 80) || undefined
+
+    return withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const index = data.gaps.findIndex((gap) => gapFingerprint(gap.capabilities) === fingerprint)
+      const now = new Date().toISOString()
+      if (index >= 0) {
+        const existing = data.gaps[index]
+        const gap: CapabilityGap = {
+          ...existing,
+          occurrenceCount: existing.occurrenceCount + 1,
+          client: client ?? existing.client,
+          lastRequestedAt: now,
+          updatedAt: now,
+        }
+        data.gaps[index] = gap
+        this.write(data)
+        // Counted, but the user closed this one: nothing new is shown to them.
+        const closed = existing.status === 'resolved' || existing.status === 'dismissed'
+        return { action: closed ? 'ignored' : 'updated', gap }
+      }
+      const gap: CapabilityGap = {
+        id: randomUUID(),
+        capabilities,
+        task,
+        reason: 'A search for this found no tool in the library.',
+        relatedToolIds: [],
+        status: 'open',
+        occurrenceCount: 1,
+        examples: [{ task, at: now }],
+        createdAt: now,
+        updatedAt: now,
+        lastRequestedAt: now,
+        source: 'search',
+        client,
+      }
+      data.gaps.unshift(gap)
+      // Searches are cheap to make and each wording is its own entry, so the
+      // noted ones are capped: the least recently asked go first.
+      const noted = data.gaps
+        .filter((item) => item.source === 'search')
+        .sort((a, b) => Date.parse(b.lastRequestedAt) - Date.parse(a.lastRequestedAt))
+      if (noted.length > MAX_SEARCH_GAPS) {
+        const drop = new Set(noted.slice(MAX_SEARCH_GAPS).map((item) => item.id))
+        data.gaps = data.gaps.filter((item) => !drop.has(item.id))
+      }
       this.write(data)
       return { action: 'created', gap }
     })

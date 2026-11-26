@@ -34,6 +34,49 @@ const { ReceiptStore } = require('../dist-electron/shared/receipt-store.js')
 const { COMPANION_WS_PROTOCOL } = require('../dist-electron/shared/companion-contracts.js')
 const WebSocket = require('ws')
 
+const { ensureVapidKeys, generateVapidKeys, parsePushSubscription, encryptPushPayload, vapidAuthorization, isAllowedPushEndpoint } = require('../dist-electron/shared/web-push.js')
+
+// ---- web push (pure) ---------------------------------------------------------
+{
+  // RFC 8291 section 5 / appendix A: the published example, byte for byte.
+  const sealed = encryptPushPayload(
+    { endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', auth: 'BTBZMqHH6r4Tts7J_aSIgg' } },
+    Buffer.from('When I grow up, I want to be a watermelon'),
+    { senderPrivateKey: Buffer.from('yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw', 'base64url'), salt: Buffer.from('DGv6ra1nlYgDCS1FRnbzlw', 'base64url') },
+  )
+  assert.equal(
+    sealed.toString('base64url'),
+    'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN',
+    'payload encryption matches the RFC 8291 example',
+  )
+  // Private scalars with a leading zero byte must still be 32 bytes, or the key file fails its own check.
+  for (let i = 0; i < 400; i++) assert.equal(Buffer.from(generateVapidKeys().privateKey, 'base64url').length, 32)
+  const keys = generateVapidKeys()
+  const header = vapidAuthorization('https://web.push.apple.com/abc', keys, Date.UTC(2026, 0, 1))
+  const [, jwt, k] = /^vapid t=([\w.-]+), k=([\w-]+)$/.exec(header)
+  assert.equal(k, keys.publicKey)
+  const [head, claims, signature] = jwt.split('.')
+  assert.deepEqual(JSON.parse(Buffer.from(head, 'base64url')), { typ: 'JWT', alg: 'ES256' })
+  const claim = JSON.parse(Buffer.from(claims, 'base64url'))
+  assert.equal(claim.aud, 'https://web.push.apple.com')
+  assert.equal(claim.exp, Date.UTC(2026, 0, 1) / 1000 + 12 * 3600)
+  assert.match(claim.sub, /^https:\/\//)
+  const point = Buffer.from(keys.publicKey, 'base64url')
+  const publicKey = (await import('node:crypto')).createPublicKey({ format: 'jwk', key: { kty: 'EC', crv: 'P-256', x: point.subarray(1, 33).toString('base64url'), y: point.subarray(33).toString('base64url') } })
+  assert.equal(
+    (await import('node:crypto')).verify('sha256', Buffer.from(`${head}.${claims}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')),
+    true,
+    'the VAPID token verifies with the public key the phone subscribed with',
+  )
+  for (const ok of ['https://web.push.apple.com/a', 'https://fcm.googleapis.com/fcm/send/x', 'https://updates.push.services.mozilla.com/wpush/v2/x']) {
+    assert.equal(isAllowedPushEndpoint(ok), true, ok)
+  }
+  for (const bad of ['http://web.push.apple.com/a', 'https://web.push.apple.com.evil.example/a', 'https://user:pw@web.push.apple.com/a', 'https://192.168.1.5/push', 'not a url']) {
+    assert.equal(isAllowedPushEndpoint(bad), false, bad)
+  }
+  console.log('OK: web push encryption matches the published example; only known push services are accepted')
+}
+
 // ---- bind policy (pure) ------------------------------------------------------
 {
   const fake = [
@@ -206,7 +249,20 @@ async function live(iface) {
       decisions.push({ id, by: device.name, accepted: false })
       return { outcome: 'rejected', message: 'Rejected. Nothing was saved.' }
     },
+    // Phone alerts, as electron/companion.ts wires them.
+    pushInfo: (device) => ({
+      enabled: alertsOn,
+      key: alertsOn ? vapid.publicKey : null,
+      subscribed: devices.pushTargets().some((target) => target.id === device.id),
+    }),
+    pushSubscribe: (device, subscription) => {
+      if (!alertsOn) throw new Error('Phone notifications are off.')
+      devices.setPush(device.id, parsePushSubscription(subscription))
+    },
+    pushUnsubscribe: (device) => { devices.setPush(device.id, null) },
   }
+  let alertsOn = false
+  const vapid = ensureVapidKeys(path.join(root, 'companion'))
   const drafts = [
     { id: 'd1', name: 'Agent Draft', projectPath: '/tmp/agent-draft', launchCommand: 'TOKEN=*** npm start', port: 5250, envKeys: ['TOKEN'], client: 'smoke-agent', remotePreview: true, updatedAt: '2026-10-29T00:00:00.000Z' },
     { id: 'd2', name: 'Second Draft', projectPath: '/tmp/second', launchCommand: 'npm start', envKeys: [], updatedAt: '2026-10-29T00:00:01.000Z' },
@@ -372,10 +428,36 @@ async function live(iface) {
   assert.equal(stopped.body.status, 'stopped')
   console.log('OK: a phone can start and stop a tool; receipts say so')
 
+  // Phone alerts: a subscription is stored on the Mac only, checked, and never shown back.
+  {
+    const phoneKeys = generateVapidKeys()
+    const subscription = { endpoint: 'https://web.push.apple.com/QExampleToken', keys: { p256dh: phoneKeys.publicKey, auth: Buffer.alloc(16, 7).toString('base64url') } }
+    assert.equal((await request('GET', '/api/push/key')).status, 401, 'push info needs a token')
+    assert.deepEqual((await request('GET', '/api/push/key', { token })).body, { enabled: false, key: null, subscribed: false })
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: subscription })).status, 400, 'refused while alerts are off on the Mac')
+    alertsOn = true
+    assert.equal((await request('GET', '/api/push/key', { token })).body.key, vapid.publicKey)
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: { ...subscription, endpoint: 'https://evil.example/push' } })).status, 400, 'only known push services')
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: { ...subscription, endpoint: 'https://web.push.apple.com.evil.example/x' } })).status, 400)
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: { ...subscription, keys: { p256dh: 'AAAA', auth: 'AAAA' } } })).status, 400, 'keys are checked')
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: subscription })).status, 200)
+    assert.equal((await request('GET', '/api/push/key', { token })).body.subscribed, true)
+    const me = await request('GET', '/api/me', { token })
+    assert.equal(me.body.notifications, true)
+    assert.equal(JSON.stringify(me.body).includes('QExampleToken'), false, 'the subscription never travels back to the phone')
+    assert.equal(devices.pushTargets().length, 1)
+    assert.equal((await request('DELETE', '/api/push/subscribe', { token })).status, 200)
+    assert.equal(devices.pushTargets().length, 0)
+    assert.equal((await request('POST', '/api/push/subscribe', { token, body: subscription })).status, 200)
+    assert.equal((await request('PUT', '/api/push/subscribe', { token })).status, 405)
+    console.log('OK: a phone can turn alerts on and off; the subscription is checked and kept on the Mac')
+  }
+
   // Revoke: next request 401 and the live socket drops now.
   const closed = new Promise((resolve) => ws.on('close', (codeNum) => resolve(codeNum)))
   server.revokeDevice(paired.body.device.id)
   assert.equal(await closed, 4001, 'revoked phone loses its stream at once')
+  assert.equal(devices.pushTargets().length, 0, 'revoking a phone drops its alert subscription')
   assert.equal((await request('GET', '/api/overview', { token })).status, 401, 'revoked token is refused on the next request')
   assert.equal(clientCount, 0)
 
@@ -423,6 +505,11 @@ async function live(iface) {
   assert.equal(index.headers['content-length'], String(index.body.length), 'whole-file response carries its length')
   assert.match(index.body.toString(), /Shelf Companion/)
   assert.equal((await raw('/tools/abc')).status, 200, 'every app route serves the index')
+  const worker = await raw('/sw.js')
+  assert.equal(worker.status, 200)
+  assert.match(worker.headers['content-type'], /javascript/, 'the service worker is served as a script at the root')
+  assert.equal(worker.headers['cache-control'], 'no-cache')
+  assert.match(worker.body.toString(), /showNotification/)
   const asset = await raw('/assets/app.js')
   assert.equal(asset.status, 200)
   assert.match(asset.headers['content-type'], /javascript/)

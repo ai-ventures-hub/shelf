@@ -118,9 +118,12 @@ Manual config (prefer the path shown in **MCP Connect** inside Shelf):
 }
 ```
 
-**Capability intelligence is descriptive and local.** Agents can discover declared interfaces and
-record missing capabilities, but Shelf does not connect to or invoke child MCP servers. It exposes
-your tools, and that's the whole scope.
+**One connection for every tool.** Agents discover what your tools can do, and can use a tool's own
+MCP server or local HTTP API through Shelf (`shelf_tool_interface`, `shelf_use_tool`,
+`shelf_request_tool`). Shelf starts the tool when a call needs it and stops tools it started for an
+agent once no agent has used them for a while. It only reaches interfaces on this Mac, never runs a
+tool's CLI, and you can turn agent use off for one tool or for all of them. A search that finds
+nothing is noted in Capability Gaps.
 
 Example prompts:
 

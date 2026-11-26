@@ -1,9 +1,11 @@
 import { dialog } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { deriveToolReadiness } from '../../shared/capability-intelligence'
+import { currentAccessChecks, deriveToolReadiness } from '../../shared/capability-intelligence'
+import { maskSecrets, toolSecretValues } from '../../shared/types'
 import { containedDataUrl, ICON_MIME_TYPES } from '../../shared/contained-data-url'
 import { resolveDesignMd } from '../../shared/design-md'
+import { AccessCheckStore } from '../../shared/access-check-store'
 import { inspectProject } from '../../shared/project-import'
 import { claimedPorts } from '../../shared/ports'
 import { registerProject } from '../../shared/register-project'
@@ -51,11 +53,36 @@ export function registerToolsIpc(ctx: IpcContext): void {
     // effort: a cleanup failure must not undo a completed delete.
     try { verification.forgetTool(id) } catch { /* left for a later delete */ }
     try { projectMemory.forget(id) } catch { /* unreadable memory stays untouched */ }
+    try { accessChecks.prune(id) } catch { /* stale checks are harmless */ }
   })
+  const accessChecks = new AccessCheckStore(store.getRoot())
   handle('tools:readiness', (_e, id) => {
     const tool = store.get(id)
     if (!tool) throw new Error(`Tool not found: ${id}`)
-    return deriveToolReadiness(tool)
+    const checks = currentAccessChecks(tool, accessChecks.forTool(id))
+    return { ...deriveToolReadiness(tool, checks), checks }
+  })
+  // The user pressed Check: try every declared interface once and remember
+  // what answered. The MCP client code loads only when this is first used.
+  handle('tools:checkAccess', async (_e, id) => {
+    const tool = store.get(id)
+    if (!tool) throw new Error(`Tool not found: ${id}`)
+    const { probeAccess } = await import('../../shared/tool-connect')
+    accessChecks.prune(id, tool.agentAccess.map((access) => access.id))
+    const secrets = toolSecretValues(tool)
+    await Promise.all(
+      // An interface marked as needing setup is not ready to be tried.
+      tool.agentAccess.filter((access) => !access.setupRequired).map(async (access) => {
+        const check = await probeAccess(tool, access)
+        accessChecks.record(id, access.id, {
+          ...check,
+          detail: maskSecrets(check.detail.replace(/\s+/g, ' '), secrets).slice(0, 240),
+          entrypoint: access.entrypoint,
+        })
+      }),
+    )
+    const checks = currentAccessChecks(tool, accessChecks.forTool(id))
+    return { ...deriveToolReadiness(tool, checks), checks }
   })
   // Launchability glyphs for library cards — one lsof call for all tools.
   handle('tools:health', async () =>

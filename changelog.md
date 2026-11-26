@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- **Gateway.** A connected agent can use a tool's own MCP server or local
+  HTTP API through Shelf instead of being wired to each tool:
+  `shelf_tool_interface` lists what the tool offers, `shelf_use_tool` calls
+  its MCP tools, and `shelf_request_tool` sends a request to its HTTP API.
+  Only interfaces on this Mac are reachable, Shelf never runs a tool's CLI,
+  and output is masked and marked as untrusted. You own the switches:
+  Settings → General → Agents for all tools, and "Let agents use this tool
+  through Shelf" under Advanced for one. Agents cannot change either. This
+  reverses the earlier decision that a gateway was out of scope.
+- **Start on demand, stop when idle.** A gateway call starts a stopped tool
+  when its interface needs it. Tools Shelf started this way stop again after
+  15 minutes without agent use (adjustable, or off). Tools you launch are
+  never stopped this way, and launching one Shelf started makes it yours.
+- **Checked readiness.** "Ready" used to mean only "declared". Shelf now
+  records whether each declared interface answered: the tool page has a
+  Check now button, agents can call `shelf_verify_tool_access`, and
+  readiness reports verified, failed, or not checked yet.
+- **Unmatched searches become gaps.** When `shelf_find_capability` matches
+  nothing, Shelf notes the search in Capability Gaps without waiting for the
+  agent to record it. A noted search never reopens a gap you resolved or
+  dismissed.
+- **Phone alerts (Companion).** With "Send alerts to paired phones" on, a
+  paired phone gets an alert when an agent is waiting for you to accept a
+  tool or when a tool stops unexpectedly. Each phone turns it on under
+  More → Notifications. Alerts go through the phone's push service,
+  encrypted so only the phone can read them; this is a request from the Mac
+  to the internet, made only while the setting is on. Off by default.
+- The loopback check behind remote preview and the gateway no longer accepts
+  names such as `127.0.0.1.example.com`.
+
 ## 2.5.1 - 2026-11-23
 
 - Fixes from the November 23 audit:

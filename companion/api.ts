@@ -9,6 +9,7 @@ import {
   type CompanionOverview,
   type CompanionPairResponse,
   type CompanionPreviewGrant,
+  type CompanionPushInfo,
   type CompanionWsMessage,
 } from '../shared/companion-contracts'
 import type { CollectionActionResult, LogLine, RunReceipt, ToolRuntimeState } from '../shared/contracts'
@@ -77,6 +78,9 @@ export const api = {
   rejectDraft: (id: string) => call<CompanionDraftDecision>('POST', `/api/drafts/${encodeURIComponent(id)}/reject`),
   startCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/start`),
   stopCollection: (id: string) => call<CollectionActionResult>('POST', `/api/collections/${encodeURIComponent(id)}/stop`),
+  pushInfo: () => call<CompanionPushInfo>('GET', '/api/push/key'),
+  pushSubscribe: (subscription: PushSubscriptionJSON) => call<{ ok: true }>('POST', '/api/push/subscribe', subscription),
+  pushUnsubscribe: () => call<{ ok: true }>('DELETE', '/api/push/subscribe'),
 }
 
 /**
