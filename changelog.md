@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.6.0 - 2026-11-26
 
 - **Gateway.** A connected agent can use a tool's own MCP server or local
   HTTP API through Shelf instead of being wired to each tool:
