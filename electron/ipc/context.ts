@@ -41,4 +41,6 @@ export interface IpcContext {
   isShuttingDown: () => boolean
   /** Stop tools, quit, install the downloaded update, relaunch. Owned by main. */
   installUpdate: () => Promise<void>
+  /** The user opened or launched this tool on purpose; it is never idle-stopped after that. */
+  claimTool: (toolId: string) => void
 }

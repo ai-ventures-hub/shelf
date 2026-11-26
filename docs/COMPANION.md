@@ -388,8 +388,8 @@ Built in 2.6, off by default (`companionNotifications`).
 
 - **What alerts:** an agent registration waiting for acceptance, and a
   tool that stopped unexpectedly or could not start (`toolFailureNotice`,
-  without the window-focus rule, since the phone is not looking at the
-  Mac). One alert per subject a minute at most.
+  same rules as the Mac's own notification). One alert per subject a
+  minute, four a minute in all.
 - **How it travels:** the phone subscribes with its browser's push service
   and sends Shelf the endpoint and two keys (`POST /api/push/subscribe`).
   To alert, the Mac POSTs to that endpoint (`shared/web-push.ts`,

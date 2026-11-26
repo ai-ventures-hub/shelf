@@ -49,6 +49,8 @@ const { ensureVapidKeys, generateVapidKeys, parsePushSubscription, encryptPushPa
     'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN',
     'payload encryption matches the RFC 8291 example',
   )
+  // Private scalars with a leading zero byte must still be 32 bytes, or the key file fails its own check.
+  for (let i = 0; i < 400; i++) assert.equal(Buffer.from(generateVapidKeys().privateKey, 'base64url').length, 32)
   const keys = generateVapidKeys()
   const header = vapidAuthorization('https://web.push.apple.com/abc', keys, Date.UTC(2026, 0, 1))
   const [, jwt, k] = /^vapid t=([\w.-]+), k=([\w-]+)$/.exec(header)

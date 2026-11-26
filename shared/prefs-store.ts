@@ -87,10 +87,22 @@ export function clampIdleStopMinutes(value: unknown): number {
  * which only reads what the user chose in the app.
  */
 export function readPrefsSnapshot(root = resolveShelfDataRoot()): UiPrefs {
+  const file = path.join(root, 'prefs.json')
+  let text: string
   try {
-    const raw = JSON.parse(fs.readFileSync(path.join(root, 'prefs.json'), 'utf8')) as Partial<UiPrefs>
-    return { ...DEFAULT_UI_PREFS, ...(raw && typeof raw === 'object' ? raw : {}) }
+    text = fs.readFileSync(file, 'utf8')
   } catch {
+    // No prefs yet: the user has changed nothing, so the defaults are theirs.
     return { ...DEFAULT_UI_PREFS }
+  }
+  try {
+    const raw = JSON.parse(text) as Partial<UiPrefs>
+    if (!raw || typeof raw !== 'object') throw new Error('not an object')
+    const merged = { ...DEFAULT_UI_PREFS, ...raw }
+    return { ...merged, gatewayBlockedToolIds: Array.isArray(merged.gatewayBlockedToolIds) ? merged.gatewayBlockedToolIds : [] }
+  } catch {
+    // The file is there but unreadable, so what the user chose is unknown.
+    // Do not guess "allowed": agent use and idle stop stay off until it reads.
+    return { ...DEFAULT_UI_PREFS, gatewayEnabled: false, idleStopEnabled: false }
   }
 }

@@ -4,7 +4,7 @@
  * status the Settings pane shows. The server itself (shared/companion-server)
  * knows nothing about Electron.
  */
-import { app, dialog, powerMonitor, powerSaveBlocker, type BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog, powerMonitor, powerSaveBlocker } from 'electron'
 import fs from 'node:fs'
 import { buildActivityBoard } from '../shared/activity-board'
 import type { CapabilityGapStore } from '../shared/capability-gap-store'
@@ -45,6 +45,8 @@ export interface CompanionManagerDeps {
   designProfiles: DesignProfileStore
   toolDrafts: ToolDraftStore
   sendToRenderer: (channel: string, ...args: unknown[]) => void
+  /** The phone's owner opened this tool (a preview); it is theirs and is not idle-stopped. */
+  onUserTouch?: (toolId: string) => void
   dataRoot: string
   /** Built renderer output: `<staticRoot>/companion/index.html`, `<staticRoot>/assets`. */
   staticRoot: string
@@ -408,7 +410,11 @@ export class CompanionManager {
     if (!this.alertsOn()) return
     const subject = message.tag || message.title
     const now = Date.now()
-    if (now - (this.lastAlertAt.get(subject) || 0) < 60_000) return
+    for (const [key, at] of this.lastAlertAt) if (now - at >= 60_000) this.lastAlertAt.delete(key)
+    if (this.lastAlertAt.has(subject)) return
+    // An agent chooses how many folders it stages and what they are called;
+    // it does not get to choose how often the phone buzzes.
+    if (this.lastAlertAt.size >= 4) return
     this.lastAlertAt.set(subject, now)
     try {
       if (!fs.existsSync(path.join(companionDir(this.deps.dataRoot), 'devices.json'))) return
@@ -452,8 +458,8 @@ export class CompanionManager {
     this.lastToolStatus.set(state.toolId, state.status)
     const tool = this.deps.store.get(state.toolId)
     if (!tool) return
-    // The phone is not looking at the Mac's window, so a failed start counts too.
-    const notice = toolFailureNotice(previous, state, tool.name, false)
+    // A start the user is watching fail in Shelf's own window is not news.
+    const notice = toolFailureNotice(previous, state, tool.name, Boolean(BrowserWindow.getFocusedWindow()))
     if (!notice) return
     void this.alertPhones(
       { title: notice.title, body: notice.body, url: `/#/tools/${encodeURIComponent(state.toolId)}`, tag: `tool:${state.toolId}` },
@@ -551,6 +557,7 @@ export class CompanionManager {
         const tool = store.get(toolId)
         if (!tool) throw new Error('That tool is no longer in the library.')
         if (!tool.remotePreview) throw new Error('Remote preview is off for this tool. Turn it on in the tool editor on your Mac (Advanced).')
+        try { this.deps.onUserTouch?.(toolId) } catch { /* advisory */ }
         const blocker = previewBlocker(tool)
         if (blocker) throw new Error(blocker)
         const state = processes.peekState(toolId)

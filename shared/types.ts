@@ -125,6 +125,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   companionKeepAwake: false,
   companionNotifications: false,
   gatewayEnabled: true,
+  gatewayBlockedToolIds: [],
   idleStopEnabled: true,
   idleStopMinutes: 15,
 }

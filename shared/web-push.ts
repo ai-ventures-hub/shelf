@@ -85,7 +85,10 @@ export function parsePushSubscription(raw: unknown): PushSubscriptionInput {
 export function generateVapidKeys(): VapidKeys {
   const ecdh = crypto.createECDH('prime256v1')
   ecdh.generateKeys()
-  return { publicKey: b64u(ecdh.getPublicKey()), privateKey: b64u(ecdh.getPrivateKey()) }
+  // getPrivateKey drops leading zero bytes; a JWK needs the full 32.
+  const scalar = ecdh.getPrivateKey()
+  const privateKey = Buffer.concat([Buffer.alloc(32 - scalar.length), scalar])
+  return { publicKey: b64u(ecdh.getPublicKey()), privateKey: b64u(privateKey) }
 }
 
 /** The Mac's signing keys, created on first use beside the Companion certificate (0600). */
@@ -162,8 +165,8 @@ export function encryptPushPayload(
 }
 
 /**
- * Send one alert. 'gone' means the phone unsubscribed (or reinstalled) and
- * the subscription should be dropped; 'failed' is worth trying again later.
+ * Send one alert. 'gone' means the phone unsubscribed, was reset, or holds a
+ * subscription made with another key, and it should be dropped; 'failed' is worth trying again later.
  */
 export function sendWebPush(
   subscription: PushSubscriptionInput,
@@ -198,7 +201,9 @@ export function sendWebPush(
       (response) => {
         response.resume()
         const status = response.statusCode || 0
-        resolve(status >= 200 && status < 300 ? 'sent' : status === 404 || status === 410 ? 'gone' : 'failed')
+        // 401/403: the service no longer accepts this Mac's key for the
+        // subscription (the key file was replaced). The phone must subscribe again.
+        resolve(status >= 200 && status < 300 ? 'sent' : [401, 403, 404, 410].includes(status) ? 'gone' : 'failed')
       },
     )
     request.on('timeout', () => request.destroy())

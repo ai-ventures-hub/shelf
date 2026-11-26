@@ -35,7 +35,7 @@ export async function sweepIdleTools(deps: IdleStopDeps): Promise<string[]> {
     const receipt = deps.receipts.get(use.onDemandReceiptId)
     // The run ended some other way, or was never Shelf's own: nothing to stop.
     if (!receipt || receipt.endedAt || receipt.startedBy?.kind !== 'gateway') {
-      deps.uses.claim(toolId)
+      deps.uses.release(toolId)
       continue
     }
     if (!idle(use.lastUsedAt)) continue
@@ -51,7 +51,7 @@ export async function sweepIdleTools(deps: IdleStopDeps): Promise<string[]> {
         : 'Stopped after a while without agent use.',
     )
     if (state.status === 'stopped') {
-      deps.uses.claim(toolId)
+      deps.uses.release(toolId)
       stopped.push(toolId)
     }
   }

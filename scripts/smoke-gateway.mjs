@@ -32,6 +32,7 @@ const { sweepIdleTools } = dist('idle-stop')
 const { findPortOccupant } = dist('ports')
 const { loopbackUrl, commandProgram, requestToolHttp } = dist('tool-connect')
 const { clampIdleStopMinutes, readPrefsSnapshot } = dist('prefs-store')
+const { deriveToolReadiness } = dist('capability-intelligence')
 
 const SECRET = 'tok_live_gatewaysecret123456'
 const port = 8781
@@ -173,6 +174,9 @@ try {
   assert.ok(echoed.text.includes(fs.realpathSync(project)), 'the child ran in the project folder with the tool env')
   const unknown = await call('shelf_use_tool', { id: tool.id, name: 'nope', arguments: {} })
   assert.equal(unknown.result.isError, true)
+  // Calls that arrive together share one session with the tool's server.
+  const together = await Promise.all(['a', 'b', 'c'].map((text) => call('shelf_use_tool', { id: tool.id, name: 'echo', arguments: { text } })))
+  assert.deepEqual(together.map((item) => /echo: [abc]/.test(item.text)), [true, true, true])
 
   const state = await call('shelf_request_tool', { id: tool.id })
   assert.equal(state.json().status, 200)
@@ -203,24 +207,32 @@ try {
   assert.equal(failedCheck.readiness.state, 'ready', 'a failed check does not change what is declared')
   const read = (await call('shelf_check_tool_readiness', { id: tool.id })).json()
   assert.equal(read.readiness.verified, 'verified')
-  assert.ok(new AccessCheckStore(root).forTool(tool.id), 'checks are saved for the app to show')
+  const saved = new AccessCheckStore(root).forTool(tool.id)
+  assert.equal(Object.keys(saved).length, 3, 'checks are saved for the app to show')
+  // A check is about the entrypoint that was tried; edit it and the check no longer counts.
+  const edited = { ...store.get(tool.id), agentAccess: store.get(tool.id).agentAccess.map((access) => access.kind === 'mcp' ? { ...access, entrypoint: 'node other-server.mjs' } : access) }
+  assert.equal(deriveToolReadiness(edited, saved).verified, 'unchecked')
+  assert.equal(deriveToolReadiness(store.get(tool.id), saved).verified, 'verified')
   console.log('OK: readiness reports what answered when Shelf last checked')
 
   // ---- the user's switches ------------------------------------------------------
-  await call('shelf_upsert_tool', { id: tool.id, description: 'edited by an agent', agentUse: false })
-  assert.equal(store.get(tool.id).agentUse, undefined, 'an agent cannot turn the switch off')
-  store.save({ ...store.get(tool.id), agentUse: false })
+  // Both switches live in prefs.json, which no agent path writes.
+  const prefsFile = path.join(root, 'prefs.json')
+  fs.writeFileSync(prefsFile, JSON.stringify({ gatewayBlockedToolIds: [tool.id] }))
   const offTool = await call('shelf_use_tool', { id: tool.id, name: 'echo', arguments: { text: 'x' } })
   assert.equal(offTool.result.isError, true)
   assert.match(offTool.text, /turned off agent use for/)
-  await call('shelf_upsert_tool', { id: tool.id, description: 'edited again', agentUse: true })
-  assert.equal(store.get(tool.id).agentUse, false, 'an agent cannot turn the switch back on')
-  store.save({ ...store.get(tool.id), agentUse: undefined })
-  fs.writeFileSync(path.join(root, 'prefs.json'), JSON.stringify({ gatewayEnabled: false }))
+  assert.equal((await call('shelf_verify_tool_access', { id: tool.id })).result.isError, true, 'a blocked tool is not probed either')
+  await call('shelf_upsert_tool', { id: tool.id, description: 'edited by an agent', agentUse: true, gatewayBlockedToolIds: [] })
+  assert.deepEqual(JSON.parse(fs.readFileSync(prefsFile, 'utf8')).gatewayBlockedToolIds, [tool.id], 'an agent edit of the tool cannot lift the block')
+  assert.equal((await call('shelf_request_tool', { id: tool.id })).result.isError, true)
+  fs.writeFileSync(prefsFile, JSON.stringify({ gatewayEnabled: false }))
   const offAll = await call('shelf_tool_interface', { id: tool.id })
   assert.equal(offAll.result.isError, true)
   assert.match(offAll.text, /Settings/)
-  fs.writeFileSync(path.join(root, 'prefs.json'), JSON.stringify({ gatewayEnabled: true }))
+  fs.writeFileSync(prefsFile, '{ not json')
+  assert.equal((await call('shelf_tool_interface', { id: tool.id })).result.isError, true, 'unreadable settings do not read as "allowed"')
+  fs.writeFileSync(prefsFile, JSON.stringify({ gatewayEnabled: true }))
   assert.equal((await call('shelf_use_tool', { id: tool.id, name: 'echo', arguments: { text: 'back' } })).result.isError, undefined)
   console.log('OK: the per-tool and global switches refuse, and agents cannot change them')
 
@@ -266,6 +278,7 @@ try {
   })
   assert.equal((await userHost.start(tool.id)).status, 'running')
   assert.equal(uses.get(tool.id).onDemandReceiptId, undefined, 'launching it yourself makes it yours')
+  assert.ok(uses.get(tool.id).claimedAt, 'and the claim is timed, so a start still in flight is not marked afterwards')
   assert.deepEqual(await sweep({ idleMs: 0 }), [])
   assert.ok(await findPortOccupant(port), 'the user\'s tool keeps running')
   console.log('OK: idle stop takes only on-demand runs and never a tool the user launched')

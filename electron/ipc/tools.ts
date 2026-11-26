@@ -1,7 +1,8 @@
 import { dialog } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { deriveToolReadiness } from '../../shared/capability-intelligence'
+import { currentAccessChecks, deriveToolReadiness } from '../../shared/capability-intelligence'
+import { maskSecrets, toolSecretValues } from '../../shared/types'
 import { containedDataUrl, ICON_MIME_TYPES } from '../../shared/contained-data-url'
 import { resolveDesignMd } from '../../shared/design-md'
 import { AccessCheckStore } from '../../shared/access-check-store'
@@ -58,7 +59,8 @@ export function registerToolsIpc(ctx: IpcContext): void {
   handle('tools:readiness', (_e, id) => {
     const tool = store.get(id)
     if (!tool) throw new Error(`Tool not found: ${id}`)
-    return { ...deriveToolReadiness(tool, accessChecks.forTool(id)), checks: accessChecks.forTool(id) }
+    const checks = currentAccessChecks(tool, accessChecks.forTool(id))
+    return { ...deriveToolReadiness(tool, checks), checks }
   })
   // The user pressed Check: try every declared interface once and remember
   // what answered. The MCP client code loads only when this is first used.
@@ -67,10 +69,20 @@ export function registerToolsIpc(ctx: IpcContext): void {
     if (!tool) throw new Error(`Tool not found: ${id}`)
     const { probeAccess } = await import('../../shared/tool-connect')
     accessChecks.prune(id, tool.agentAccess.map((access) => access.id))
+    const secrets = toolSecretValues(tool)
     await Promise.all(
-      tool.agentAccess.map(async (access) => accessChecks.record(id, access.id, await probeAccess(tool, access))),
+      // An interface marked as needing setup is not ready to be tried.
+      tool.agentAccess.filter((access) => !access.setupRequired).map(async (access) => {
+        const check = await probeAccess(tool, access)
+        accessChecks.record(id, access.id, {
+          ...check,
+          detail: maskSecrets(check.detail.replace(/\s+/g, ' '), secrets).slice(0, 240),
+          entrypoint: access.entrypoint,
+        })
+      }),
     )
-    return { ...deriveToolReadiness(tool, accessChecks.forTool(id)), checks: accessChecks.forTool(id) }
+    const checks = currentAccessChecks(tool, accessChecks.forTool(id))
+    return { ...deriveToolReadiness(tool, checks), checks }
   })
   // Launchability glyphs for library cards — one lsof call for all tools.
   handle('tools:health', async () =>

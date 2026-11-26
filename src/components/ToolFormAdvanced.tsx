@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { previewBlocker as remotePreviewBlocker } from '../../shared/companion-preview-policy'
+import { usePrefs } from '../hooks/usePrefs'
 import { ColorField } from './ColorField'
 import { LucideIconPicker } from './LucideIconPicker'
 import type { AgentAccess, AgentAccessKind, Tool, UiPrefs } from '../types'
@@ -54,6 +55,8 @@ export function ToolFormAdvanced({
   update,
   setForm,
 }: ToolFormAdvancedProps) {
+  const { updatePrefs } = usePrefs()
+  const gatewayBlocked = (prefs.gatewayBlockedToolIds || []).includes(form.id)
   function addAccess(kind: AgentAccessKind) {
     const access: AgentAccess = {
       id: crypto.randomUUID(),
@@ -346,18 +349,24 @@ export function ToolFormAdvanced({
             </p>
           </div>
 
-          {form.agentAccess.length > 0 || form.agentUse === false ? <div className="field span-2">
+          {form.id && (form.agentAccess.length > 0 || gatewayBlocked) ? <div className="field span-2">
             <label className="checkbox-row">
               <input
                 type="checkbox"
-                checked={form.agentUse !== false}
-                onChange={(e) => update('agentUse', e.target.checked ? undefined : false)}
+                checked={!gatewayBlocked}
+                disabled={!prefs.gatewayEnabled}
+                onChange={(e) => {
+                  const others = (prefs.gatewayBlockedToolIds || []).filter((id) => id !== form.id)
+                  void updatePrefs({ gatewayBlockedToolIds: e.target.checked ? others : [...others, form.id] })
+                }}
               />
               Let agents use this tool through Shelf
             </label>
             <p className="field-hint">
               A connected agent can call the interfaces listed under Agent access through Shelf,
-              which starts the tool when needed. Only you can change this.
+              which starts the tool when needed. This is your setting: it takes effect at once, is
+              kept apart from the tool, and no agent can change it.
+              {prefs.gatewayEnabled ? '' : ' Agent use is currently off for every tool in Settings.'}
             </p>
           </div> : null}
 

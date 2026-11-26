@@ -48,6 +48,8 @@ export interface DesktopIntegrationHost {
   sendToRenderer: (channel: string, ...args: unknown[]) => void
   /** True once the user has chosen Quit (not close-to-tray). */
   isQuitting: () => boolean
+  /** The user opened or launched this tool on purpose; it is never idle-stopped after that. */
+  claimTool?: (toolId: string) => void
 }
 
 let tray: Tray | null = null
@@ -214,6 +216,7 @@ async function rebuildTrayMenu(host: DesktopIntegrationHost, snapshot?: ToolRunt
                       label: 'Open URL',
                       click: () => {
                         // Enforce http(s)-only URL handling matching the renderer bridge.
+                        host.claimTool?.(tool.id)
                         void system.openUrl(url).catch(() => undefined)
                       },
                     } satisfies Electron.MenuItemConstructorOptions,

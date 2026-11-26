@@ -62,6 +62,7 @@ let capabilityGaps: CapabilityGapStore
 let designProfiles: DesignProfileStore
 let teamCatalogs: TeamCatalogStore
 let toolDrafts: ToolDraftStore
+let toolUses: ToolUseStore
 let companion: CompanionManager
 let isQuitting = false
 let quitDiscardApproved = false
@@ -210,6 +211,7 @@ function getDesktopHost(): DesktopIntegrationHost {
     navigate,
     sendToRenderer,
     isQuitting: () => isQuitting,
+    claimTool: (toolId) => toolUses.claim(toolId),
   }
 }
 
@@ -543,6 +545,7 @@ function buildIpcContext(): IpcContext {
     applyLaunchAtLogin,
     isShuttingDown: () => isQuitting || quitPreparing,
     installUpdate,
+    claimTool: (toolId) => toolUses.claim(toolId),
   }
 }
 
@@ -616,7 +619,7 @@ if (gotLock) {
     // Scratch clones from adds that never reached approve/cancel, plus old operation files.
     cleanStagingRoot(store.getRoot())
     cleanStaleOperations(store.getRoot())
-    const toolUses = new ToolUseStore(store.getRoot())
+    toolUses = new ToolUseStore(store.getRoot())
     processes = new ProcessManager(store, {
       receipts,
       defaultOrigin: () => ({ kind: 'gui' }),
@@ -637,6 +640,7 @@ if (gotLock) {
     companion = new CompanionManager({
       prefs, store, processes, receipts, verification, capabilityGaps, designProfiles, toolDrafts,
       sendToRenderer,
+      onUserTouch: (toolId) => toolUses.claim(toolId),
       dataRoot: store.getRoot(),
       staticRoot: path.join(__dirname, '../../dist'),
       iconPngPath: app.isPackaged

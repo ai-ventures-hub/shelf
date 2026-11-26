@@ -78,8 +78,12 @@ async function main() {
       throw new Error(`Tools without annotations: ${missingAnnotations.map((t) => t.name).join(', ')}`)
     }
     const hint = (name, key) => listing.tools.find((t) => t.name === name)?.annotations?.[key]
-    for (const name of ['shelf_list_tools', 'shelf_get_tool', 'shelf_get_status', 'shelf_get_logs', 'shelf_find_capability', 'shelf_inspect_project', 'shelf_list_receipts', 'shelf_get_verification', 'shelf_prepare_handoff']) {
+    for (const name of ['shelf_list_tools', 'shelf_get_tool', 'shelf_get_status', 'shelf_get_logs', 'shelf_inspect_project', 'shelf_list_receipts', 'shelf_get_verification', 'shelf_prepare_handoff']) {
       if (hint(name, 'readOnlyHint') !== true || hint(name, 'openWorldHint') !== false) throw new Error(`${name} must be read-only and closed-world`)
+    }
+    // A search that matches nothing is noted as a gap, so it is a local write.
+    if (hint('shelf_find_capability', 'readOnlyHint') !== false || hint('shelf_find_capability', 'openWorldHint') !== false) {
+      throw new Error('shelf_find_capability must be a closed-world local write')
     }
     for (const name of ['shelf_remove_tool', 'shelf_clear_receipts', 'shelf_stop_tool']) {
       if (hint(name, 'destructiveHint') !== true) throw new Error(`${name} must be marked destructive`)
@@ -259,8 +263,8 @@ async function main() {
       throw new Error('capability matches must use compact readiness/status')
     }
     const nothing = await callTool(client, 'shelf_find_capability', { task: 'render holographic weather forecasts' })
-    if (nothing.count !== 0 || !/shelf_record_capability_gap/.test(nothing.next || '')) {
-      throw new Error('zero matches must point at shelf_record_capability_gap')
+    if (nothing.count !== 0 || nothing.noted !== true || !/shelf_record_capability_gap/.test(nothing.next || '')) {
+      throw new Error('zero matches must be noted and point at shelf_record_capability_gap')
     }
     // Subscribed team-catalog entries the user has not installed are visible,
     // read-only, and never installable by the agent.

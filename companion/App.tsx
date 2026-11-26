@@ -935,6 +935,10 @@ function pushKeyBytes(key: string): Uint8Array<ArrayBuffer> {
   return bytes
 }
 
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
 /**
  * Alerts for a waiting registration or a crashed tool. iOS only allows them
  * for an app on the Home Screen, and only asks after a tap.
@@ -973,7 +977,10 @@ function NotificationsCard() {
   }
 
   async function turnOn() {
-    if (!key) return
+    if (!key) {
+      setError('Could not reach Shelf for its alert key. Check the connection and open this screen again.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -983,7 +990,14 @@ function NotificationsCard() {
       }
       const registration = await navigator.serviceWorker.register('/sw.js')
       await navigator.serviceWorker.ready
-      const existing = await registration.pushManager.getSubscription()
+      let existing = await registration.pushManager.getSubscription()
+      // A subscription made with another key (the Mac's key file was replaced)
+      // would be accepted here and then never deliver.
+      const madeWith = existing?.options.applicationServerKey
+      if (existing && (!madeWith || !sameBytes(new Uint8Array(madeWith), pushKeyBytes(key)))) {
+        await existing.unsubscribe()
+        existing = null
+      }
       const subscription = existing || await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: pushKeyBytes(key),

@@ -80,9 +80,9 @@ export interface ProcessManagerOptions {
   /** Optional override for auto-restart backoff delays (used by smoke tests). */
   autoRestartDelaysMs?: number[]
   /**
-   * The user (app, menu bar, or phone) asked for this tool to run. Fires even
-   * when it is already running, so a run Shelf started for an agent becomes
-   * the user's and is no longer stopped for idleness.
+   * Someone asked for this tool to run on purpose (app, menu bar, phone, or
+   * an agent's explicit launch). Fires even when it is already running, so a
+   * run Shelf started on demand is no longer stopped for idleness.
    */
   onUserStart?: (toolId: string) => void
 }
@@ -800,7 +800,9 @@ export class ProcessManager {
 
   private noteUserStart(toolId: string, options: StartOptions): void {
     const kind = (options.origin ?? this.options.defaultOrigin?.())?.kind
-    if (kind !== 'gui' && kind !== 'tray' && kind !== 'companion') return
+    // Everything but Shelf's own on-demand start is someone asking for the
+    // tool on purpose, an agent calling shelf_launch_tool included.
+    if (kind === 'gateway') return
     try { this.options.onUserStart?.(toolId) } catch { /* advisory */ }
   }
 

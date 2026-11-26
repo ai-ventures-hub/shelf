@@ -34,6 +34,8 @@ export interface AccessCheck {
   checkedAt: string
   /** For MCP: how many tools the server listed. */
   toolCount?: number
+  /** The entrypoint that was tried. A check for an entrypoint since edited no longer counts. */
+  entrypoint?: string
 }
 
 export interface ToolReadiness {
@@ -275,6 +277,12 @@ export interface UiPrefs {
   companionNotifications: boolean
   /** Gateway (2.6): agents may use a tool's own interface through Shelf. */
   gatewayEnabled: boolean
+  /**
+   * Tools the user took out of the gateway. Kept here, not on the tool
+   * record: agents and MCP servers (including one left running from an
+   * older build) rewrite library.json, and none of them write prefs.json.
+   */
+  gatewayBlockedToolIds: string[]
   /** Stop tools Shelf started for an agent once no agent has used them for a while. */
   idleStopEnabled: boolean
   /** Minutes without agent use before such a tool is stopped (2 to 240). */

@@ -16,7 +16,7 @@ self.addEventListener('push', (event) => {
     body: typeof data.body === 'string' ? data.body : '',
     tag: typeof data.tag === 'string' ? data.tag : undefined,
     icon: '/apple-touch-icon.png',
-    data: { url: typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/' },
+    data: { url: typeof data.url === 'string' && data.url.startsWith('/') && !data.url.startsWith('//') ? data.url : '/' },
   }))
 })
 

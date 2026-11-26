@@ -97,6 +97,8 @@ const toolUses = new ToolUseStore()
 const projectMemory = new ProjectMemoryStore(store.getRoot())
 const processes = new ProcessManager(store, {
   receipts,
+  // An explicit shelf_launch_tool is a request to keep the tool up.
+  onUserStart: (toolId) => toolUses.claim(toolId),
   // Thunk: the client's self-reported name (e.g. "claude-code") is only known
   // after the MCP initialize handshake, well before any tool call arrives.
   defaultOrigin: () => ({
@@ -549,8 +551,6 @@ server.registerTool(
         remotePreview: (args.remotePreview ?? existing?.remotePreview) ? true : undefined,
         // Auto-heal is a user-owned runtime preference; preserve across MCP edits.
         autoRestart: existing?.autoRestart ? true : undefined,
-        // Whether agents may use the tool through Shelf is the user's switch.
-        agentUse: existing?.agentUse === false ? false : undefined,
         iconPath: args.iconPath ?? existing?.iconPath,
         iconLucide: args.iconLucide ?? existing?.iconLucide,
         iconColor: args.iconColor ?? existing?.iconColor,
@@ -606,6 +606,8 @@ server.registerTool(
     }
     store.delete(id)
     processes.forget(id)
+    try { accessChecks.prune(id) } catch { /* stale checks are harmless */ }
+    try { toolUses.forget(id) } catch { /* stale use is harmless */ }
     // Same cleanup as the desktop delete. History of a run the desktop is
     // still executing stays until that run ends.
     try { new VerificationStore(store.getRoot()).forget(id) } catch { /* left for a later delete */ }
@@ -1197,7 +1199,10 @@ async function main() {
   process.stdin.once('end', () => void gateway.closeAll())
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
-      void gateway.closeAll().finally(() => process.exit(0))
+      // Bounded: a tool's MCP server that will not close must not hold the exit.
+      const exit = () => process.exit(0)
+      setTimeout(exit, 2_000).unref()
+      void gateway.closeAll().finally(exit)
     })
   }
 }

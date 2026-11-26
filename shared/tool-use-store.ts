@@ -17,6 +17,8 @@ export interface ToolUse {
   calls: number
   /** Receipt of the run Shelf started for an agent call; absent once the user has taken the tool over. */
   onDemandReceiptId?: string
+  /** When someone last launched or opened the tool on purpose. A run that was starting at that moment is theirs too. */
+  claimedAt?: string
 }
 
 interface ToolUseFile {
@@ -47,9 +49,9 @@ export class ToolUseStore {
    * Record an agent call. Calls arrive in bursts, so plain touches are written
    * at most once per tool every 10 seconds; a new on-demand run is always written.
    */
-  touch(toolId: string, input: { client?: string; onDemandReceiptId?: string } = {}): void {
+  touch(toolId: string, input: { client?: string; onDemandReceiptId?: string; force?: boolean } = {}): void {
     const now = Date.now()
-    if (!input.onDemandReceiptId && now - (this.lastWrite.get(toolId) || 0) < WRITE_EVERY_MS) return
+    if (!input.onDemandReceiptId && !input.force && now - (this.lastWrite.get(toolId) || 0) < WRITE_EVERY_MS) return
     this.lastWrite.set(toolId, now)
     withFileLockSync(this.filePath, () => {
       const data = this.read()
@@ -59,13 +61,30 @@ export class ToolUseStore {
         client: input.client ?? current?.client,
         calls: (current?.calls || 0) + 1,
         onDemandReceiptId: input.onDemandReceiptId ?? current?.onDemandReceiptId,
+        ...(current?.claimedAt ? { claimedAt: current.claimedAt } : {}),
       }
       this.write(data)
     })
   }
 
-  /** The user launched, restarted, or opened the tool: it is theirs now and is never stopped for idleness. */
+  /**
+   * Someone launched, restarted, or opened the tool on purpose: it is theirs
+   * now and is never stopped for idleness. The time is kept so a run that
+   * Shelf was still starting for an agent at that moment is not marked as
+   * on demand afterwards.
+   */
   claim(toolId: string): void {
+    withFileLockSync(this.filePath, () => {
+      const data = this.read()
+      const current = data.uses[toolId]
+      const { onDemandReceiptId: _released, ...kept } = current || { lastUsedAt: new Date(0).toISOString(), calls: 0 }
+      data.uses[toolId] = { ...kept, claimedAt: new Date().toISOString() }
+      this.write(data)
+    })
+  }
+
+  /** The on-demand run ended by itself; nothing was claimed. */
+  release(toolId: string): void {
     withFileLockSync(this.filePath, () => {
       const data = this.read()
       const current = data.uses[toolId]

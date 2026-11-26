@@ -12,6 +12,8 @@ import type {
 } from './types'
 
 const MAX_EXAMPLES = 5
+/** Gaps Shelf noted from unmatched searches (not ones an agent recorded on purpose). */
+const MAX_SEARCH_GAPS = 100
 
 export interface RecordCapabilityGapInput {
   task: string
@@ -86,6 +88,8 @@ export class CapabilityGapStore {
           reason,
           relatedToolIds: unique([...(existing.relatedToolIds || []), ...(input.relatedToolIds || [])]),
           suggestedAccess: input.suggestedAccess ?? existing.suggestedAccess,
+          // An agent has now described the need on purpose.
+          source: 'agent',
           status:
             existing.status === 'resolved' || existing.status === 'dismissed'
               ? 'open'
@@ -148,7 +152,9 @@ export class CapabilityGapStore {
         }
         data.gaps[index] = gap
         this.write(data)
-        return { action: 'updated', gap }
+        // Counted, but the user closed this one: nothing new is shown to them.
+        const closed = existing.status === 'resolved' || existing.status === 'dismissed'
+        return { action: closed ? 'ignored' : 'updated', gap }
       }
       const gap: CapabilityGap = {
         id: randomUUID(),
@@ -166,6 +172,15 @@ export class CapabilityGapStore {
         client,
       }
       data.gaps.unshift(gap)
+      // Searches are cheap to make and each wording is its own entry, so the
+      // noted ones are capped: the least recently asked go first.
+      const noted = data.gaps
+        .filter((item) => item.source === 'search')
+        .sort((a, b) => Date.parse(b.lastRequestedAt) - Date.parse(a.lastRequestedAt))
+      if (noted.length > MAX_SEARCH_GAPS) {
+        const drop = new Set(noted.slice(MAX_SEARCH_GAPS).map((item) => item.id))
+        data.gaps = data.gaps.filter((item) => !drop.has(item.id))
+      }
       this.write(data)
       return { action: 'created', gap }
     })

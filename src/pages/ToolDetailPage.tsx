@@ -84,6 +84,8 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
   const [designMd, setDesignMd] = useState<DesignMdResult | null>(null)
   const [readiness, setReadiness] = useState<(ToolReadiness & { checks?: Record<string, AccessCheck> }) | null>(null)
   const [checkingAccess, setCheckingAccess] = useState(false)
+  const latestToolId = useRef(id)
+  latestToolId.current = id
   // Tool Sharing: result line after "Share" and the updates sheet.
   const [shareStatus, setShareStatus] = useState<
     | { kind: 'copied'; link: string; envKeys: string[] }
@@ -585,10 +587,12 @@ export function ToolDetailPage({ section = 'overview' }: { section?: 'overview' 
               type="button"
               className="btn btn-sm"
               disabled={checkingAccess}
+              title="Tries each interface once: starts its MCP server and asks for its tool list, sends one request to its HTTP API, and looks up its CLI without running it."
               onClick={() => {
+                const checkedId = tool.id
                 setCheckingAccess(true)
-                void window.shelf.checkToolAccess(tool.id)
-                  .then(setReadiness)
+                void window.shelf.checkToolAccess(checkedId)
+                  .then((result) => { if (latestToolId.current === checkedId) setReadiness(result) })
                   .catch(() => setActionError('Could not check the agent interfaces. Try again.'))
                   .finally(() => setCheckingAccess(false))
               }}

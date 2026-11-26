@@ -66,7 +66,6 @@ export function toolHasAdvancedContent(tool: Tool, prefs: UiPrefs): boolean {
   if (tool.notes?.trim()) return true
   if (tool.remotePreview) return true
   if (tool.autoRestart) return true
-  if (tool.agentUse === false) return true
   if (tool.iconPath?.trim()) return true
   if (tool.iconLucide && tool.iconLucide !== prefs.defaultIconLucide) return true
   if (tool.iconColor && tool.iconColor !== prefs.defaultIconColor) return true

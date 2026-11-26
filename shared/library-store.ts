@@ -604,8 +604,6 @@ function normalizeTool(input: Partial<Tool>): Tool {
     remotePreview: input.remotePreview === true ? true : undefined,
     // Auto-heal (2.5): opt-in crash recovery; only literal true survives.
     autoRestart: input.autoRestart === true ? true : undefined,
-    // Gateway (2.6): on unless the user turned it off; only a literal false is kept.
-    agentUse: input.agentUse === false ? false : undefined,
     createdAt: input.createdAt || now,
     updatedAt: input.updatedAt || now,
     // Fail closed for pre-0.9 records: createdAt, never "now" — a normalize

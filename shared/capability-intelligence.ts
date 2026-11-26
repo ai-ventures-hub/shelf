@@ -79,7 +79,21 @@ const SHELF_ACTIONS = [
   'shelf_get_logs',
 ]
 
-export function deriveToolReadiness(tool: Tool, checks: Record<string, AccessCheck> = {}): ToolReadiness {
+/** The saved checks that are about the interfaces as declared now. */
+export function currentAccessChecks(
+  tool: Pick<Tool, 'agentAccess'>,
+  saved: Record<string, AccessCheck> = {},
+): Record<string, AccessCheck> {
+  const current: Record<string, AccessCheck> = {}
+  for (const access of tool.agentAccess) {
+    const check = saved[access.id]
+    if (check && (check.entrypoint === undefined || check.entrypoint === access.entrypoint)) current[access.id] = check
+  }
+  return current
+}
+
+export function deriveToolReadiness(tool: Tool, saved: Record<string, AccessCheck> = {}): ToolReadiness {
+  const checks = currentAccessChecks(tool, saved)
   const projectMissing = Boolean(tool.projectPath && !fs.existsSync(tool.projectPath))
   const launchable = Boolean(tool.launchCommand?.trim()) && !projectMissing
   const base = { launchable, shelfActions: SHELF_ACTIONS }
@@ -136,7 +150,7 @@ export function deriveToolReadiness(tool: Tool, checks: Record<string, AccessChe
         verified === 'verified'
           ? `Ready through ${through}, and it answered when Shelf last checked. Use it through Shelf (shelf_tool_interface, shelf_use_tool, shelf_request_tool) or connect to the declared entrypoint yourself.`
           : verified === 'failed'
-            ? `Declared ready through ${through}, but it did not answer when Shelf last checked: ${failed.map((access) => checks[access.id].detail).join(' ')}`
+            ? `Declared ready through ${through}, but it did not answer when Shelf last checked. Reported: ${failed.map((access) => JSON.stringify(checks[access.id].detail)).join(' ')}`
             : `Declared ready through ${through}; not checked yet. Use it through Shelf (shelf_tool_interface, shelf_use_tool, shelf_request_tool) or connect to the declared entrypoint yourself.`,
       reasons: ready.map((access) => {
         const check = checks[access.id]
