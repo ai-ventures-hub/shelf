@@ -171,6 +171,20 @@ export function CompanionSettings() {
             A sleeping Mac cannot be reached, even over Tailscale. This holds off app sleep while a paired
             phone has the Companion open, and lets go a minute after it closes.
           </p>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={prefs.companionNotifications}
+              onChange={(e) => void updatePrefs({ companionNotifications: e.target.checked })}
+            />
+            Send alerts to paired phones
+          </label>
+          <p className="field-hint" style={{ margin: 0 }}>
+            An alert when an agent is waiting for you to accept a tool, or when a tool stops unexpectedly.
+            Each phone turns it on under More. Alerts travel through the phone&apos;s push service (Apple&apos;s for
+            an iPhone), encrypted so only the phone can read them. That is a request from this Mac to the
+            internet, made only while this is on.
+          </p>
         </div>
       </section>
 
@@ -239,6 +253,7 @@ export function CompanionSettings() {
                     {device.lastSeenAt
                       ? `Seen ${formatRelativeTime(device.lastSeenAt)}${device.lastSeenFrom ? ` from ${device.lastSeenFrom}` : ''}`
                       : `Paired ${formatRelativeTime(device.pairedAt)}`}
+                    {device.notifications ? ' · alerts on' : ''}
                   </span>
                   <button
                     type="button"

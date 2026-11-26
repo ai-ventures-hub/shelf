@@ -32,8 +32,13 @@ preview**. It is not a second Shelf.
   through the interface picker. Shelf never sees a phone that the Mac's
   network cannot already reach.
 - **Nothing leaves the Mac** except to the user's own paired device over
-  the user's own network. The one existing network call (onboarding
-  survey) stays the only Shelf-to-Internet call.
+  the user's own network. The onboarding survey was the only
+  Shelf-to-Internet call until 2.6. Phone alerts (Phase C) add a second
+  one, decided 2026-11-26: while "Send alerts to paired phones" is on, the
+  Mac posts each alert to the phone's push service (Apple's for an
+  iPhone). The payload is encrypted for that phone alone (RFC 8291), the
+  setting is off by default, and nothing is sent while it is off. There is
+  still no Shelf account, relay, or server.
 - **Tools are untrusted local processes.** Today they are safe because
   they bind to `127.0.0.1`. Anything that widens that reach is opt-in per
   tool, visible, and revocable. A phone must never be able to reach a
@@ -374,15 +379,38 @@ stages a new folder, and the user had to walk to the Mac to accept it.
   preview: requested" and Accept grants it (`RegisterOverrides.remotePreview`
   → `newToolFrom`). The reach is unchanged: only paired phones, only while
   Companion is on, only while the tool runs.
-- Not done: push. A draft staged while the phone app is closed waits until
-  the user opens it (Phase C still parked).
+- Push arrived in 2.6 (Phase C below): a draft staged while the phone app
+  is closed raises an alert when the user has alerts on.
 
 ### Phase C — Notifications (optional)
 
-Web push for "tool crashed" and "stack finished starting," reusing
-`toolFailureNotice`. Needs a VAPID key pair generated locally once; the
-push service is Apple's, reached only by the phone's browser, so the
-no-cloud stance holds. Decide after A and B are in real use.
+Built in 2.6, off by default (`companionNotifications`).
+
+- **What alerts:** an agent registration waiting for acceptance, and a
+  tool that stopped unexpectedly or could not start (`toolFailureNotice`,
+  without the window-focus rule, since the phone is not looking at the
+  Mac). One alert per subject a minute at most.
+- **How it travels:** the phone subscribes with its browser's push service
+  and sends Shelf the endpoint and two keys (`POST /api/push/subscribe`).
+  To alert, the Mac POSTs to that endpoint (`shared/web-push.ts`,
+  `node:crypto` only). An earlier version of this note said the push
+  service is "reached only by the phone's browser"; that was wrong. The
+  Mac makes the request. The body is encrypted for the phone (RFC 8291)
+  and signed with a key pair made on this Mac (`companion/vapid.json`,
+  0600). Shelf only sends to known push hosts.
+- **On the phone:** `/sw.js` is served from memory at the root
+  (`shared/companion-sw.ts`), shows the alert, and opens the app when it
+  is tapped. It caches nothing. More → Notifications turns alerts on; iOS
+  needs the app on the Home Screen and asks after a tap.
+- **Stored:** the subscription sits on the device record in
+  `devices.json` and is never sent back to any phone. Revoking a device
+  removes it. A push service answering 404 or 410 removes it too.
+- **Not verified at build time:** whether iOS accepts a subscription from
+  an IP-address origin behind a user-trusted certificate. Test on a real
+  iPhone before relying on it.
+- **Known gap:** a crash of a tool that an agent launched (owned by the
+  MCP process) reaches the app as "stopped", not "error", so it does not
+  alert.
 
 ## Smoke tests (names reserved)
 

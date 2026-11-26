@@ -927,6 +927,112 @@ function ToolLog({ toolId, onLogSink }: { toolId: string; onLogSink: (sink: ((li
 
 // ---- more ---------------------------------------------------------------------
 
+function pushKeyBytes(key: string): Uint8Array<ArrayBuffer> {
+  const base64 = key.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(key.length / 4) * 4, '=')
+  const raw = atob(base64)
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length))
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+/**
+ * Alerts for a waiting registration or a crashed tool. iOS only allows them
+ * for an app on the Home Screen, and only asks after a tap.
+ */
+function NotificationsCard() {
+  const supported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const [state, setState] = useState<'loading' | 'off-on-mac' | 'off' | 'on'>('loading')
+  const [key, setKey] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!supported) return
+    let active = true
+    void api.pushInfo().then((info) => {
+      if (!active) return
+      setKey(info.key)
+      setState(!info.enabled ? 'off-on-mac' : info.subscribed && Notification.permission === 'granted' ? 'on' : 'off')
+    }).catch(() => { if (active) setState('off') })
+    return () => { active = false }
+  }, [supported])
+
+  if (!supported) {
+    return (
+      <li className="card">
+        <div className="row-main">
+          <strong>Notifications</strong>
+          <small>
+            {isStandalone()
+              ? 'This browser cannot receive alerts from Shelf.'
+              : 'Add Shelf to the Home Screen first, then open it from there to turn alerts on.'}
+          </small>
+        </div>
+      </li>
+    )
+  }
+
+  async function turnOn() {
+    if (!key) return
+    setBusy(true)
+    setError(null)
+    try {
+      if ((await Notification.requestPermission()) !== 'granted') {
+        setError('Notifications are blocked for Shelf. Allow them in the phone’s Settings, then try again.')
+        return
+      }
+      const registration = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      const existing = await registration.pushManager.getSubscription()
+      const subscription = existing || await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: pushKeyBytes(key),
+      })
+      await api.pushSubscribe(subscription.toJSON())
+      setState('on')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not turn alerts on.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function turnOff() {
+    setBusy(true)
+    setError(null)
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/')
+      const subscription = await registration?.pushManager.getSubscription()
+      await subscription?.unsubscribe()
+      await api.pushUnsubscribe()
+      setState('off')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not turn alerts off.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="card">
+      <div className="row-main">
+        <strong>{state === 'on' ? 'Notifications are on' : 'Notifications'}</strong>
+        <small>
+          {state === 'off-on-mac'
+            ? 'Turn on “Send alerts to paired phones” in Settings → Companion on the Mac first.'
+            : 'An alert when an agent is waiting for you to accept a tool, or when a tool stops unexpectedly. Sent through this phone’s push service, encrypted so only this phone can read it.'}
+        </small>
+        {error ? <small role="alert">{error}</small> : null}
+      </div>
+      {state === 'on' || state === 'off' ? (
+        <button type="button" className="btn" disabled={busy} onClick={() => void (state === 'on' ? turnOff() : turnOn())}>
+          {busy ? 'Working…' : state === 'on' ? 'Turn off' : 'Turn on'}
+        </button>
+      ) : null}
+    </li>
+  )
+}
+
 function MoreScreen({ overview, onUnpaired }: { overview: CompanionOverview | null; onUnpaired: () => void }) {
   const [busy, setBusy] = useState(false)
   return (
@@ -948,6 +1054,7 @@ function MoreScreen({ overview, onUnpaired }: { overview: CompanionOverview | nu
             </small>
           </div>
         </li>
+        <NotificationsCard />
         {!isStandalone() ? (
           <li className="card">
             <div className="row-main">

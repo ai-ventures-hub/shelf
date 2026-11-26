@@ -20,7 +20,10 @@ import type { PreviewProxy, PreviewTarget } from '../shared/companion-preview'
 import type { CompanionHost, CompanionServer } from '../shared/companion-server'
 import { CompanionDeviceStore, companionDir } from '../shared/companion-store'
 import path from 'node:path'
-import type { RegisterOutcome, Tool, UiPrefs } from '../shared/contracts'
+import type { RegisterOutcome, Tool, ToolRuntimeState, UiPrefs } from '../shared/contracts'
+import { toolFailureNotice } from '../shared/desktop-status'
+import { launchOriginLabel } from '../shared/types'
+import { ensureVapidKeys, parsePushSubscription, sendWebPush, type PushMessage } from '../shared/web-push'
 import type { DesignProfileStore } from '../shared/design-profile-store'
 import { buildErrorReport, buildReceiptReport } from '../shared/launch-diagnostics'
 import type { LibraryStore } from '../shared/library-store'
@@ -116,6 +119,10 @@ export class CompanionManager {
 
   private async reconcile(): Promise<void> {
     const prefs = this.deps.prefs.get()
+    // Registrations already waiting at launch are not news.
+    if (!this.knownDraftIds) {
+      try { this.knownDraftIds = new Set(this.deps.toolDrafts.list().map((draft) => draft.id)) } catch { /* next change seeds it */ }
+    }
     if (!prefs.companionKeepAwake) this.releaseBlocker()
     if (!prefs.companionEnabled) {
       await this.stopServer()
@@ -364,6 +371,7 @@ export class CompanionManager {
   }
 
   broadcast(channel: string, payload: unknown): void {
+    if (channel === 'process:update') this.noteToolState(payload as ToolRuntimeState)
     this.server?.broadcast(channel, payload)
     // A tool starting or stopping is exactly when a preview listener comes or goes.
     if (channel === 'process:update' && this.preview) this.syncPreviews()
@@ -376,6 +384,81 @@ export class CompanionManager {
 
   notifyDraftsChanged(): void {
     this.server?.notifyDraftsChanged()
+    this.noteDrafts()
+  }
+
+  // ---- phone alerts (2.6) -------------------------------------------------
+
+  /** Draft ids already seen, so only a newly staged registration alerts. */
+  private knownDraftIds: Set<string> | null = null
+  private lastToolStatus = new Map<string, ToolRuntimeState['status']>()
+  private lastAlertAt = new Map<string, number>()
+
+  private alertsOn(): boolean {
+    const prefs = this.deps.prefs.get()
+    return prefs.companionEnabled && prefs.companionNotifications
+  }
+
+  /**
+   * Send one alert to every phone that turned notifications on. This is the
+   * one place Shelf reaches the phone's push service; it does nothing while
+   * the setting is off. At most one alert per subject a minute.
+   */
+  private async alertPhones(message: PushMessage, urgent = false): Promise<void> {
+    if (!this.alertsOn()) return
+    const subject = message.tag || message.title
+    const now = Date.now()
+    if (now - (this.lastAlertAt.get(subject) || 0) < 60_000) return
+    this.lastAlertAt.set(subject, now)
+    try {
+      if (!fs.existsSync(path.join(companionDir(this.deps.dataRoot), 'devices.json'))) return
+      const targets = this.devices.pushTargets()
+      if (targets.length === 0) return
+      const keys = ensureVapidKeys(companionDir(this.deps.dataRoot))
+      await Promise.all(targets.map(async (target) => {
+        if ((await sendWebPush(target.push, message, keys, { urgent })) !== 'gone') return
+        // The phone unsubscribed or was reset; stop sending to it.
+        this.devices.setPush(target.id, null)
+        this.publish()
+      }))
+    } catch (err) {
+      console.warn('Companion: could not send a phone alert:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  private noteDrafts(): void {
+    let drafts: { id: string; name: string; client?: string }[]
+    try {
+      drafts = this.deps.toolDrafts.list().map((draft) => publicToolDraft(draft))
+    } catch {
+      return
+    }
+    const known = this.knownDraftIds
+    this.knownDraftIds = new Set(drafts.map((draft) => draft.id))
+    if (!known) return
+    for (const draft of drafts.filter((item) => !known.has(item.id)).slice(0, 3)) {
+      void this.alertPhones({
+        title: `${launchOriginLabel({ kind: 'mcp', client: draft.client }) || 'An agent'} wants to add ${draft.name}`,
+        body: 'Open Shelf to review it. Nothing runs until you accept.',
+        url: '/',
+        tag: `draft:${draft.id}`,
+      })
+    }
+  }
+
+  private noteToolState(state: ToolRuntimeState): void {
+    if (!state?.toolId) return
+    const previous = this.lastToolStatus.get(state.toolId)
+    this.lastToolStatus.set(state.toolId, state.status)
+    const tool = this.deps.store.get(state.toolId)
+    if (!tool) return
+    // The phone is not looking at the Mac's window, so a failed start counts too.
+    const notice = toolFailureNotice(previous, state, tool.name, false)
+    if (!notice) return
+    void this.alertPhones(
+      { title: notice.title, body: notice.body, url: `/#/tools/${encodeURIComponent(state.toolId)}`, tag: `tool:${state.toolId}` },
+      true,
+    )
   }
 
   private publish(): void {
@@ -508,6 +591,25 @@ export class CompanionManager {
         this.notifyDraftsChanged()
         console.log(`Companion: ${device.name} rejected draft ${id}`)
         return { outcome: 'rejected', message: 'Rejected. Nothing was saved.' }
+      },
+      pushInfo: (device) => {
+        const enabled = prefs.get().companionNotifications
+        return {
+          enabled,
+          key: enabled ? ensureVapidKeys(companionDir(this.deps.dataRoot)).publicKey : null,
+          subscribed: this.devices.pushTargets().some((target) => target.id === device.id),
+        }
+      },
+      pushSubscribe: (device, subscription) => {
+        if (!prefs.get().companionNotifications) {
+          throw new Error('Phone notifications are off. Turn them on in Settings → Companion on the Mac.')
+        }
+        this.devices.setPush(device.id, parsePushSubscription(subscription))
+        this.publish()
+      },
+      pushUnsubscribe: (device) => {
+        this.devices.setPush(device.id, null)
+        this.publish()
       },
     }
   }
